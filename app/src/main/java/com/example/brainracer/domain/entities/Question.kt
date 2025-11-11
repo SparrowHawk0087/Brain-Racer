@@ -1,13 +1,13 @@
 package com.example.brainracer.domain.entities
-import java.time.LocalDateTime
 
+// Сущность вопроса
 data class Question(
     val id: String,
     val text: String,
     val imageUrl: String?,
-    val answers: List<Answer>,
+    val answers: List<UserAnswer>,
     val timeLimit: Long,
     val points: Int
 ) {
-    fun getCorrectAnswer(): Answer? = answers.find { it.isCorrect }
+    fun getCorrectAnswer(): UserAnswer? = answers.find { it.isCorrect }
 }
