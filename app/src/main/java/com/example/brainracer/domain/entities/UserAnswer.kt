@@ -1,7 +1,6 @@
 package com.example.brainracer.domain.entities
 
-import java.time.LocalDateTime
-
+// Сущность ответа пользователя
 data class UserAnswer(
     val questionId: String,
     val selectedAnswerId: String,
