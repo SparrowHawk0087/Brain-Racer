@@ -1,7 +1,6 @@
 package com.example.brainracer.ui.utils
 
 import com.example.brainracer.domain.entities.Achievement
-import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.domain.entities.UserStats
 
 enum class QuizMark {
@@ -13,7 +12,7 @@ enum class QuizMark {
 }
 
 // TODO: обновить после внедрения UseCases
-data class QuizResultsUIState(
+data class QuizResultsUiState(
     //val quizResult: QuizResult? = null,
     val userStats: UserStats? = null,
     //val levelInfo: LevelInfo? = null,
