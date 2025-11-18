@@ -9,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 
 // TODO: дописать по мере создания экранов и их переходов
+// Навигационные теги экранов
 enum class BrainRacerScreen(@StringRes val title: Int) {
     Login(title = R.string.login),
     SignUp(title = R.string.sign_up),
@@ -16,6 +17,7 @@ enum class BrainRacerScreen(@StringRes val title: Int) {
 }
 
 // TODO: дописать по мере создания экранов и их переходов
+// Экраны приложения и навигация между ними
 @Composable
 fun BrainRacerApp(navController: NavHostController = rememberNavController())
 {
