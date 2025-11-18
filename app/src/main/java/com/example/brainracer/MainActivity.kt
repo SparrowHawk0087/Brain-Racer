@@ -13,20 +13,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.brainracer.ui.screens.BrainRacerApp
 import com.example.brainracer.ui.theme.BrainRacerTheme
+import com.google.firebase.FirebaseApp
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        FirebaseApp.initializeApp(this)
         setContent {
             BrainRacerTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     BrainRacerApp()
                     /**Greeting(
                     name = "Android",
                     modifier = Modifier.padding(innerPadding)
                     )*/
-                }
             }
         }
     }
