@@ -79,4 +79,6 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     implementation(platform("com.google.firebase:firebase-bom:34.6.0"))
+    implementation("androidx.navigation:navigation-compose:2.9.6")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
 }
