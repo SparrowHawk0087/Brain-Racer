@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Brain Racer</string>
+    <string name="login">Login</string>
+    <string name="sign_up">Sign Up</string>
 </resources>
