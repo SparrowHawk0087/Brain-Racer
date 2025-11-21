@@ -16,13 +16,6 @@ data class Quiz(
     val questions: List<Question> = emptyList()
 )
 
-data class Question(
-    val question: String = "",
-    val answers: List<String> = emptyList(),
-    val correctAnswer: String = "",
-    val image: String? = null
-)
-
 
 /*// Сущность "Викторина"
 data class Quiz(
