@@ -2,7 +2,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    id("com.google.gms.google-services")
 }
 
 android {
@@ -51,25 +50,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-
-    /**
-     * // Firebase
-     *     // Import the Firebase BoM for the Firebase platform
-     *     implementation(platform(libs.firebase.bom))
-     *
-     *     // When using the BoM, don't specify versions in Firebase dependencies
-     *     implementation(libs.firebase.analytics)
-     *
-     *     // Add the dependency for the Firebase Authentication library
-     *     // When using the BoM, you don't specify versions in Firebase library dependencies
-     *     implementation("com.google.firebase:firebase-auth")
-     *
-     *     // Also add the dependencies for the Credential Manager libraries and specify their versions
-     *     implementation("androidx.credentials:credentials:1.3.0")
-     *     implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
-     *     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
-     * */
-
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -77,6 +57,8 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-
-    implementation(platform("com.google.firebase:firebase-bom:34.6.0"))
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+    implementation("com.google.firebase:firebase-auth:22.3.1")
+    implementation("com.google.firebase:firebase-firestore:24.11.1")
+    implementation("com.google.firebase:firebase-storage:20.3.0")
 }
