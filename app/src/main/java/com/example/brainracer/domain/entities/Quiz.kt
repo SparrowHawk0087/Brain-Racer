@@ -9,7 +9,22 @@ enum class QuizDifficulty {
     EASY, MEDIUM, HARD, EXPERT
 }
 
-// Сущность "Викторина"
+
+data class Quiz(
+    val id: String = "",
+    val title: String = "",
+    val questions: List<Question> = emptyList()
+)
+
+data class Question(
+    val question: String = "",
+    val answers: List<String> = emptyList(),
+    val correctAnswer: String = "",
+    val image: String? = null
+)
+
+
+/*// Сущность "Викторина"
 data class Quiz(
     val id: String,
     val title: String,
@@ -26,5 +41,5 @@ data class Quiz(
 ) {
     fun getQuestionCount(): Int = questions.size
     fun getTotalTime(): Long = questions.sumOf { it.timeLimit }
-}
+}*/
 
