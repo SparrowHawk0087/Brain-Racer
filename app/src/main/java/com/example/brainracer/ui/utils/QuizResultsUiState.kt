@@ -36,3 +36,21 @@ data class QuizResultsUiState(
      * */
 
 }
+data class DashboardUiState(
+    // 1. Данные пользователя (Пользователь / User UseCase Group)
+    val userName: String = "Гость",
+    val userStats: UserStats? = null,
+    val currentLevel: Int = 1,
+
+    // 2. Сводка по Викторинам и Вызовам (Quizzes / Challenges UseCase Groups)
+    val availableQuizzesCount: Int = 0,
+    val pendingChallengesCount: Int = 0,
+
+    // 3. Социальные функции / Достижения (Social / Achievements UseCase Groups)
+    val newAchievementsCount: Int = 0,
+    val notificationsCount: Int = 0,
+
+    // 4. UI-состояние
+    val isLoading: Boolean = false,
+    val error: String? = null
+)
