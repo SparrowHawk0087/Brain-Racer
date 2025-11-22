@@ -43,7 +43,7 @@ class AuthViewModel: ViewModel() {
     }
 
     fun signOut() {
-        auth.singOut()
+        auth.signOut()
         user_.value = auth.currentUser
     }
 

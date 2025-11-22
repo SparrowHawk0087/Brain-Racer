@@ -21,12 +21,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.brainracer.Greeting
+import com.example.brainracer.ui.theme.BrainRacerTheme
+import com.example.brainracer.ui.viewmodels.AuthViewModel
 
-@Preview(showBackground = true, showSystemUi = true)
+//@Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun ForgotPasswordScreen(
-    /*authViewModel: AuthViewModel = AuthViewModel(),*/
-    /*onPasswordResetSent: () -> Unit,*/
+    authViewModel: AuthViewModel = AuthViewModel(),
+    onPasswordResetSent: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var email by rememberSaveable { mutableStateOf("") }
@@ -50,8 +53,8 @@ fun ForgotPasswordScreen(
 
         Spacer(modifier = Modifier.padding(8.dp))
         Button(onClick = {
-            /*authViewModel.sendPasswordResetEmail(email)
-            onPasswordResetSent()*/
+            authViewModel.sendPasswordResetEmail(email)
+            onPasswordResetSent()
         },
             ) {
             Text("Send Password Reset Email")

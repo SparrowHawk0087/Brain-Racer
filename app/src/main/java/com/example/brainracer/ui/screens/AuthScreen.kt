@@ -35,13 +35,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.brainracer.R
+import com.example.brainracer.ui.viewmodels.AuthViewModel
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun AuthScreen(
-    /*authViewModel: AuthViewModel = AuthViewModel(),*/
-    /*onSignIn: () -> Unit = {},*/
-    /*onForgotPassword: () -> Unit = {}*/
+    authViewModel: AuthViewModel = AuthViewModel(),
+    onSignIn: () -> Unit = {},
+    onForgotPassword: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
 
@@ -137,11 +138,11 @@ fun AuthScreen(
 
         Button(onClick = {
             if (isLoggedIn) {
-                /*TODO:authViewModel.signIn(email, password)*/
+                authViewModel.signIn(email, password)
             } else {
-                /*TODO:authViewModel.signUp(email, password, username)*/
+                authViewModel.signUp(email, password, username)
             }
-            /*TODO:onSignIn()*/
+            onSignIn()
         },
             modifier = Modifier.width(200.dp)
         ) {
@@ -153,7 +154,7 @@ fun AuthScreen(
         }
 
         if (isLoggedIn) {
-            TextButton(onClick = {/*TODO:onForgotPassword*/ }) {
+            TextButton(onClick = onForgotPassword) {
                 Text("Forgot Password?")
             }
         }
