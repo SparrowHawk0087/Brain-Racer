@@ -14,12 +14,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.brainracer.ui.viewmodels.AuthViewModel
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun ProfileScreen(
-    /*profileViewModel: ProfileViewModel = viewModel(),
-    authViewModel: AuthViewModel = viewModel()*/
+    /*profileViewModel: ProfileViewModel = viewModel(),*/
+    authViewModel: AuthViewModel = viewModel(),
+    onNavigateToAuth: () -> Unit
 ) {
     //TODO: val user = profileViewModel.user.collectAsState()
 

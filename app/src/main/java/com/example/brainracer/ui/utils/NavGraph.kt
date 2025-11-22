@@ -11,6 +11,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.brainracer.ui.screens.AuthScreen
 import com.example.brainracer.ui.screens.ForgotPasswordScreen
+import com.example.brainracer.ui.screens.ProfileScreen
 import com.example.brainracer.ui.screens.QuizListScreen
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 
