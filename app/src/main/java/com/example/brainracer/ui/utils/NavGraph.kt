@@ -11,6 +11,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.brainracer.ui.screens.AuthScreen
 import com.example.brainracer.ui.screens.ForgotPasswordScreen
+import com.example.brainracer.ui.screens.HomeScreen
 import com.example.brainracer.ui.screens.ProfileScreen
 import com.example.brainracer.ui.screens.QuizListScreen
 import com.example.brainracer.ui.viewmodels.AuthViewModel
@@ -32,7 +33,7 @@ fun NavGraph(authViewModel: AuthViewModel = viewModel()) {
                 onPasswordResetSent = { navController.popBackStack() }
             )
         }
-        /*TODO реализовать после создания заглушки домашнего экрана: composable(
+        composable(
             "home/{userId}",
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
         ) { backStackEntry ->
@@ -40,7 +41,7 @@ fun NavGraph(authViewModel: AuthViewModel = viewModel()) {
                 navController = navController,
                 userId = backStackEntry.arguments?.getString("userId") ?: ""
             )
-        }*/
+        }
         composable("quizzes") {
             QuizListScreen(onQuizClick = { quizId ->
                 navController.navigate("game/$quizId")
