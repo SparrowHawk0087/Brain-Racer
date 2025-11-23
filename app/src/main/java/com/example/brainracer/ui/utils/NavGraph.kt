@@ -32,7 +32,7 @@ fun NavGraph(authViewModel: AuthViewModel = viewModel()) {
                 onPasswordResetSent = { navController.popBackStack() }
             )
         }
-        /*TODO реализовать после создания заглушки домашнегоэкрана: composable(
+        /*TODO реализовать после создания заглушки домашнего экрана: composable(
             "home/{userId}",
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
         ) { backStackEntry ->

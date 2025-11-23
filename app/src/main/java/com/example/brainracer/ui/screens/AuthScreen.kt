@@ -1,5 +1,6 @@
 package com.example.brainracer.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -21,12 +22,16 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -46,11 +51,32 @@ fun AuthScreen(
     modifier: Modifier = Modifier
 ) {
 
-    var email by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
-    var username by rememberSaveable { mutableStateOf("") }
-    var isLoggedIn by rememberSaveable { mutableStateOf(true) }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var isLogin by remember { mutableStateOf(true) }
     var isPasswordVisible by rememberSaveable { mutableStateOf(false) }
+    val authResult by authViewModel.authResult.collectAsState()
+    val error by authViewModel.error.collectAsState()
+    val context = LocalContext.current
+    var isLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(error) {
+        error?.let {
+            isLoading = false
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            authViewModel.clearError()
+        }
+    }
+
+    LaunchedEffect(authResult) {
+        isLoading = false
+        if (authResult?.user != null) {
+            Toast.makeText(context, "Success!", Toast.LENGTH_SHORT).show()
+            onSignIn() // следуем по пути Success
+        }
+    }
+
 
     Column (
         modifier = modifier.fillMaxSize(),
@@ -68,7 +94,7 @@ fun AuthScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-         if (!isLoggedIn) {
+         if (!isLogin) {
              OutlinedTextField(
                  value = username,
                  onValueChange = { username = it },
@@ -137,7 +163,7 @@ fun AuthScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(onClick = {
-            if (isLoggedIn) {
+            if (isLogin) {
                 authViewModel.signIn(email, password)
             } else {
                 authViewModel.signUp(email, password, username)
@@ -146,14 +172,14 @@ fun AuthScreen(
         },
             modifier = Modifier.width(200.dp)
         ) {
-            Text(if (isLoggedIn) "Login" else "Sign Up")
+            Text(if (isLogin) "Login" else "Sign Up")
         }
 
-        TextButton(onClick = { isLoggedIn = !isLoggedIn }) {
-            Text(if (isLoggedIn) "Go to Sign Up" else "Go to Login")
+        TextButton(onClick = { isLogin = !isLogin }) {
+            Text(if (isLogin) "Go to Sign Up" else "Go to Login")
         }
 
-        if (isLoggedIn) {
+        if (isLogin) {
             TextButton(onClick = onForgotPassword) {
                 Text("Forgot Password?")
             }

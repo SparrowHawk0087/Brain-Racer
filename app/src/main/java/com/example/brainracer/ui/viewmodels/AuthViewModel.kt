@@ -3,6 +3,7 @@ package com.example.brainracer.ui.viewmodels
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.AuthResult
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.auth.ktx.auth
@@ -16,6 +17,11 @@ class AuthViewModel: ViewModel() {
     private val auth: FirebaseAuth = Firebase.auth
     private val user_ = MutableStateFlow(auth.currentUser)
     val user: StateFlow<com.google.firebase.auth.FirebaseUser?> = user_
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error
+
+    private val _authResult = MutableStateFlow<AuthResult?>(null)
+    val authResult: StateFlow<AuthResult?> = _authResult
 
     fun signIn(email: String, password: String) {
         viewModelScope.launch {
@@ -68,4 +74,11 @@ class AuthViewModel: ViewModel() {
         }
     }
 
+    fun checkAuthStatus() {
+        user_.value = auth.currentUser
+    }
+
+    fun clearError() {
+        _error.value = null
+    }
 }
