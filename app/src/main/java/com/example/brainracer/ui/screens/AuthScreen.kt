@@ -1,5 +1,7 @@
 package com.example.brainracer.ui.screens
 
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -14,6 +16,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -21,12 +24,16 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -34,29 +41,42 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.brainracer.R
+import com.example.brainracer.ui.viewmodels.AuthViewModel
+
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun AuthScreen(
-    /*authViewModel: AuthViewModel = AuthViewModel(),*/
-    /*onSignIn: () -> Unit = {},*/
-    /*onForgotPassword: () -> Unit = {}*/
+    authViewModel: AuthViewModel = viewModel(),
+    onForgotPassword: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-
-    var email by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
-    var username by rememberSaveable { mutableStateOf("") }
-    var isLoggedIn by rememberSaveable { mutableStateOf(true) }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var isLogin by remember { mutableStateOf(true) }
     var isPasswordVisible by rememberSaveable { mutableStateOf(false) }
+    val user by authViewModel.user.collectAsState()
+    val error by authViewModel.error.collectAsState()
+    val context = LocalContext.current
+    var isLoading by remember { mutableStateOf(false) }
+
+    // Обработка ошибок
+    LaunchedEffect(error) {
+        error?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            authViewModel.clearError()
+            isLoading = false
+        }
+    }
 
     Column (
         modifier = modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-
         Text(
             text = "Brain Racer",
             style = MaterialTheme.typography.headlineLarge,
@@ -67,20 +87,23 @@ fun AuthScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-         if (!isLoggedIn) {
-             OutlinedTextField(
-                 value = username,
-                 onValueChange = { username = it },
-                 label = { Text("Username") },
-                 placeholder = { Text("Enter your username") },
-                 leadingIcon = { Icon(Icons.Default.AccountCircle, contentDescription = "Username") },
-                 isError = username.isBlank() || username.isEmpty() || username.contains(" "),
-                 supportingText = {if (username.contains(" ") || username.isEmpty()) Text("Username cannot be empty or contain spaces") },
-                 singleLine = true,
-                 shape = RoundedCornerShape(16.dp),
-                 modifier = Modifier.padding(8.dp)
-             )
-         }
+        if (!isLogin) {
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Username") },
+                placeholder = { Text("Enter your username") },
+                leadingIcon = { Icon(Icons.Default.AccountCircle, contentDescription = "Username") },
+                isError = username.isBlank() || username.isEmpty() || username.contains(" "),
+                supportingText = {
+                    if (username.contains(" ") || username.isEmpty())
+                        Text("Username cannot be empty or contain spaces")
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.padding(8.dp)
+            )
+        }
 
         OutlinedTextField(
             value = email,
@@ -88,8 +111,8 @@ fun AuthScreen(
             label = { Text("Email") },
             placeholder = { Text("Enter your email") },
             singleLine = true,
-            leadingIcon = { Icon(Icons.Default.Email, contentDescription = "Email")  },
-            isError =  email.isNotBlank() && !isValidEmail(email),
+            leadingIcon = { Icon(Icons.Default.Email, contentDescription = "Email") },
+            isError = email.isNotBlank() && !isValidEmail(email),
             supportingText = { Text(validateEmailMessage(email)) },
             shape = RoundedCornerShape(16.dp)
         )
@@ -135,25 +158,39 @@ fun AuthScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Button(onClick = {
-            if (isLoggedIn) {
-                /*TODO:authViewModel.signIn(email, password)*/
-            } else {
-                /*TODO:authViewModel.signUp(email, password, username)*/
-            }
-            /*TODO:onSignIn()*/
-        },
+        Button(
+            onClick = {
+                if (isLogin) {
+                    if (email.isNotBlank() && password.isNotBlank()) {
+                        isLoading = true
+                        authViewModel.signIn(email, password)
+                    }
+                } else {
+                    if (username.isNotBlank() && email.isNotBlank() && password.isNotBlank()) {
+                        isLoading = true
+                        authViewModel.signUp(email, password, username)
+                    }
+                }
+            },
+            enabled = !isLoading,
             modifier = Modifier.width(200.dp)
         ) {
-            Text(if (isLoggedIn) "Login" else "Sign Up")
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(if (isLogin) "Login" else "Sign Up")
+            }
         }
 
-        TextButton(onClick = { isLoggedIn = !isLoggedIn }) {
-            Text(if (isLoggedIn) "Go to Sign Up" else "Go to Login")
+        TextButton(onClick = { isLogin = !isLogin }) {
+            Text(if (isLogin) "Go to Sign Up" else "Go to Login")
         }
 
-        if (isLoggedIn) {
-            TextButton(onClick = {/*TODO:onForgotPassword*/ }) {
+        if (isLogin) {
+            TextButton(onClick = onForgotPassword) {
                 Text("Forgot Password?")
             }
         }

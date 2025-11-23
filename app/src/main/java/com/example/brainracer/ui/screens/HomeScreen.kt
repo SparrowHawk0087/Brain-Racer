@@ -18,38 +18,38 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 
-//@Preview(showBackground = true, showSystemUi = true)
+
 @Composable
-fun ProfileScreen(
-    onNavigateToAuth: () -> Unit,
-    authViewModel: AuthViewModel = viewModel(),
-    userId: String
+fun HomeScreen(
+    navController: NavController,
+    userId: String,
+    authViewModel: AuthViewModel = viewModel()
 ) {
     val user by authViewModel.user.collectAsState()
     val context = LocalContext.current
-
-    // Если пользователь удален или вышел
-    LaunchedEffect(user) {
-        if (user == null) {
-            Toast.makeText(context, "Session expired or account deleted", Toast.LENGTH_SHORT).show()
-            onNavigateToAuth()
-        }
-    }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("Profile: $userId")
+        Text("Welcome, User ID: $userId")
+
+        Button(onClick = {
+            navController.navigate("quizzes")
+        }) {
+            Text("Start Quiz")
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(onClick = {
-            authViewModel.deleteAccount()
+            navController.navigate("profile/$userId")
         }) {
-            Text("Delete Account")
+            Text("Profile")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
