@@ -25,10 +25,10 @@ class AuthViewModel: ViewModel() {
 
     fun signIn(email: String, password: String) {
         viewModelScope.launch {
-            try{
+            try {
                 auth.signInWithEmailAndPassword(email, password).await()
                 user_.value = auth.currentUser
-            } catch(e: Exception){
+            } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing in", e)
             }
         }
@@ -36,13 +36,13 @@ class AuthViewModel: ViewModel() {
 
     fun signUp(email: String, password: String, username: String) {
         viewModelScope.launch {
-            try{
+            try {
                 val authResult = auth.createUserWithEmailAndPassword(email, password).await()
                 val user = authResult.user
                 val profile = UserProfileChangeRequest.Builder().setDisplayName(username).build()
                 user?.updateProfile(profile)?.await()
                 user_.value = auth.currentUser
-            } catch(e: Exception) {
+            } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing up", e)
             }
         }
@@ -54,10 +54,10 @@ class AuthViewModel: ViewModel() {
     }
 
     fun sendPasswordResetEmail(email: String) {
-        viewModelScope.launch{
-            try{
+        viewModelScope.launch {
+            try {
                 auth.sendPasswordResetEmail(email).await()
-            } catch (e: Exception){
+            } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error sending password reset email", e)
             }
         }
@@ -80,5 +80,17 @@ class AuthViewModel: ViewModel() {
 
     fun clearError() {
         _error.value = null
+    }
+
+    fun reloadUser() {
+        viewModelScope.launch {
+            try {
+                auth.currentUser?.reload()
+                user_.value = auth.currentUser
+            } catch (e: Exception) {
+                Log.e("AuthViewModel", "Failed to reload user", e)
+                user_.value = null
+            }
+        }
     }
 }

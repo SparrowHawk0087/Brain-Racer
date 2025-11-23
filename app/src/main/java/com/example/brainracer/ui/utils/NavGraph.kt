@@ -39,13 +39,15 @@ fun NavGraph(authViewModel: AuthViewModel = viewModel()) {
         ) { backStackEntry ->
             HomeScreen(
                 navController = navController,
-                userId = backStackEntry.arguments?.getString("userId") ?: ""
+                userId = backStackEntry.arguments?.getString("userId") ?: "",
+
             )
         }
         composable("quizzes") {
             QuizListScreen(onQuizClick = { quizId ->
                 navController.navigate("game/$quizId")
-            })
+            }
+            )
         }
 
         composable(
@@ -53,7 +55,8 @@ fun NavGraph(authViewModel: AuthViewModel = viewModel()) {
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
         ) { backStackEntry ->
             ProfileScreen(
-                onNavigateToAuth = { navController.navigate("auth") }
+                onNavigateToAuth = { navController.navigate("auth") },
+                userId = backStackEntry.arguments?.getString("userId") ?: ""
             )
         }
     }

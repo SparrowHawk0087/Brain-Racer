@@ -3,26 +3,41 @@ package com.example.brainracer
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import com.example.brainracer.ui.theme.BrainRacerTheme
 import com.example.brainracer.ui.utils.NavGraph
 import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : ComponentActivity() {
+    private lateinit var auth: FirebaseAuth
+    private lateinit var authStateListener: FirebaseAuth.AuthStateListener
+
     override fun onCreate(savedInstanceState: Bundle?) {
         FirebaseApp.initializeApp(this)
         super.onCreate(savedInstanceState)
-        setContent {
-            BrainRacerTheme {
-                NavGraph()
+
+        auth = FirebaseAuth.getInstance()
+        authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            val currentUser = firebaseAuth.currentUser
+            if (currentUser == null) {
+                // Пользователь вышел или аккаунт удалён
+                setContent {
+                    BrainRacerTheme {
+                        NavGraph()
+                    }
+                }
             }
         }
     }
+
+
+override fun onStart() {
+    super.onStart()
+    auth.addAuthStateListener(authStateListener)
+}
+
+override fun onStop() {
+    super.onStop()
+    auth.removeAuthStateListener(authStateListener)
+}
 }
