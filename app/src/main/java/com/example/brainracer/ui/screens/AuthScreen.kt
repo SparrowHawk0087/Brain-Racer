@@ -70,10 +70,9 @@ fun AuthScreen(
     }
 
     LaunchedEffect(authResult) {
-        isLoading = false
         if (authResult?.user != null) {
             Toast.makeText(context, "Success!", Toast.LENGTH_SHORT).show()
-            onSignIn() // следуем по пути Success
+            onSignIn() // ← здесь уже user != null
         }
     }
 
@@ -164,14 +163,16 @@ fun AuthScreen(
 
         Button(onClick = {
             if (isLogin) {
-                authViewModel.signIn(email, password)
+                if (email.isNotBlank() && password.isNotBlank()) {
+                    authViewModel.signIn(email, password)
+                    // onSuccess вызывается автоматически через LaunchedEffect
+                }
             } else {
-                authViewModel.signUp(email, password, username)
+                if (username.isNotBlank() && email.isNotBlank() && password.isNotBlank()) {
+                    authViewModel.signUp(email, password, username)
+                }
             }
-            onSignIn()
-        },
-            modifier = Modifier.width(200.dp)
-        ) {
+        }, modifier = Modifier.width(200.dp)) {
             Text(if (isLogin) "Login" else "Sign Up")
         }
 
