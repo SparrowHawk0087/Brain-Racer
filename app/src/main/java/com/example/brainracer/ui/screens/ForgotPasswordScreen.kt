@@ -22,12 +22,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 
 //@Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun ForgotPasswordScreen(
-    authViewModel: AuthViewModel = AuthViewModel(),
+    authViewModel: AuthViewModel = viewModel(),
     onPasswordResetSent: () -> Unit,
     modifier: Modifier = Modifier
 ) {

@@ -17,30 +17,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 
 //@Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun ProfileScreen(
     onNavigateToAuth: () -> Unit,
-    authViewModel: AuthViewModel = AuthViewModel(),
+    authViewModel: AuthViewModel = viewModel(),
     userId: String
 ) {
     val user by authViewModel.user.collectAsState()
     val context = LocalContext.current
 
-    // Проверяем статус при входе
-    LaunchedEffect(Unit) {
-        authViewModel.reloadUser()
-    }
-
-    // Если пользователь удалён
-    if (user == null) {
-        LaunchedEffect(Unit) {
+    // Если пользователь удален или вышел
+    LaunchedEffect(user) {
+        if (user == null) {
             Toast.makeText(context, "Session expired or account deleted", Toast.LENGTH_SHORT).show()
             onNavigateToAuth()
         }
-        return
     }
 
     Column(
@@ -50,8 +45,19 @@ fun ProfileScreen(
     ) {
         Text("Profile: $userId")
         Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = { authViewModel.deleteAccount() }) {
+
+        Button(onClick = {
+            authViewModel.deleteAccount()
+        }) {
             Text("Delete Account")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = {
+            authViewModel.signOut()
+        }) {
+            Text("Sign Out")
         }
     }
 }

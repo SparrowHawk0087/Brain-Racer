@@ -10,34 +10,27 @@ import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
-    private lateinit var authStateListener: FirebaseAuth.AuthStateListener
 
     override fun onCreate(savedInstanceState: Bundle?) {
         FirebaseApp.initializeApp(this)
         super.onCreate(savedInstanceState)
+        auth = FirebaseAuth.getInstance() // инициализируем
 
-        auth = FirebaseAuth.getInstance()
-        authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
-            val currentUser = firebaseAuth.currentUser
-            if (currentUser == null) {
-                // Пользователь вышел или аккаунт удалён
-                setContent {
-                    BrainRacerTheme {
-                        NavGraph()
-                    }
-                }
+        setContent {
+            BrainRacerTheme {
+                // Передаём auth и currentUser
+                NavGraph(auth = auth)
             }
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        // Нужно для автоматического обновления состояния
+    }
 
-override fun onStart() {
-    super.onStart()
-    auth.addAuthStateListener(authStateListener)
-}
-
-override fun onStop() {
-    super.onStop()
-    auth.removeAuthStateListener(authStateListener)
-}
+    override fun onStop() {
+        super.onStop()
+        // очистка не требуется, если не добавляли слушатель
+    }
 }

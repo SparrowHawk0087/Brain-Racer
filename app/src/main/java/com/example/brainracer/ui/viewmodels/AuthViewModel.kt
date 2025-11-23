@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.AuthResult
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
@@ -20,16 +21,14 @@ class AuthViewModel: ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
-    private val _authResult = MutableStateFlow<AuthResult?>(null)
-    val authResult: StateFlow<AuthResult?> = _authResult
-
     fun signIn(email: String, password: String) {
         viewModelScope.launch {
             try {
-                auth.signInWithEmailAndPassword(email, password).await()
-                user_.value = auth.currentUser
+                val result = auth.signInWithEmailAndPassword(email, password).await()
+                user_.value = auth.currentUser  // обновляем user
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing in", e)
+                _error.value = e.message // Показать ошибку пользователю
             }
         }
     }
@@ -41,9 +40,14 @@ class AuthViewModel: ViewModel() {
                 val user = authResult.user
                 val profile = UserProfileChangeRequest.Builder().setDisplayName(username).build()
                 user?.updateProfile(profile)?.await()
-                user_.value = auth.currentUser
+                user_.value = auth.currentUser // обновляем user
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing up", e)
+                _error.value = when (e) {   // Показать ошибку пользователю
+                        is FirebaseAuthUserCollisionException -> "Email already in use"
+                        is IllegalArgumentException -> "Invalid email or password"
+                        else -> e.message ?: "Unknown error"
+                    }
             }
         }
     }
