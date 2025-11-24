@@ -16,4 +16,3 @@ data class Challenge(
     val expiresAt: LocalDateTime,
     val completedAt: LocalDateTime?,
     val results: Map<String, ChallengeResult> // userId -> result
-)
