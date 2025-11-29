@@ -3,6 +3,7 @@ import androidx.compose.runtime.Immutable
 
 @Immutable
 data class QuizUIState(
+
     //викторина и прогресс
     val currentQuestionIndex: Int = 0,
     val totalQuestions: Int = 0,
