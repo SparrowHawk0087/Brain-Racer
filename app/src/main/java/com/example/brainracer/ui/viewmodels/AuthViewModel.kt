@@ -3,6 +3,8 @@ package com.example.brainracer.ui.viewmodels
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.brainracer.data.repositories.UserRepositoryImpl
+import com.example.brainracer.domain.entities.User
 import com.google.firebase.auth.AuthResult
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
@@ -15,9 +17,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 class AuthViewModel: ViewModel() {
+    // Firebase Auth объявление
+    // User repository для работы с данными пользователя
     private val auth: FirebaseAuth = Firebase.auth
-    private val user_ = MutableStateFlow(auth.currentUser)
-    val user: StateFlow<com.google.firebase.auth.FirebaseUser?> = user_
+    private val userRepository = UserRepositoryImpl()
+    private val _user = MutableStateFlow(auth.currentUser)
+    val user: StateFlow<com.google.firebase.auth.FirebaseUser?> = _user
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
@@ -25,7 +30,7 @@ class AuthViewModel: ViewModel() {
         viewModelScope.launch {
             try {
                 val result = auth.signInWithEmailAndPassword(email, password).await()
-                user_.value = auth.currentUser  // обновляем user
+                _user.value = auth.currentUser  // обновляем user
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing in", e)
                 _error.value = e.message // Показать ошибку пользователю
@@ -40,7 +45,29 @@ class AuthViewModel: ViewModel() {
                 val user = authResult.user
                 val profile = UserProfileChangeRequest.Builder().setDisplayName(username).build()
                 user?.updateProfile(profile)?.await()
-                user_.value = auth.currentUser // обновляем user
+               // _user.value = auth.currentUser // обновляем user
+                val firebaseUser = authResult.user
+
+                // Создаем профиль пользователя в Firestore
+                if (firebaseUser != null) {
+                    val user = User(
+                        id = firebaseUser.uid,
+                        email = email,
+                        nickname = username,
+                        createdAt = com.google.firebase.Timestamp.now(),
+                        lastLogin = com.google.firebase.Timestamp.now()
+                    )
+
+                    userRepository.createUser(user).fold(
+                        onSuccess = { _user.value = auth.currentUser },
+                        onFailure = { e ->
+                            _error.value = "Failed to create user profile: ${e.message}"
+                            // Откатываем: удаляем пользователя аутентификации если Firestore не удался
+                            firebaseUser.delete().await()
+                            _user.value = null
+                        }
+                    )
+                }
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing up", e)
                 _error.value = when (e) {   // Показать ошибку пользователю
@@ -54,7 +81,7 @@ class AuthViewModel: ViewModel() {
 
     fun signOut() {
         auth.signOut()
-        user_.value = auth.currentUser
+        _user.value = auth.currentUser
     }
 
     fun sendPasswordResetEmail(email: String) {
@@ -71,7 +98,7 @@ class AuthViewModel: ViewModel() {
         viewModelScope.launch {
             try {
                 auth.currentUser?.delete()?.await()
-                user_.value = auth.currentUser
+                _user.value = auth.currentUser
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error deleting account", e)
             }
@@ -79,7 +106,7 @@ class AuthViewModel: ViewModel() {
     }
 
     fun checkAuthStatus() {
-        user_.value = auth.currentUser
+        _user.value = auth.currentUser
     }
 
     fun clearError() {
@@ -90,10 +117,10 @@ class AuthViewModel: ViewModel() {
         viewModelScope.launch {
             try {
                 auth.currentUser?.reload()
-                user_.value = auth.currentUser
+                _user.value = auth.currentUser
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Failed to reload user", e)
-                user_.value = null
+                _user.value = null
             }
         }
     }
