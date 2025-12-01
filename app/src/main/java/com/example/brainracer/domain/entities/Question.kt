@@ -1,13 +1,14 @@
 package com.example.brainracer.domain.entities
 
-// Сущность вопроса
 data class Question(
-    val id: String,
-    val text: String,
-    val imageUrl: String?,
-    val answers: List<UserAnswer>,
-    val timeLimit: Long,
-    val points: Int
-) {
-    fun getCorrectAnswer(): UserAnswer? = answers.find { it.isCorrect }
-}
+    val id: String = "",
+    val questionText: String = "",
+    val questionType: QuestionType = QuestionType.MULTIPLE_CHOICE,
+    val options: List<String> = emptyList(),
+    val correctAnswerIndex: Int = 0,
+    val imageUrl: String? = null,
+    val gifUrl: String? = null,
+    val explanation: String? = null,
+    val points: Int = 10,
+    val timeLimit: Int = 30
+)
