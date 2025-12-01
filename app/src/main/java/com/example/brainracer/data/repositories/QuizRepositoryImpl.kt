@@ -22,12 +22,12 @@ class QuizRepositoryImpl: QuizRepository {
         val document = quizzesCollection.document(quizId).get().await()
         if (document.exists()) {
             val quiz = document.toObject(Quiz::class.java)
-            Result.success(quiz ?: throw Exception("Quiz data is null"))
+            Result.Success(quiz ?: throw Exception("Quiz data is null"))
         } else {
-            Result.failure(Exception("Quiz not found"))
+            Result.Error(Exception("Quiz not found"))
         }
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
     //Получение квизов по категории
     override suspend fun getQuizzesByCategory(category: String, limit: Int): Result<List<Quiz>> = try {
@@ -38,9 +38,9 @@ class QuizRepositoryImpl: QuizRepository {
             .get()
             .await()
         val quizzes = res.documents.mapNotNull { it.toObject(Quiz::class.java)}
-        Result.success(quizzes)
+        Result.Success(quizzes)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
     // Получение квизов, созданных конкретным юзером
     override suspend fun getQuizzesByUser(userId: String): Result<List<Quiz>> = try {
@@ -50,9 +50,9 @@ class QuizRepositoryImpl: QuizRepository {
             .get()
             .await()
         val quizzes = res.documents.mapNotNull { it.toObject(Quiz::class.java)}
-        Result.success(quizzes)
+        Result.Success(quizzes)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 
     // Создание квиза
@@ -65,17 +65,17 @@ class QuizRepositoryImpl: QuizRepository {
         usersCollection.document(quizWithId.createdBy)
             .update("createdQuizzes",FieldValue.arrayUnion(quizWithId.id))
             .await()
-        Result.success(Unit)
+        Result.Success(Unit)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 
     // Обновить существующий квиз
     override suspend fun updateQuiz(quiz: Quiz): Result<Unit> = try {
         quizzesCollection.document(quiz.id).set(quiz, SetOptions.merge()).await()
-        Result.success(Unit)
+        Result.Success(Unit)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 
     // Удаление квиза
@@ -87,9 +87,9 @@ class QuizRepositoryImpl: QuizRepository {
                 .update("createdQuizzes", FieldValue.arrayRemove(quizId))
                 .await()
         }
-        Result.success(Unit)
+        Result.Success(Unit)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 
     // Поиск квизов по названию (+ категории)
@@ -103,9 +103,9 @@ class QuizRepositoryImpl: QuizRepository {
             queryRef = queryRef.whereEqualTo("category", category)
         val res = queryRef.get().await()
         val quizzes = res.documents.mapNotNull { it.toObject(Quiz::class.java) }
-        Result.success(quizzes)
+        Result.Success(quizzes)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 
     // Запись результатов прохождения квиза
@@ -125,9 +125,9 @@ class QuizRepositoryImpl: QuizRepository {
             )
             transaction.update(quizRef, updates)
         }.await()
-        Result.success(Unit)
+        Result.Success(Unit)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 
     // Получение популярных квизов ( отбор по количеству прохождений)
@@ -139,8 +139,8 @@ class QuizRepositoryImpl: QuizRepository {
             .get()
             .await()
         val quizzes = res.documents.mapNotNull { it.toObject(Quiz::class.java) }
-        Result.success(quizzes)
+        Result.Success(quizzes)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 }
