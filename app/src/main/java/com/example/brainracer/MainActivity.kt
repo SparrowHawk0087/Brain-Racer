@@ -15,7 +15,6 @@ class MainActivity : ComponentActivity() {
         FirebaseApp.initializeApp(this)
         super.onCreate(savedInstanceState)
         auth = FirebaseAuth.getInstance() // инициализируем
-
         setContent {
             BrainRacerTheme {
                 // Передаём auth и currentUser
