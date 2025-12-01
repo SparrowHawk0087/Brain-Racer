@@ -4,6 +4,8 @@ import androidx.compose.runtime.Stable
 
 @Stable
 data class ProfileUIState(
+    val isLoading: Boolean = true,
+    val errorMessage: String? = null,
     val userId: String = "",
     val username: String = "",
     val email: String = "",
@@ -13,10 +15,13 @@ data class ProfileUIState(
     val gamesWon: Int = 0,
     val winRate: Double = 0.0,
     val totalPoints: Int = 0,
-    val likedQuizzes: List<QuizItem> = emptyList(),
     val createdQuizzes: List<QuizItem> = emptyList(),
-    val isLoading: Boolean = false,
-    val errorMessage: String? = null
+    val likedQuizzes: List<QuizItem> = emptyList(),
+    val currentRank: String = "Новичок",
+    val achievementsCount: Int = 0,
+    val friendsCount: Int = 0,
+    val bio: String = "",
+    val interests: List<String> = emptyList()
 )
 
 @Stable
