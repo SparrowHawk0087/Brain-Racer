@@ -1,7 +1,10 @@
 package com.example.brainracer.ui.viewmodels
-
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.brainracer.data.repositories.QuizRepositoryImpl
+import com.example.brainracer.data.repositories.UserRepositoryImpl
+import com.example.brainracer.data.repositories.fold
+import com.example.brainracer.domain.entities.User as DomainUser
 import com.example.brainracer.ui.utils.ProfileUIState
 import com.example.brainracer.ui.utils.QuizItem
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -9,19 +12,34 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.example.brainracer.data.repositories.Result
 
 class ProfileViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUIState())
     val uiState: StateFlow<ProfileUIState> = _uiState.asStateFlow()
 
-    fun loadUserProfile(userId: String? = null) {
+    private val userRepository = UserRepositoryImpl()
+    private val quizRepository = QuizRepositoryImpl()
+
+    fun loadUserProfile(userId: String) {
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
         viewModelScope.launch {
             try {
-                val mockProfile = createMockProfile()
-                _uiState.update { mockProfile.copy(isLoading = false) }
+                userRepository.getUser(userId).fold(
+                    onSuccess = { user ->
+                        loadUserQuizzes(user)
+                    },
+                    onFailure = { error ->
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                errorMessage = "Ошибка загрузки профиля: ${error.message}"
+                            )
+                        }
+                    }
+                )
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -33,7 +51,105 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
-    fun toggleQuizLike(quizId: String) {
+    private fun loadUserQuizzes(user: DomainUser) {
+        viewModelScope.launch {
+            try {
+                // Загружаем созданные викторины
+                when (val createdQuizzesResult = quizRepository.getQuizzesByUser(user.id)) {
+                    is Result.Success -> {
+                        val createdQuizzes = createdQuizzesResult.data
+
+                        // Конвертируем в QuizItem для UI
+                        val createdQuizItems = createdQuizzes.map { quiz ->
+                            QuizItem(
+                                id = quiz.id,
+                                title = quiz.title,
+                                category = quiz.category,
+                                questionCount = quiz.questions.size,
+                                difficulty = quiz.difficulty.name
+                            )
+                        }
+
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                userId = user.id,
+                                username = user.nickname,
+                                email = user.email,
+                                avatarUrl = user.avatarUrl,
+                                registrationDate = user.createdAt.toDate().toString(),
+                                gamesPlayed = user.stats.totalQuizzesTaken,
+                                gamesWon = user.stats.correctAnswers,
+                                winRate = user.stats.averageScore,
+                                totalPoints = user.stats.totalPoints,
+                                createdQuizzes = createdQuizItems,
+                                likedQuizzes = emptyList()
+                            )
+                        }
+                    }
+                    is Result.Error -> {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                errorMessage = "Ошибка загрузки викторин: ${createdQuizzesResult.exception.message}"
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Ошибка загрузки викторин: ${e.message}"
+                    )
+                }
+            }
+        }
+    }
+
+    fun updateUserAvatar(userId: String, avatarUrl: String) {
+        viewModelScope.launch {
+            when (val result = userRepository.updateUserAvatar(userId, avatarUrl)) {
+                is Result.Success -> {
+                    _uiState.update { it.copy(avatarUrl = avatarUrl) }
+                }
+                is Result.Error -> {
+                    _uiState.update { it.copy(errorMessage = "Ошибка обновления аватара: ${result.exception.message}") }
+                }
+            }
+        }
+    }
+
+    fun updateUsername(userId: String, newUsername: String) {
+        viewModelScope.launch {
+            when (val userResult = userRepository.getUser(userId)) {
+                is Result.Success -> {
+                    val user = userResult.data
+                    val updatedUser = user.copy(nickname = newUsername)
+
+                    when (val updateResult = userRepository.updateUser(updatedUser)) {
+                        is Result.Success -> {
+                            _uiState.update { it.copy(username = newUsername) }
+                        }
+                        is Result.Error -> {
+                            _uiState.update { it.copy(errorMessage = "Ошибка обновления имени: ${updateResult.exception.message}") }
+                        }
+                    }
+                }
+                is Result.Error -> {
+                    _uiState.update { it.copy(errorMessage = "Ошибка обновления имени: ${userResult.exception.message}") }
+                }
+            }
+        }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+}
+
+
+    /* fun toggleQuizLike(quizId: String) {
         viewModelScope.launch {
             _uiState.update { currentState ->
                 val updatedLikedQuizzes = currentState.likedQuizzes.toMutableList()
@@ -111,4 +227,4 @@ class ProfileViewModel : ViewModel() {
             )
         )
     }
-}
+}*/

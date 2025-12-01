@@ -24,7 +24,8 @@ data class QuizItem(
     val id: String,
     val title: String,
     val category: String,
-    val questionCount: Int
+    val questionCount: Int,
+    val difficulty: String,
 )
 
 object ProfileUtils {
