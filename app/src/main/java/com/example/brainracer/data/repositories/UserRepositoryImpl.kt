@@ -20,12 +20,16 @@ class UserRepositoryImpl : UserRepository {
         val document = usersCollection.document(userId).get().await()
         if (document.exists()) {
             val user = document.toObject(User::class.java)
-            Result.success(user ?: throw Exception("User data is null"))
+            if (user != null) {
+                Result.Success(user)
+            } else {
+                Result.Error(Exception("User data is null"))
+            }
         } else {
-            Result.failure(Exception("User not found"))
+            Result.Error(Exception("User not found"))
         }
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 
     // Создаем user в Firestore
@@ -33,7 +37,7 @@ class UserRepositoryImpl : UserRepository {
         usersCollection.document(user.id).set(user).await()
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 
     // Обновляем user в Firestore
@@ -41,7 +45,7 @@ class UserRepositoryImpl : UserRepository {
         usersCollection.document(user.id).set(user, SetOptions.merge()).await()
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 
     // Обновляем статистику пользователя в Firestore
@@ -85,7 +89,7 @@ class UserRepositoryImpl : UserRepository {
         }.await()
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 
     // Функция поиска пользователей из Firestore
@@ -100,7 +104,7 @@ class UserRepositoryImpl : UserRepository {
         val users = result.documents.mapNotNull { it.toObject(User::class.java) }
         Result.success(users)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 
     // Обновляем интересы пользователя в Firestore
@@ -110,7 +114,7 @@ class UserRepositoryImpl : UserRepository {
             .await()
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 
     // Обновляем аватар пользователя в Firestore
@@ -120,7 +124,7 @@ class UserRepositoryImpl : UserRepository {
             .await()
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.Error(e)
     }
 
     // Расчет ранга пользователя
