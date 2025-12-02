@@ -3,7 +3,7 @@ package com.example.brainracer.data.repositories
 import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.domain.entities.User
 import com.example.brainracer.domain.entities.UserRank
-import com.example.brainracer.ui.utils.Result
+import com.example.brainracer.data.utils.Result
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore

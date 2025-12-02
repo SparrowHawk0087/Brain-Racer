@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.domain.entities.User
-import com.example.brainracer.ui.utils.Result
+import com.example.brainracer.data.utils.Result
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthUserCollisionException

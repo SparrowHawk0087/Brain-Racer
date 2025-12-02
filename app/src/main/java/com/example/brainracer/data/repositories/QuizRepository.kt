@@ -2,7 +2,7 @@ package com.example.brainracer.data.repositories
 
 import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.domain.entities.Quiz
-import com.example.brainracer.ui.utils.Result
+import com.example.brainracer.data.utils.Result
 
 interface QuizRepository {
     suspend fun getQuiz(quizId: String): Result<Quiz>
