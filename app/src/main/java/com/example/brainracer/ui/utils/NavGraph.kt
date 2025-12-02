@@ -27,12 +27,10 @@ fun NavGraph(
     val navController = rememberNavController()
     val user by authViewModel.user.collectAsState()
 
-    // Следим за изменением пользователя и навигируем при успешной аутентификации
     LaunchedEffect(user) {
         user?.let { currentUser ->
             val userId = currentUser.uid
             if (userId.isNotBlank()) {
-                // Навигируем на домашний экран
                 navController.navigate("home/$userId") {
                     popUpTo("auth") { inclusive = true }
                     launchSingleTop = true
@@ -54,6 +52,7 @@ fun NavGraph(
             )
         }
 
+        // ОБНОВЛЁННЫЙ ЭКРАН HOME - теперь с двумя ViewModel
         composable(
             "home/{userId}",
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
@@ -62,7 +61,8 @@ fun NavGraph(
             HomeScreen(
                 navController = navController,
                 userId = userId,
-                authViewModel = authViewModel
+                authViewModel = authViewModel // ← передаём authViewModel
+                // homeViewModel создаётся автоматически через viewModel() default параметр
             )
         }
 
@@ -71,14 +71,13 @@ fun NavGraph(
                 authViewModel = authViewModel,
                 onPasswordResetSent = {
                     navController.popBackStack()
-                    // Показываем сообщение об успехе
                 }
             )
         }
 
         composable("quizzes") {
             QuizListScreen(onQuizClick = { quizId ->
-                navController.navigate("game/$quizId")
+                navController.navigate("quiz/$quizId")
             })
         }
 

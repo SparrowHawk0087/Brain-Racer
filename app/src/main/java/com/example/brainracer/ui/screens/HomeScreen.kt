@@ -1,13 +1,9 @@
 package com.example.brainracer.ui.screens
 
 import android.widget.Toast
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,44 +16,67 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.brainracer.ui.viewmodels.AuthViewModel
-
+import com.example.brainracer.ui.viewmodels.HomeViewModel
 
 @Composable
 fun HomeScreen(
     navController: NavController,
     userId: String,
-    authViewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = viewModel(),
+    homeViewModel: HomeViewModel = viewModel()
 ) {
-    val user by authViewModel.user.collectAsState()
+    val uiState by homeViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            homeViewModel.clearError()
+        }
+    }
+
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("Welcome, User ID: $userId")
+        if (uiState.isLoading) {
+            CircularProgressIndicator()
+        } else {
+            Text("Welcome, ${uiState.userName}!")
 
-        Button(onClick = {
-            navController.navigate("quizzes")
-        }) {
-            Text("Start Quiz")
-        }
+            uiState.userStats?.let { stats ->
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Quizzes taken: ${stats.totalQuizzesTaken}")
+                Text("Total points: ${stats.totalPoints}")
+                Text("Current streak: ${stats.currentStreak} days")
+            }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Button(onClick = {
-            navController.navigate("profile/$userId")
-        }) {
-            Text("Profile")
-        }
+            Button(onClick = {
+                navController.navigate("quizzes")
+            }) {
+                Text("Start Quiz")
+            }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Button(onClick = {
-            authViewModel.signOut()
-        }) {
-            Text("Sign Out")
+            Button(onClick = {
+                navController.navigate("profile/$userId")
+            }) {
+                Text("Profile")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(onClick = {
+                authViewModel.signOut()
+            }) {
+                Text("Sign Out")
+            }
         }
     }
 }
