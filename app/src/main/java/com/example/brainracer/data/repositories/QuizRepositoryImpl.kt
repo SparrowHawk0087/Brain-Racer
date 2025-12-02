@@ -2,6 +2,8 @@ package com.example.brainracer.data.repositories
 
 import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.ChallengeResult
+import com.example.brainracer.ui.utils.Result
+import com.example.brainracer.ui.utils.getOrNull
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -22,12 +24,12 @@ class QuizRepositoryImpl: QuizRepository {
         val document = quizzesCollection.document(quizId).get().await()
         if (document.exists()) {
             val quiz = document.toObject(Quiz::class.java)
-            Result.Success(quiz ?: throw Exception("Quiz data is null"))
+            Result.success(quiz ?: throw Exception("Quiz data is null"))
         } else {
-            Result.Error(Exception("Quiz not found"))
+            Result.error(Exception("Quiz not found"))
         }
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
     //Получение квизов по категории
     override suspend fun getQuizzesByCategory(category: String, limit: Int): Result<List<Quiz>> = try {
@@ -38,9 +40,9 @@ class QuizRepositoryImpl: QuizRepository {
             .get()
             .await()
         val quizzes = res.documents.mapNotNull { it.toObject(Quiz::class.java)}
-        Result.Success(quizzes)
+        Result.success(quizzes)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
     // Получение квизов, созданных конкретным юзером
     override suspend fun getQuizzesByUser(userId: String): Result<List<Quiz>> = try {
@@ -50,9 +52,9 @@ class QuizRepositoryImpl: QuizRepository {
             .get()
             .await()
         val quizzes = res.documents.mapNotNull { it.toObject(Quiz::class.java)}
-        Result.Success(quizzes)
+        Result.success(quizzes)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 
     // Создание квиза
@@ -65,17 +67,17 @@ class QuizRepositoryImpl: QuizRepository {
         usersCollection.document(quizWithId.createdBy)
             .update("createdQuizzes",FieldValue.arrayUnion(quizWithId.id))
             .await()
-        Result.Success(Unit)
+        Result.success(Unit)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 
     // Обновить существующий квиз
     override suspend fun updateQuiz(quiz: Quiz): Result<Unit> = try {
         quizzesCollection.document(quiz.id).set(quiz, SetOptions.merge()).await()
-        Result.Success(Unit)
+        Result.success(Unit)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 
     // Удаление квиза
@@ -87,9 +89,9 @@ class QuizRepositoryImpl: QuizRepository {
                 .update("createdQuizzes", FieldValue.arrayRemove(quizId))
                 .await()
         }
-        Result.Success(Unit)
+        Result.success(Unit)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 
     // Поиск квизов по названию (+ категории)
@@ -103,9 +105,9 @@ class QuizRepositoryImpl: QuizRepository {
             queryRef = queryRef.whereEqualTo("category", category)
         val res = queryRef.get().await()
         val quizzes = res.documents.mapNotNull { it.toObject(Quiz::class.java) }
-        Result.Success(quizzes)
+        Result.success(quizzes)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 
     // Запись результатов прохождения квиза
@@ -125,9 +127,9 @@ class QuizRepositoryImpl: QuizRepository {
             )
             transaction.update(quizRef, updates)
         }.await()
-        Result.Success(Unit)
+        Result.success(Unit)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 
     // Получение популярных квизов ( отбор по количеству прохождений)
@@ -139,8 +141,8 @@ class QuizRepositoryImpl: QuizRepository {
             .get()
             .await()
         val quizzes = res.documents.mapNotNull { it.toObject(Quiz::class.java) }
-        Result.Success(quizzes)
+        Result.success(quizzes)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 }

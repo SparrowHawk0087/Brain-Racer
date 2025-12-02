@@ -1,4 +1,4 @@
-package com.example.brainracer.data.repositories
+package com.example.brainracer.ui.utils
 
 sealed class Result<out T> {
     data class Success<out T>(val data: T) : Result<T>()

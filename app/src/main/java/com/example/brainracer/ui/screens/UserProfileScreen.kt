@@ -1,6 +1,6 @@
 package com.example.brainracer.ui.screens
 
-import androidx.compose.foundation.layout.Column
+/*import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,4 +33,4 @@ fun UserProfileScreen(modifier: Modifier = Modifier) {  // ← ДОБАВИЛИ 
         Text(text = "Процент побед: ${uiState.winRate}%")
         Text(text = "Очков: ${uiState.totalPoints}")
     }
-}
+}*/

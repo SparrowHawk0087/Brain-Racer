@@ -3,11 +3,13 @@ package com.example.brainracer.data.repositories
 import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.domain.entities.User
 import com.example.brainracer.domain.entities.UserRank
+import com.example.brainracer.ui.utils.Result
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
+
 
 class UserRepositoryImpl : UserRepository {
 
@@ -21,15 +23,15 @@ class UserRepositoryImpl : UserRepository {
         if (document.exists()) {
             val user = document.toObject(User::class.java)
             if (user != null) {
-                Result.Success(user)
+                Result.success(user)
             } else {
-                Result.Error(Exception("User data is null"))
+                Result.error(Exception("User data is null"))
             }
         } else {
-            Result.Error(Exception("User not found"))
+            Result.error(Exception("User not found"))
         }
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 
     // Создаем user в Firestore
@@ -37,7 +39,7 @@ class UserRepositoryImpl : UserRepository {
         usersCollection.document(user.id).set(user).await()
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 
     // Обновляем user в Firestore
@@ -45,14 +47,14 @@ class UserRepositoryImpl : UserRepository {
         usersCollection.document(user.id).set(user, SetOptions.merge()).await()
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 
     // Обновляем статистику пользователя в Firestore
     override suspend fun updateUserStats(
         userId: String,
         quizResult: ChallengeResult
-    ): Result<Unit>  = try {
+    ): Result<Unit> = try {
         val userRef = usersCollection.document(userId)
         firestore.runTransaction { transaction ->
             val userDoc = transaction.get(userRef)
@@ -89,7 +91,7 @@ class UserRepositoryImpl : UserRepository {
         }.await()
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 
     // Функция поиска пользователей из Firestore
@@ -104,7 +106,7 @@ class UserRepositoryImpl : UserRepository {
         val users = result.documents.mapNotNull { it.toObject(User::class.java) }
         Result.success(users)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 
     // Обновляем интересы пользователя в Firestore
@@ -114,7 +116,7 @@ class UserRepositoryImpl : UserRepository {
             .await()
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 
     // Обновляем аватар пользователя в Firestore
@@ -124,7 +126,7 @@ class UserRepositoryImpl : UserRepository {
             .await()
         Result.success(Unit)
     } catch (e: Exception) {
-        Result.Error(e)
+        Result.error(e)
     }
 
     // Расчет ранга пользователя
