@@ -5,7 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.domain.entities.User
-import com.google.firebase.auth.AuthResult
+import com.example.brainracer.ui.utils.Result
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.UserProfileChangeRequest
@@ -16,9 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-class AuthViewModel: ViewModel() {
-    // Firebase Auth объявление
-    // User repository для работы с данными пользователя
+class AuthViewModel : ViewModel() {
     private val auth: FirebaseAuth = Firebase.auth
     private val userRepository = UserRepositoryImpl()
     private val _user = MutableStateFlow(auth.currentUser)
@@ -29,11 +28,11 @@ class AuthViewModel: ViewModel() {
     fun signIn(email: String, password: String) {
         viewModelScope.launch {
             try {
-                val result = auth.signInWithEmailAndPassword(email, password).await()
-                _user.value = auth.currentUser  // обновляем user
+                auth.signInWithEmailAndPassword(email, password).await()
+                _user.value = auth.currentUser
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing in", e)
-                _error.value = e.message // Показать ошибку пользователю
+                _error.value = e.message
             }
         }
     }
@@ -42,39 +41,46 @@ class AuthViewModel: ViewModel() {
         viewModelScope.launch {
             try {
                 val authResult = auth.createUserWithEmailAndPassword(email, password).await()
-                val user = authResult.user
-                val profile = UserProfileChangeRequest.Builder().setDisplayName(username).build()
-                user?.updateProfile(profile)?.await()
-               // _user.value = auth.currentUser // обновляем user
                 val firebaseUser = authResult.user
 
-                // Создаем профиль пользователя в Firestore
+                // Обновляем профиль в Firebase Auth
+                firebaseUser?.let { user ->
+                    val profile = UserProfileChangeRequest.Builder()
+                        .setDisplayName(username)
+                        .build()
+                    user.updateProfile(profile).await()
+                }
+
+                // Создаём пользователя в Firestore
                 if (firebaseUser != null) {
                     val user = User(
                         id = firebaseUser.uid,
                         email = email,
                         nickname = username,
-                        createdAt = com.google.firebase.Timestamp.now(),
-                        lastLogin = com.google.firebase.Timestamp.now()
+                        createdAt = Timestamp.now(),
+                        lastLogin = Timestamp.now()
                     )
 
-                    userRepository.createUser(user).fold(
-                        onSuccess = { _user.value = auth.currentUser },
-                        onFailure = { e ->
-                            _error.value = "Failed to create user profile: ${e.message}"
-                            // Откатываем: удаляем пользователя аутентификации если Firestore не удался
+                    val result = userRepository.createUser(user)
+                    if (result is Result.Success) {
+                        _user.value = auth.currentUser
+                    } else if (result is Result.Error) {
+                        _error.value = "Failed to create user profile: ${result.exception.message}"
+                        try {
                             firebaseUser.delete().await()
-                            _user.value = null
+                        } catch (deleteEx: Exception) {
+                            Log.e("AuthViewModel", "Failed to delete Firebase user", deleteEx)
                         }
-                    )
+                        _user.value = null
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing up", e)
-                _error.value = when (e) {   // Показать ошибку пользователю
-                        is FirebaseAuthUserCollisionException -> "Email already in use"
-                        is IllegalArgumentException -> "Invalid email or password"
-                        else -> e.message ?: "Unknown error"
-                    }
+                _error.value = when (e) {
+                    is FirebaseAuthUserCollisionException -> "Email already in use"
+                    is IllegalArgumentException -> "Invalid email or password"
+                    else -> e.message ?: "Unknown error"
+                }
             }
         }
     }

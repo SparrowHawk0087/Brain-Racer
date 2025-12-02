@@ -3,7 +3,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
-import com.example.brainracer.data.repositories.fold
+import com.example.brainracer.ui.utils.fold
 import com.example.brainracer.domain.entities.User as DomainUser
 import com.example.brainracer.ui.utils.ProfileUIState
 import com.example.brainracer.ui.utils.QuizItem
@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import com.example.brainracer.data.repositories.Result
+import com.example.brainracer.ui.utils.Result
 
 class ProfileViewModel : ViewModel() {
 

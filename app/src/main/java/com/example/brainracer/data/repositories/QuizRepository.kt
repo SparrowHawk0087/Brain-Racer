@@ -2,10 +2,11 @@ package com.example.brainracer.data.repositories
 
 import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.domain.entities.Quiz
+import com.example.brainracer.ui.utils.Result
 
 interface QuizRepository {
     suspend fun getQuiz(quizId: String): Result<Quiz>
-    suspend fun getQuizzesByCategory(category: String,limit: Int = 20):Result<List<Quiz>>
+    suspend fun getQuizzesByCategory(category: String,limit: Int = 20): Result<List<Quiz>>
     suspend fun getQuizzesByUser(userId: String): Result<List<Quiz>>
     suspend fun createQuiz(quiz: Quiz): Result<Unit>
     suspend fun updateQuiz(quiz: Quiz): Result<Unit>
