@@ -3,7 +3,9 @@ package com.example.brainracer.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
+import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.data.utils.Result
+import com.example.brainracer.data.utils.fold
 import com.example.brainracer.ui.utils.HomeUiState
 import com.example.brainracer.ui.utils.QuizItem
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.google.firebase.auth.FirebaseAuth
 
 class HomeViewModel : ViewModel() {
 
@@ -18,6 +21,53 @@ class HomeViewModel : ViewModel() {
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     private val quizRepository = QuizRepositoryImpl()
+    private val userRepository = UserRepositoryImpl()
+    private val auth = FirebaseAuth.getInstance()
+
+    init {
+        // Сначала пробуем загрузить данные пользователя из Firebase Auth
+        val currentUserId = auth.currentUser?.uid
+        currentUserId?.let { userId ->
+            loadUserData(userId)
+        }
+    }
+
+    private fun loadUserData(userId: String) {
+        viewModelScope.launch {
+            try {
+                val userResult = userRepository.getUser(userId)
+                userResult.fold(
+                    onSuccess = { user ->
+                        _uiState.update {
+                            it.copy(
+                                userName = user.nickname ?: "Гость",
+                                userStats = user.stats
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        // Если не удалось загрузить из Firestore, используем имя из Firebase Auth
+                        val displayName = auth.currentUser?.displayName ?: "Гость"
+                        _uiState.update {
+                            it.copy(
+                                userName = displayName,
+                                errorMessage = "Не удалось загрузить полный профиль: ${error.message}"
+                            )
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                // В случае ошибки используем базовую информацию
+                val displayName = auth.currentUser?.displayName ?: "Гость"
+                _uiState.update {
+                    it.copy(
+                        userName = displayName,
+                        errorMessage = "Ошибка загрузки данных пользователя: ${e.message}"
+                    )
+                }
+            }
+        }
+    }
 
     fun loadQuizzes() {
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -49,6 +99,7 @@ class HomeViewModel : ViewModel() {
                             it.copy(
                                 isLoading = false,
                                 quizzes = quizItems,
+                                selectedCategory = "Все", // ← ДОБАВЬТЕ ЭТО!
                                 errorMessage = null
                             )
                         }

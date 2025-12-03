@@ -57,10 +57,8 @@ fun NavGraph(
             "home/{userId}",
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
         ) { backStackEntry ->
-            val userId = backStackEntry.arguments?.getString("userId") ?: ""
             HomeScreen(
                 navController = navController,
-                userId = userId,
                 authViewModel = authViewModel // ← передаём authViewModel
                 // homeViewModel создаётся автоматически через viewModel() default параметр
             )
