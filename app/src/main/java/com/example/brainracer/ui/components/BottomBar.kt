@@ -1,8 +1,13 @@
 package com.example.brainracer.ui.components
 
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,75 +28,55 @@ fun TextOnlyBottomBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 10.dp) // Нормальные отступы
+            .padding(horizontal = 24.dp, vertical = 12.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp)) // Стандартное закругление
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .clip(RoundedCornerShape(24.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant) // Фон островка
                 .shadow(
-                    elevation = 8.dp, // Умеренная тень
-                    shape = RoundedCornerShape(20.dp),
-                    spotColor = Color.Black.copy(alpha = 0.1f)
+                    elevation = 12.dp,
+                    shape = RoundedCornerShape(24.dp),
+                    spotColor = Color.Black.copy(alpha = 0.15f)
                 )
-                .height(60.dp), // Стандартная высота для кнопок/баров
+                .height(72.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Пункт Home
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Home",
-                    color = if (currentRoute == "home")
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    style = MaterialTheme.typography.titleSmall // Стандартный размер
-                )
-            }
-
-            // Тонкий разделитель
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(24.dp)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            // Иконка Home прямо на фоне островка
+            Icon(
+                imageVector = Icons.Filled.Home,
+                contentDescription = "Home",
+                tint = if (currentRoute == "home")
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(36.dp)
             )
 
-            // Пункт Profile
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Profile",
-                    color = if (currentRoute == "profile")
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    style = MaterialTheme.typography.titleSmall
-                )
-            }
+            // Иконка Profile прямо на фоне островка
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = "Profile",
+                tint = if (currentRoute == "profile")
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(36.dp)
+            )
         }
     }
 }
 
-@Preview(showBackground = true, heightDp = 90)
+@Preview(showBackground = true, heightDp = 120)
 @Composable
 fun TextOnlyBottomBarPreviewHome() {
     MaterialTheme {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(90.dp)
+                .height(120.dp)
                 .background(MaterialTheme.colorScheme.background)
         ) {
             TextOnlyBottomBar(
@@ -102,14 +87,14 @@ fun TextOnlyBottomBarPreviewHome() {
     }
 }
 
-@Preview(showBackground = true, heightDp = 90)
+@Preview(showBackground = true, heightDp = 120)
 @Composable
 fun TextOnlyBottomBarPreviewProfile() {
     MaterialTheme {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(90.dp)
+                .height(120.dp)
                 .background(MaterialTheme.colorScheme.background)
         ) {
             TextOnlyBottomBar(
