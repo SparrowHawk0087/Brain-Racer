@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.brainracer.ui.components.TextOnlyBottomBar
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import com.example.brainracer.ui.viewmodels.HomeViewModel
 
@@ -35,48 +36,64 @@ fun HomeScreen(
         }
     }
 
+    // Весь экран - Column, чтобы бар был внизу
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier.fillMaxSize()
     ) {
-        if (uiState.isLoading) {
-            CircularProgressIndicator()
-        } else {
-            Text("Welcome, ${uiState.userName}!")
+        // Основной контент занимает всё доступное пространство
+        Box(
+            modifier = Modifier
+                .weight(1f)  // Заставляет занимать всё пространство кроме бара
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                if (uiState.isLoading) {
+                    CircularProgressIndicator()
+                } else {
+                    Text("Welcome, ${uiState.userName}!")
 
-            uiState.userStats?.let { stats ->
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Quizzes taken: ${stats.totalQuizzesTaken}")
-                Text("Total points: ${stats.totalPoints}")
-                Text("Current streak: ${stats.currentStreak} days")
-            }
+                    uiState.userStats?.let { stats ->
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Quizzes taken: ${stats.totalQuizzesTaken}")
+                        Text("Total points: ${stats.totalPoints}")
+                        Text("Current streak: ${stats.currentStreak} days")
+                    }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-            Button(onClick = {
-                navController.navigate("quizzes")
-            }) {
-                Text("Start Quiz")
-            }
+                    Button(onClick = {
+                        navController.navigate("quizzes")
+                    }) {
+                        Text("Start Quiz")
+                    }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-            Button(onClick = {
-                navController.navigate("profile/$userId")
-            }) {
-                Text("Profile")
-            }
+                    Button(onClick = {
+                        navController.navigate("profile/$userId")
+                    }) {
+                        Text("Profile")
+                    }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-            Button(onClick = {
-                authViewModel.signOut()
-            }) {
-                Text("Sign Out")
+                    Button(onClick = {
+                        authViewModel.signOut()
+                    }) {
+                        Text("Sign Out")
+                    }
+                }
             }
         }
+
+        // НИЖНИЙ БАР - Home подсвечен так как это HomeScreen
+        TextOnlyBottomBar(
+            showBar = true,
+            currentRoute = "home"  // ← ВОТ ТУТ Home будет подсвечен
+        )
     }
 }

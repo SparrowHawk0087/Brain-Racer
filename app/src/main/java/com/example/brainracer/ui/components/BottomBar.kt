@@ -4,42 +4,53 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 
-// Самый простой BottomBar без иконок
+// Простой BottomBar с двумя пунктами
 @Composable
 fun TextOnlyBottomBar(
-    showBar: Boolean = true
+    showBar: Boolean = true,
+    currentRoute: String = "home" // Чтобы показывать какой пункт активен
 ) {
     if (!showBar) return
 
     NavigationBar {
+        // Пункт Home (Главная)
         NavigationBarItem(
             icon = {},  // Без иконки
-            label = { Text("Главная") },
-            selected = true,
-            onClick = {}
+            label = { Text("Home") },
+            selected = currentRoute == "home", // Подсвечиваем если активен
+            onClick = {} // Пусто - логику добавит другой разработчик
         )
 
+        // Пункт Profile (Профиль)
         NavigationBarItem(
             icon = {},
-            label = { Text("Поиск") },
-            selected = false,
-            onClick = {}
-        )
-
-        NavigationBarItem(
-            icon = {},
-            label = { Text("Профиль") },
-            selected = false,
-            onClick = {}
+            label = { Text("Profile") },
+            selected = currentRoute == "profile", // Подсвечиваем если активен
+            onClick = {} // Пусто
         )
     }
 }
 
-// Preview
+// Preview с активным Home
 @Preview(showBackground = true, heightDp = 80)
 @Composable
-fun TextOnlyBottomBarPreview() {
+fun BottomBarHomePreview() {
     MaterialTheme {
-        TextOnlyBottomBar(showBar = true)
+        TextOnlyBottomBar(
+            showBar = true,
+            currentRoute = "home" // Home активен
+        )
+    }
+}
+
+// Preview с активным Profile
+@Preview(showBackground = true, heightDp = 80)
+@Composable
+fun BottomBarProfilePreview() {
+    MaterialTheme {
+        TextOnlyBottomBar(
+            showBar = true,
+            currentRoute = "profile" // Profile активен
+        )
     }
 }
