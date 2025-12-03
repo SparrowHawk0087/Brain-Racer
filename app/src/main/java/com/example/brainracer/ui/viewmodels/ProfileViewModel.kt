@@ -66,7 +66,10 @@ class ProfileViewModel : ViewModel() {
                                 title = quiz.title,
                                 category = quiz.category,
                                 questionCount = quiz.questions.size,
-                                difficulty = quiz.difficulty.name
+                                difficulty = quiz.difficulty.name,
+                                description = quiz.description,
+                                rating = quiz.stats.averageRating,
+                                playCount = quiz.stats.timesTaken
                             )
                         }
 

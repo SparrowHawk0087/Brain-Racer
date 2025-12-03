@@ -1,6 +1,8 @@
 package com.example.brainracer.ui.utils
 
 import androidx.compose.runtime.Stable
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Stable
 data class ProfileUIState(
@@ -31,10 +33,12 @@ data class QuizItem(
     val category: String,
     val questionCount: Int,
     val difficulty: String,
+    val description: String,
+    val rating: Double,
+    val playCount: Int,
 )
 
 object ProfileUtils {
-
     fun calculateWinRate(gamesPlayed: Int, gamesWon: Int): Double {
         return if (gamesPlayed > 0) {
             (gamesWon.toDouble() / gamesPlayed) * 100
@@ -45,10 +49,10 @@ object ProfileUtils {
 
     fun formatRegistrationDate(dateString: String): String {
         return try {
-            val inputFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-            val outputFormat = java.text.SimpleDateFormat("dd MMMM yyyy", java.util.Locale("ru"))
+            val inputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val outputFormat = SimpleDateFormat("dd MMMM yyyy", Locale("ru"))
             val date = inputFormat.parse(dateString)
-            outputFormat.format(date ?: java.util.Date())
+            outputFormat.format(date ?: Date())
         } catch (e: Exception) {
             "Дата не указана"
         }
@@ -92,7 +96,7 @@ object ProfileUtils {
         return FormattedStats(
             gamesPlayedFormatted = formatLargeNumber(gamesPlayed),
             gamesWonFormatted = formatLargeNumber(gamesWon),
-            winRateFormatted = calculateWinRate(gamesPlayed, gamesWon).toFormattedPercent(),
+            winRateFormatted = calculateWinRate(gamesPlayed, gamesWon).toString(),
             totalPointsFormatted = formatLargeNumber(totalPoints)
         )
     }
@@ -118,11 +122,11 @@ object ProfileConstants {
     const val DEFAULT_AVATAR_SIZE = 100
 }
 
-fun String.isValidUsername(): Boolean {
+/*fun String.isValidUsername(): Boolean {
     return length in ProfileConstants.MIN_USERNAME_LENGTH..ProfileConstants.MAX_USERNAME_LENGTH &&
             matches(Regex("^[a-zA-Zа-яА-Я0-9_]+$"))
 }
 
 fun Double.toFormattedPercent(): String {
     return "%.1f%%".format(this)
-}
+}*/
