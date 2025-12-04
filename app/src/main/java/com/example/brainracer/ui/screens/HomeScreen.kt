@@ -1,12 +1,14 @@
 package com.example.brainracer.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -17,9 +19,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -60,7 +64,13 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Brain Racer") },
+                title = { Text(
+                    text = "Brain Racer",
+                    color = MaterialTheme.colorScheme.inverseSurface,
+                    style = MaterialTheme.typography.displayLarge,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(8.dp)
+                )},
                 actions = {
                     IconButton(onClick = {
                         authViewModel.signOut()
@@ -73,7 +83,8 @@ fun HomeScreen(
                             contentDescription = "Выйти"
                         )
                     }
-                }
+                },
+                modifier = Modifier.windowInsetsPadding(WindowInsets.systemBars)
             )
         },
         bottomBar = {
@@ -82,7 +93,7 @@ fun HomeScreen(
                 showBar = true,
                 currentRoute = currentRoute,
                 onHomeClick = onHomeClick,
-                onProfileClick = onProfileClick
+                onProfileClick = onProfileClick,
             )
         },
         floatingActionButton = {
@@ -90,14 +101,17 @@ fun HomeScreen(
                 onClick = {
                     // Добавляем демо-викторины через ViewModel
                     homeViewModel.addDemoQuizzes()
-                }
+                },
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.add),
-                    contentDescription = "Добавить демо-викторины"
+                    contentDescription = "Добавить демо-викторины",
+                    modifier = Modifier.size(24.dp)
                 )
             }
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.secondary
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -107,7 +121,8 @@ fun HomeScreen(
             // Приветствие пользователя
             Text(
                 text = "Привет, ${uiState.userName.ifBlank { "Гость" }}!",
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.displayMedium,
+                color = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
 

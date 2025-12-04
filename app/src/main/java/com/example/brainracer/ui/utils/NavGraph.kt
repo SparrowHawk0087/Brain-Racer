@@ -111,6 +111,9 @@ fun NavGraph(
                 authViewModel = authViewModel,
                 onPasswordResetSent = {
                     navController.popBackStack()
+                },
+                onNavigateBack = {
+                    navController.popBackStack()
                 }
             )
         }
