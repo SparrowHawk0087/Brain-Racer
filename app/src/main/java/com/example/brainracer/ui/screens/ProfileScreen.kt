@@ -1,5 +1,6 @@
 package com.example.brainracer.ui.screens
 
+import android.R
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -8,12 +9,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -42,6 +47,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults.contentWindowInsets
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -129,12 +135,14 @@ fun ProfileScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.systemBars,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = if (isOwnProfile) "Мой профиль" else "Профиль игрока",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.displayLarge,
+                        color = MaterialTheme.colorScheme.inverseSurface
                     )
                 },
                 actions = {
@@ -149,7 +157,8 @@ fun ProfileScreen(
                             )
                         }
                     }
-                }
+                },
+                modifier = Modifier.windowInsetsPadding(WindowInsets.systemBars)
             )
         },
         bottomBar = {
@@ -173,7 +182,8 @@ fun ProfileScreen(
                     text = { Text("Вызвать на дуэль") }
                 )
             }
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.secondary
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
@@ -441,7 +451,7 @@ fun MainStats(
             title = "Побед",
             value = "$winPercentage%",
             icon = Icons.Default.EmojiEvents,
-            color = MaterialTheme.colorScheme.secondary
+            color = MaterialTheme.colorScheme.inversePrimary
         )
 
         StatCard(
@@ -555,8 +565,8 @@ fun RecentGameItem(game: RecentGame) {
             .padding(horizontal = 16.dp),
         colors = CardDefaults.cardColors(
             containerColor = when (game.result) {
-                "Победа" -> MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                else -> MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                "Победа" -> MaterialTheme.colorScheme.surface.copy(alpha = 0.1f)
+                else -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.1f)
             }
         )
     ) {
@@ -570,13 +580,13 @@ fun RecentGameItem(game: RecentGame) {
             Column {
                 Text(
                     text = game.topic,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
                 Text(
                     text = game.timeAgo,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
             }
 
@@ -585,7 +595,7 @@ fun RecentGameItem(game: RecentGame) {
             ) {
                 Badge(
                     containerColor = when (game.result) {
-                        "Победа" -> MaterialTheme.colorScheme.primary
+                        "Победа" -> Color.Green.copy(alpha = 0.5f)
                         else -> MaterialTheme.colorScheme.error
                     }
                 ) {
@@ -595,7 +605,7 @@ fun RecentGameItem(game: RecentGame) {
                 Text(
                     text = String.format("%.1f", game.score),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
             }
         }

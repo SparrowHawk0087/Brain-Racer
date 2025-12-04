@@ -23,7 +23,8 @@ fun BottomBar(
     showBar: Boolean = true,
     currentRoute: String = "home",
     onHomeClick: () -> Unit = {},
-    onProfileClick: () -> Unit = {}
+    onProfileClick: () -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     if (!showBar) return
 
@@ -35,6 +36,7 @@ fun BottomBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 12.dp)
+            .windowInsetsPadding(WindowInsets.navigationBars)
     ) {
         Row(
             modifier = Modifier
