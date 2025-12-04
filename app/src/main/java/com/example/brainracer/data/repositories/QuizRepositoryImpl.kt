@@ -4,6 +4,7 @@ import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.data.utils.getOrNull
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -34,8 +35,8 @@ class QuizRepositoryImpl: QuizRepository {
     //Получение квизов по категории
     override suspend fun getQuizzesByCategory(category: String, limit: Int): Result<List<Quiz>> = try {
         val res = quizzesCollection
-            .whereEqualTo("category",category)
-            .whereEqualTo("isPublic",true)
+            .whereEqualTo("category", category)
+            .whereEqualTo("public", true)  // Изменить здесь
             .limit(limit.toLong())
             .get()
             .await()
@@ -58,18 +59,14 @@ class QuizRepositoryImpl: QuizRepository {
     }
 
     // Создание квиза
-    override suspend fun createQuiz(quiz: Quiz): Result<Unit> = try {
-        val quizWithId = if (quiz.id.isBlank()){
-            quiz.copy(id = quizzesCollection.document().id)
-        } else
-            quiz
-        quizzesCollection.document(quizWithId.id).set(quizWithId).await()
-        usersCollection.document(quizWithId.createdBy)
-            .update("createdQuizzes",FieldValue.arrayUnion(quizWithId.id))
-            .await()
-        Result.success(Unit)
-    } catch (e: Exception) {
-        Result.error(e)
+    override suspend fun createQuiz(quiz: Quiz): Result<Unit> {
+        return try {
+            // Просто сохраняем викторину, НЕ создаем пользователя
+            quizzesCollection.document(quiz.id).set(quiz).await()
+            Result.Success(Unit)
+        } catch (e: Exception) {
+            Result.Error(e)
+        }
     }
 
     // Обновить существующий квиз
@@ -97,7 +94,7 @@ class QuizRepositoryImpl: QuizRepository {
     // Поиск квизов по названию (+ категории)
     override suspend fun searchQuizzes(query: String, category: String?): Result<List<Quiz>> = try {
         var queryRef = quizzesCollection
-            .whereEqualTo("isPublic", true)
+            .whereEqualTo("public", true)  // Изменить здесь
             .whereGreaterThanOrEqualTo("title", query)
             .whereLessThanOrEqualTo("title", query + "\uf8ff")
             .limit(20)
@@ -133,16 +130,22 @@ class QuizRepositoryImpl: QuizRepository {
     }
 
     // Получение популярных квизов ( отбор по количеству прохождений)
+    // В QuizRepositoryImpl.kt изменить:
     override suspend fun getPopularQuizzes(limit: Int): Result<List<Quiz>> = try {
+        println("DEBUG QuizRepositoryImpl: Querying with field 'public' instead of 'isPublic'")
+
         val res = quizzesCollection
-            .whereEqualTo("isPublic", true)
-            .orderBy("stats.times_taken", Query.Direction.DESCENDING)
+            .whereEqualTo("public", true)  // Изменить isPublic → public
             .limit(limit.toLong())
             .get()
             .await()
+
+        println("DEBUG QuizRepositoryImpl: Got ${res.documents.size} documents")
+
         val quizzes = res.documents.mapNotNull { it.toObject(Quiz::class.java) }
         Result.success(quizzes)
     } catch (e: Exception) {
+        println("DEBUG QuizRepositoryImpl: Error: ${e.message}")
         Result.error(e)
     }
 }
