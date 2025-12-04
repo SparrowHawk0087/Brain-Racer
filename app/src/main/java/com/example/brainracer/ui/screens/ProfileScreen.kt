@@ -2,19 +2,7 @@ package com.example.brainracer.ui.screens
 
 import androidx.compose.ui.graphics.Color
 import android.widget.Toast
-import androidx.compose.foundation.Image
-import com.example.brainracer.R
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
@@ -37,6 +25,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.brainracer.ui.components.TextOnlyBottomBar
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -114,7 +103,6 @@ fun MyProgressBarScreen() {
     }
 }
 
-//@Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun ProfileScreen(
     onNavigateToAuth: () -> Unit,
@@ -132,27 +120,47 @@ fun ProfileScreen(
         }
     }
 
+    // Весь экран - Column, чтобы бар был внизу
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier.fillMaxSize()
     ) {
-        Text("Profile: $userId")
-        Spacer(modifier = Modifier.height(16.dp))
+        // Основной контент с центрированием
+        Box(
+            modifier = Modifier
+                .fillMaxSize()  // Занимает весь экран
+                .weight(1f)     // Но даёт место для бара
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center  // ← Центрирование по вертикали
+            ) {
+                Text("Profile: $userId")
+                Spacer(modifier = Modifier.height(16.dp))
 
-        Button(onClick = {
-            authViewModel.deleteAccount()
-        }) {
-            Text("Delete Account")
+                Button(onClick = {
+                    authViewModel.deleteAccount()
+                }) {
+                    Text("Delete Account")
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(onClick = {
+                    authViewModel.signOut()
+                }) {
+                    Text("Sign Out")
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(onClick = {
-            authViewModel.signOut()
-        }) {
-            Text("Sign Out")
-        }
+        // НИЖНИЙ БАР
+        TextOnlyBottomBar(
+            showBar = true,
+            currentRoute = "profile"
+        )
     }
 }
 
