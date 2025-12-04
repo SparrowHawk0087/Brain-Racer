@@ -278,5 +278,11 @@ fun QuizCard(
                 }
             }
         }
+
+        // НИЖНИЙ БАР - Home подсвечен так как это HomeScreen
+        TextOnlyBottomBar(
+            showBar = true,
+            currentRoute = "home"  // ← ВОТ ТУТ Home будет подсвечен
+        )
     }
 }
