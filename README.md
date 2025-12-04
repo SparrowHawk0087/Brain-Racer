@@ -59,7 +59,6 @@
 | **Backend & Cloud Services** | ![Firebase](https://img.shields.io/badge/Firebase-FFCA28?style=flat&logo=firebase&logoColor=black) |
 
 ### Технологический стек
-
 ```kotlin
 // Основные технологии
 val techStack = listOf(
@@ -70,3 +69,8 @@ val techStack = listOf(
     "MVVM Architecture",
     "Dependency Injection (Dagger/Hilt)"
 )
+```
+
+### Наш дизайн 
+https://www.figma.com/design/sXtUvbLbtfCMbCgBn6rPfp/Untitled?node-id=0-1&t=H0rDOybmM2CZwt5w-1
+
