@@ -25,17 +25,20 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.brainracer.R
+import com.example.brainracer.ui.components.BottomBar
 import com.example.brainracer.ui.utils.QuizItem
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import com.example.brainracer.ui.viewmodels.HomeViewModel
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
-    homeViewModel: HomeViewModel = viewModel()
+    homeViewModel: HomeViewModel = viewModel(),
+    onHomeClick: () -> Unit = {},  // Добавлено
+    onProfileClick: () -> Unit = {}, // Добавлено
+    currentRoute: String = "home"    // Добавлено
 ) {
     val uiState by homeViewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -52,6 +55,7 @@ fun HomeScreen(
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
     }
+
 
     Scaffold(
         topBar = {
@@ -70,6 +74,15 @@ fun HomeScreen(
                         )
                     }
                 }
+            )
+        },
+        bottomBar = {
+            // Передаём обработчики кликов и текущий маршрут
+            BottomBar(
+                showBar = true,
+                currentRoute = currentRoute,
+                onHomeClick = onHomeClick,
+                onProfileClick = onProfileClick
             )
         },
         floatingActionButton = {
@@ -116,6 +129,7 @@ fun HomeScreen(
                     )
                 }
             }
+
 
             // Содержимое экрана
             when {
@@ -181,6 +195,7 @@ fun HomeScreen(
     }
 }
 
+// QuizCard остается без изменений
 @Composable
 fun QuizCard(
     quiz: QuizItem,
@@ -216,6 +231,7 @@ fun QuizCard(
                     color = MaterialTheme.colorScheme.primary
                 )
             }
+
 
             // Информация о викторине
             Column {
@@ -278,11 +294,5 @@ fun QuizCard(
                 }
             }
         }
-
-        // НИЖНИЙ БАР - Home подсвечен так как это HomeScreen
-        TextOnlyBottomBar(
-            showBar = true,
-            currentRoute = "home"  // ← ВОТ ТУТ Home будет подсвечен
-        )
     }
 }

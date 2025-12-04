@@ -19,11 +19,17 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun TextOnlyBottomBar(
+fun BottomBar(
     showBar: Boolean = true,
-    currentRoute: String = "home"
+    currentRoute: String = "home",
+    onHomeClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {}
 ) {
     if (!showBar) return
+
+    // Отладочный вывод
+    println("DEBUG BottomBar: currentRoute = $currentRoute")
+    println("DEBUG BottomBar: showBar = $showBar")
 
     Box(
         modifier = Modifier
@@ -34,7 +40,7 @@ fun TextOnlyBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant) // Фон островка
+                .background(MaterialTheme.colorScheme.surface)
                 .shadow(
                     elevation = 12.dp,
                     shape = RoundedCornerShape(24.dp),
@@ -44,27 +50,43 @@ fun TextOnlyBottomBar(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Иконка Home прямо на фоне островка
-            Icon(
-                imageVector = Icons.Filled.Home,
-                contentDescription = "Home",
-                tint = if (currentRoute == "home")
-                    MaterialTheme.colorScheme.primary
-                else
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.size(36.dp)
-            )
+            // Кнопка Home
+            IconButton(
+                onClick = {
+                    println("DEBUG BottomBar: Home clicked")
+                    onHomeClick()
+                },
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Home,
+                    contentDescription = "Home",
+                    tint = if (currentRoute.startsWith("home"))
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.size(36.dp)
+                )
+            }
 
-            // Иконка Profile прямо на фоне островка
-            Icon(
-                imageVector = Icons.Filled.Person,
-                contentDescription = "Profile",
-                tint = if (currentRoute == "profile")
-                    MaterialTheme.colorScheme.primary
-                else
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.size(36.dp)
-            )
+            // Кнопка Profile
+            IconButton(
+                onClick = {
+                    println("DEBUG BottomBar: Profile clicked")
+                    onProfileClick()
+                },
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Person,
+                    contentDescription = "Profile",
+                    tint = if (currentRoute.startsWith("profile"))
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.size(36.dp)
+                )
+            }
         }
     }
 }
@@ -79,13 +101,14 @@ fun TextOnlyBottomBarPreviewHome() {
                 .height(120.dp)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            TextOnlyBottomBar(
+            BottomBar(
                 showBar = true,
                 currentRoute = "home"
             )
         }
     }
 }
+
 
 @Preview(showBackground = true, heightDp = 120)
 @Composable
@@ -97,7 +120,7 @@ fun TextOnlyBottomBarPreviewProfile() {
                 .height(120.dp)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            TextOnlyBottomBar(
+            BottomBar(
                 showBar = true,
                 currentRoute = "profile"
             )
