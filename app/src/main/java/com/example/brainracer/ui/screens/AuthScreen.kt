@@ -56,15 +56,6 @@ import com.example.brainracer.ui.theme.BrainRacerTheme
 import com.example.brainracer.ui.theme.ButtonShapeLogin
 import com.example.brainracer.ui.theme.Shapes
 import com.example.brainracer.ui.viewmodels.AuthViewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import org.xbill.DNS.Lookup
-import org.xbill.DNS.TextParseException
-import org.xbill.DNS.Type
-import org.xbill.DNS.SimpleResolver
-import java.net.InetAddress
-import java.net.UnknownHostException
 
 
 @Preview(showBackground = true, showSystemUi = true)
@@ -79,35 +70,10 @@ fun AuthScreen(
     var username by remember { mutableStateOf("") }
     var isLogin by remember { mutableStateOf(true) }
     var isPasswordVisible by rememberSaveable { mutableStateOf(false) }
+    //val user by authViewModel.user.collectAsState()
     val error by authViewModel.error.collectAsState()
     val context = LocalContext.current
     var isLoading by remember { mutableStateOf(false) }
-
-    var emailValidationMessage by remember { mutableStateOf("") }
-    var isCheckingEmail by remember { mutableStateOf(false) }
-    val isUsernameValid = isValidUsername(username)
-
-    // Сброс валидации при переключении Login/Register
-    LaunchedEffect(isLogin) {
-        emailValidationMessage = ""
-        isCheckingEmail = false
-    }
-
-    // Проверка email с debounce
-    LaunchedEffect(email) {
-        if (email.isNotBlank()) {
-            emailValidationMessage = ""
-            isCheckingEmail = true
-            delay(500)
-            emailValidationMessage = validateEmailMessageSuspend(email)
-            isCheckingEmail = false
-        } else {
-            emailValidationMessage = ""
-            isCheckingEmail = false
-        }
-    }
-
-    val isEmailValid = emailValidationMessage == "Success"
 
     // Обработка ошибок
     LaunchedEffect(error) {
@@ -195,7 +161,7 @@ fun AuthScreen(
                     text = "Email",
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                     style = MaterialTheme.typography.bodyLarge
-                ) },
+                    ) },
                 placeholder = { Text(
                     text = "Enter your email",
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -206,25 +172,13 @@ fun AuthScreen(
                     Icons.Default.Email,
                     contentDescription = "Email",
                     tint = MaterialTheme.colorScheme.onPrimary
-                ) },
-                trailingIcon = {
-                    if (isCheckingEmail) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
-                        )
-                    }
-                },
-                isError = email.isNotBlank() && !isEmailValid && emailValidationMessage.isNotEmpty(),
-                supportingText = {
-                    if (emailValidationMessage.isNotEmpty()) {
-                        Text(
-                            text = emailValidationMessage,
-                            color = MaterialTheme.colorScheme.inverseOnSurface,
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                },
+                    ) },
+                isError = email.isNotBlank() && !isValidEmail(email),
+                supportingText = { Text(
+                    text = validateEmailMessage(email),
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    style = MaterialTheme.typography.labelSmall
+                    ) },
                 shape = Shapes.small,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.onPrimary,
@@ -324,10 +278,7 @@ fun AuthScreen(
                         }
                     }
                 },
-                enabled = !isLoading && when {
-                    isLogin -> email.isNotBlank() && password.isNotBlank() && isEmailValid && isValidPassword(password)
-                    else -> isUsernameValid && email.isNotBlank() && password.isNotBlank() && isEmailValid && isValidPassword(password)
-                },
+                enabled = !isLoading,
                 shape = ButtonShapeLogin,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -356,62 +307,11 @@ fun AuthScreen(
     }
 }
 
-// Function to check MX-notes
-suspend fun isDomainExists(domain: String): Boolean = withContext(Dispatchers.IO) {
-    try {
-        // 1. Пытаемся выполнить DNS-запросы через публичный DNS (Google)
-        val resolver = SimpleResolver("8.8.8.8")
-        resolver.setTimeout(5) // таймаут 5 секунд
-
-        fun checkWithResolver(type: Int): Boolean {
-            val lookup = Lookup(domain, type)
-            lookup.setResolver(resolver)
-            val records = lookup.run()
-            return records != null && records.isNotEmpty()
-        }
-
-        // Проверяем MX, A и AAAA записи
-        if (checkWithResolver(Type.MX)) {
-            Log.d("DNS_CHECK", "Domain $domain has MX records")
-            return@withContext true
-        }
-        if (checkWithResolver(Type.A)) {
-            Log.d("DNS_CHECK", "Domain $domain has A records")
-            return@withContext true
-        }
-        if (checkWithResolver(Type.AAAA)) {
-            Log.d("DNS_CHECK", "Domain $domain has AAAA records")
-            return@withContext true
-        }
-
-        // 2. Если dnsjava не нашёл записей, пробуем системный резолвер через InetAddress
-        try {
-            InetAddress.getByName(domain)
-            Log.d("DNS_CHECK", "Domain $domain resolved via InetAddress")
-            return@withContext true
-        } catch (e: UnknownHostException) {
-            Log.d("DNS_CHECK", "Domain $domain not found via InetAddress")
-            return@withContext false
-        }
-
-    } catch (e: TextParseException) {
-        Log.e("DNS_CHECK", "TextParseException for domain $domain", e)
-        false
-    } catch (e: Exception) {
-        // Любая другая ошибка (сеть, таймаут) – возвращаем true,
-        // чтобы не блокировать регистрацию из-за временных проблем
-        Log.e("DNS_CHECK", "Unexpected error checking domain $domain", e)
-        true
-    }
-}
-
-
 // Function to send pre-check email
-suspend fun validateEmailMessageSuspend(email: String): String {
+fun validateEmailMessage(email: String): String {
     if (email.isEmpty()) return ""
 
-    // Сначала синтаксическая проверка (быстрая)
-    if (!isValidEmailSyntax(email)) {
+    if (!isValidEmail(email)) {
         return when {
             !email.contains("@") -> "Email must contain @ symbol"
             !email.contains(".") -> "Email must contain a domain (e.g., .com)"
@@ -421,18 +321,11 @@ suspend fun validateEmailMessageSuspend(email: String): String {
             else -> "Invalid email format"
         }
     }
-
-    // Проверка существования домена (может занять время)
-    val domain = email.substringAfter('@')
-    return if (isDomainExists(domain)) {
-        "Success"
-    } else {
-        "Email domain does not exist or cannot receive mail"
-    }
+    return "Success"
 }
 
 // Function to validate email format
-fun isValidEmailSyntax(email: String): Boolean {
+fun isValidEmail(email: String): Boolean {
     val emailPattern = Regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")
     return emailPattern.matches(email)
 }
@@ -454,11 +347,6 @@ fun validatePasswordMessage(password: String): String {
 // Function to validate password format
 fun isValidPassword(password: String): Boolean {
     return validatePasswordMessage(password) == "Success"
-}
-
-// Функция проверки username (можно добавить рядом с валидацией пароля)
-fun isValidUsername(username: String): Boolean {
-    return username.isNotBlank() && !username.contains(" ")
 }
 
 @Preview
