@@ -65,4 +65,5 @@ dependencies {
     implementation("com.google.firebase:firebase-storage:20.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("androidx.compose.material:material-icons-extended:1.5.4")
+    implementation("dnsjava:dnsjava:3.5.2")
 }
