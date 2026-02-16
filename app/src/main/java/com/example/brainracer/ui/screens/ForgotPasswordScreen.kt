@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material3.Button
@@ -19,8 +18,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -33,8 +34,9 @@ import com.example.brainracer.ui.theme.BrainRacerTheme
 import com.example.brainracer.ui.theme.ButtonShapeLarge
 import com.example.brainracer.ui.theme.Shapes
 import com.example.brainracer.ui.viewmodels.AuthViewModel
+import kotlinx.coroutines.delay
 
-@Preview( showBackground = true, showSystemUi = true)
+@Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun ForgotPasswordScreen(
     authViewModel: AuthViewModel = viewModel(),
@@ -43,8 +45,26 @@ fun ForgotPasswordScreen(
     modifier: Modifier = Modifier
 ) {
     var email by rememberSaveable { mutableStateOf("") }
+    var emailValidationMessage by remember { mutableStateOf("") }
+    var isCheckingEmail by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+
+    // Асинхронная проверка email с debounce
+    LaunchedEffect(email) {
+        if (email.isNotBlank()) {
+            emailValidationMessage = ""
+            isCheckingEmail = true
+            delay(500)
+            emailValidationMessage = validateEmailMessageSuspend(email)
+            isCheckingEmail = false
+        } else {
+            emailValidationMessage = ""
+            isCheckingEmail = false
+        }
+    }
+
+    val isEmailValid = emailValidationMessage == "Success"
 
     Column(
         modifier = modifier.fillMaxSize()
@@ -92,12 +112,22 @@ fun ForgotPasswordScreen(
                     contentDescription = "Email",
                     tint = MaterialTheme.colorScheme.onPrimary
                 ) },
-                isError = email.isNotBlank() && !isValidEmail(email),
-                supportingText = { Text(
-                    text = validateEmailMessage(email),
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
-                    style = MaterialTheme.typography.labelSmall
-                ) },
+                isError = email.isNotBlank() && !isEmailValid && emailValidationMessage.isNotEmpty(),
+                supportingText = {
+                    if (emailValidationMessage.isNotEmpty()) {
+                        Text(
+                            text = emailValidationMessage,
+                            color = MaterialTheme.colorScheme.inverseOnSurface,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    } else if (isCheckingEmail) {
+                        Text(
+                            text = "Checking email...",
+                            color = MaterialTheme.colorScheme.inverseOnSurface,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                },
                 shape = Shapes.small,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.onPrimary,
@@ -110,17 +140,19 @@ fun ForgotPasswordScreen(
 
             Spacer(modifier = Modifier.padding(8.dp))
 
-            Button(onClick = {
-                if (email.isNotBlank() && isValidEmail(email)) {
-                    authViewModel.sendPasswordResetEmail(email)
-                    onPasswordResetSent()
-                } else {
-                    Toast.makeText(context, "Enter valid email", Toast.LENGTH_SHORT).show()
-                }
-            },
+            Button(
+                onClick = {
+                    if (isEmailValid) {
+                        authViewModel.sendPasswordResetEmail(email)
+                        onPasswordResetSent()
+                    } else {
+                        Toast.makeText(context, "Enter a valid email", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                enabled = isEmailValid,
                 shape = ButtonShapeLarge,
                 modifier = Modifier.fillMaxWidth()
-                ) {
+            ) {
                 Text(
                     "Reset Email",
                     style = MaterialTheme.typography.labelSmall,
@@ -130,7 +162,8 @@ fun ForgotPasswordScreen(
 
             Spacer(modifier = Modifier.padding(8.dp))
 
-            Button(onClick = { onNavigateBack() },
+            Button(
+                onClick = { onNavigateBack() },
                 shape = ButtonShapeLarge,
                 colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.onTertiaryContainer),
                 modifier = Modifier.fillMaxWidth()
@@ -145,13 +178,10 @@ fun ForgotPasswordScreen(
     }
 }
 
-
 @Preview
 @Composable
 fun ForgotPasswordScreenPreview() {
-    BrainRacerTheme(
-        darkTheme = false
-    ) {
+    BrainRacerTheme(darkTheme = false) {
         ForgotPasswordScreen()
     }
 }
@@ -159,9 +189,7 @@ fun ForgotPasswordScreenPreview() {
 @Preview
 @Composable
 fun ForgotPasswordScreenPreviewDark() {
-    BrainRacerTheme(
-        darkTheme = true
-    ) {
+    BrainRacerTheme(darkTheme = true) {
         ForgotPasswordScreen()
     }
 }
