@@ -108,7 +108,7 @@ class QuizRepositoryImpl: QuizRepository {
     }
 
     // Запись результатов прохождения квиза
-    override suspend fun recordQuizResult(quizResult: ChallengeResult): Result<Unit> = try {
+    /*override suspend fun recordQuizResult(quizResult: ChallengeResult): Result<Unit> = try {
         val resWithId = quizResult.copy( id = quizResultsCollection.document().id )
         quizResultsCollection.document(resWithId.id).set(resWithId).await()
         val quizRef = quizzesCollection.document(quizResult.quizId)
@@ -127,7 +127,7 @@ class QuizRepositoryImpl: QuizRepository {
         Result.success(Unit)
     } catch (e: Exception) {
         Result.error(e)
-    }
+    }*/
 
     // Получение популярных квизов ( отбор по количеству прохождений)
     // В QuizRepositoryImpl.kt изменить:
@@ -146,6 +146,41 @@ class QuizRepositoryImpl: QuizRepository {
         Result.success(quizzes)
     } catch (e: Exception) {
         println("DEBUG QuizRepositoryImpl: Error: ${e.message}")
+        Result.error(e)
+    }
+
+    // Запись результатов прохождения квиза с поддержкой вызовов
+    override suspend fun recordQuizResult(quizResult: ChallengeResult): Result<Unit> = try {
+        val resWithId = quizResult.copy(id = quizResultsCollection.document().id)
+        quizResultsCollection.document(resWithId.id).set(resWithId).await()
+
+        // Обновляем статистику викторины
+        val quizRef = quizzesCollection.document(quizResult.quizId)
+        firestore.runTransaction { transaction ->
+            val quizDoc = transaction.get(quizRef)
+            val currentStats = quizDoc.get("stats") as? Map<String, Any> ?: mapOf()
+            val newTimesTaken = (currentStats["times_taken"] as? Long ?: 0) + 1
+            val currentAverage = currentStats["average_score"] as? Double ?: 0.0
+            val newAverageScore = (currentAverage * (newTimesTaken - 1) + quizResult.accuracy) / newTimesTaken
+            val updates = mapOf(
+                "stats.times_taken" to newTimesTaken,
+                "stats.average_score" to newAverageScore
+            )
+            transaction.update(quizRef, updates)
+        }.await()
+
+        // Если результат связан с вызовом — обновляем вызов
+        if (!quizResult.challengeId.isNullOrBlank()) {
+            val challengeRepository = ChallengeRepositoryImpl()
+            challengeRepository.submitChallengeResult(
+                challengeId = quizResult.challengeId!!,
+                userId = quizResult.userId,
+                result = quizResult
+            )
+        }
+
+        Result.success(Unit)
+    } catch (e: Exception) {
         Result.error(e)
     }
 }
