@@ -64,7 +64,7 @@ class ProfileViewModel : ViewModel() {
                             QuizItem(
                                 id = quiz.id,
                                 title = quiz.title,
-                                category = quiz.category,
+                                category = quiz.categoryId,
                                 questionCount = quiz.questions.size,
                                 difficulty = quiz.difficulty.name,
                                 description = quiz.description,

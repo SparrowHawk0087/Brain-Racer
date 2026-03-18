@@ -6,6 +6,7 @@ import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.data.utils.fold
+import com.example.brainracer.domain.entities.Category
 import com.example.brainracer.ui.utils.HomeUiState
 import com.example.brainracer.ui.utils.QuizItem
 import kotlinx.coroutines.delay
@@ -145,7 +146,7 @@ class HomeViewModel : ViewModel() {
                             QuizItem(
                                 id = quiz.id,
                                 title = quiz.title,
-                                category = quiz.category,
+                                category = quiz.categoryId,
                                 questionCount = quiz.questions.size,
                                 difficulty = quiz.difficulty.name,
                                 description = quiz.description,
@@ -212,9 +213,8 @@ class HomeViewModel : ViewModel() {
                         id = "test_quiz_${System.currentTimeMillis()}",
                         title = "Тест: Основы биологии",
                         description = "Простая тестовая викторина",
-                        category = "Биология",
+                        categoryId = "Биология",
                         difficulty = com.example.brainracer.domain.entities.QuizDifficulty.EASY,
-                        tags = listOf("тест", "биология"),
                         questions = listOf(
                             com.example.brainracer.domain.entities.Question(
                                 id = "q1",
@@ -237,7 +237,6 @@ class HomeViewModel : ViewModel() {
                         ),
                         createdBy = currentUserId,
                         createdAt = com.google.firebase.Timestamp.now(),
-                        isPublic = true,
                         timePerQuestion = 30
                     )
                 )
@@ -315,6 +314,12 @@ class HomeViewModel : ViewModel() {
                 )
             }
         }
+    }
+
+    private suspend fun loadCategories() {
+        val snapshot = firestore.collection("categories").orderBy("order").get().await()
+        val categories = snapshot.documents.mapNotNull { it.toObject(Category::class.java) }
+        _uiState.update { it.copy(categories = categories.map { it.name } ) }
     }
 
     fun clearError() {

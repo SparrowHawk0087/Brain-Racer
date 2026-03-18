@@ -7,16 +7,15 @@ data class Quiz(
     val id: String = "",
     val title: String = "",
     val description: String = "",
-    val category: String = "",
+    val categoryId: String = "",
     val difficulty: QuizDifficulty = QuizDifficulty.MEDIUM,
-    val tags: List<String> = emptyList(),
     val questions: List<Question> = emptyList(),
     val stats: QuizStats = QuizStats(),
     val createdBy: String = "",
     val createdAt: Timestamp = Timestamp.now(),
-    val isPublic: Boolean = true,
     val timePerQuestion: Int = 30,
-    var totalTime: Int = 0
+    var totalTime: Int = 0,
+    val imageUrl: String = "",
 ) {
     val questionCount: Int
         get() = questions.size
