@@ -35,7 +35,7 @@ class QuizRepositoryImpl: QuizRepository {
     //Получение квизов по категории
     override suspend fun getQuizzesByCategory(category: String, limit: Int): Result<List<Quiz>> = try {
         val res = quizzesCollection
-            .whereEqualTo("category", category)
+            .whereEqualTo("categoryId", category)
             .whereEqualTo("public", true)  // Изменить здесь
             .limit(limit.toLong())
             .get()
@@ -99,7 +99,7 @@ class QuizRepositoryImpl: QuizRepository {
             .whereLessThanOrEqualTo("title", query + "\uf8ff")
             .limit(20)
         if (!category.isNullOrBlank())
-            queryRef = queryRef.whereEqualTo("category", category)
+            queryRef = queryRef.whereEqualTo("categoryId", category)
         val res = queryRef.get().await()
         val quizzes = res.documents.mapNotNull { it.toObject(Quiz::class.java) }
         Result.success(quizzes)
