@@ -1,11 +1,10 @@
 package com.example.brainracer.ui.components
 
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
@@ -23,14 +22,11 @@ fun BottomBar(
     showBar: Boolean = true,
     currentRoute: String = "home",
     onHomeClick: () -> Unit = {},
+    onFriendsClick: () -> Unit = {},   // <-- НОВЫЙ параметр
     onProfileClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (!showBar) return
-
-    // Отладочный вывод
-    println("DEBUG BottomBar: currentRoute = $currentRoute")
-    println("DEBUG BottomBar: showBar = $showBar")
 
     Box(
         modifier = Modifier
@@ -52,12 +48,10 @@ fun BottomBar(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Кнопка Home
+
+            // ── Home ──────────────────────────────────────────────────────────
             IconButton(
-                onClick = {
-                    println("DEBUG BottomBar: Home clicked")
-                    onHomeClick()
-                },
+                onClick = onHomeClick,
                 modifier = Modifier.size(48.dp)
             ) {
                 Icon(
@@ -71,12 +65,26 @@ fun BottomBar(
                 )
             }
 
-            // Кнопка Profile
+            // ── Friends ───────────────────────────────────────────────────────
             IconButton(
-                onClick = {
-                    println("DEBUG BottomBar: Profile clicked")
-                    onProfileClick()
-                },
+                onClick = onFriendsClick,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Group,
+                    contentDescription = "Friends",
+                    // Подсветка активна, если маршрут начинается с "friends"
+                    tint = if (currentRoute.startsWith("friends"))
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+
+            // ── Profile ───────────────────────────────────────────────────────
+            IconButton(
+                onClick = onProfileClick,
                 modifier = Modifier.size(48.dp)
             ) {
                 Icon(
@@ -95,37 +103,24 @@ fun BottomBar(
 
 @Preview(showBackground = true, heightDp = 120)
 @Composable
-fun TextOnlyBottomBarPreviewHome() {
+private fun BottomBarPreviewHome() {
     MaterialTheme {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(120.dp)
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            BottomBar(
-                showBar = true,
-                currentRoute = "home"
-            )
-        }
+        BottomBar(showBar = true, currentRoute = "home")
     }
 }
 
+@Preview(showBackground = true, heightDp = 120)
+@Composable
+private fun BottomBarPreviewFriends() {
+    MaterialTheme {
+        BottomBar(showBar = true, currentRoute = "friends")
+    }
+}
 
 @Preview(showBackground = true, heightDp = 120)
 @Composable
-fun TextOnlyBottomBarPreviewProfile() {
+private fun BottomBarPreviewProfile() {
     MaterialTheme {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(120.dp)
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            BottomBar(
-                showBar = true,
-                currentRoute = "profile"
-            )
-        }
+        BottomBar(showBar = true, currentRoute = "profile")
     }
 }

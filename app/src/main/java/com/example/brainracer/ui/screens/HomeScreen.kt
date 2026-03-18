@@ -40,37 +40,37 @@ fun HomeScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
     homeViewModel: HomeViewModel = viewModel(),
-    onHomeClick: () -> Unit = {},  // Добавлено
-    onProfileClick: () -> Unit = {}, // Добавлено
-    currentRoute: String = "home"    // Добавлено
+    onHomeClick: () -> Unit = {},
+    onFriendsClick: () -> Unit = {}, // ← новый параметр
+    onProfileClick: () -> Unit = {},
+    currentRoute: String = "home"
 ) {
     val uiState by homeViewModel.uiState.collectAsState()
     val context = LocalContext.current
     var searchActive by remember { mutableStateOf(false) }
 
-    // Отладочный вывод
     LaunchedEffect(uiState.userName) {
         println("DEBUG HomeScreen: userName = '${uiState.userName}', quizzes count = ${uiState.quizzes.size}")
     }
 
-    // Показываем Toast при ошибках
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let { message ->
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
     }
 
-
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(
-                    text = "Brain Racer",
-                    color = MaterialTheme.colorScheme.inverseSurface,
-                    style = MaterialTheme.typography.displayLarge,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(8.dp)
-                )},
+                title = {
+                    Text(
+                        text = "Brain Racer",
+                        color = MaterialTheme.colorScheme.inverseSurface,
+                        style = MaterialTheme.typography.displayLarge,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                },
                 actions = {
                     IconButton(onClick = {
                         authViewModel.signOut()
@@ -88,20 +88,17 @@ fun HomeScreen(
             )
         },
         bottomBar = {
-            // Передаём обработчики кликов и текущий маршрут
             BottomBar(
                 showBar = true,
                 currentRoute = currentRoute,
                 onHomeClick = onHomeClick,
-                onProfileClick = onProfileClick,
+                onFriendsClick = onFriendsClick, // ← пробрасываем в BottomBar
+                onProfileClick = onProfileClick
             )
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = {
-                    // Добавляем демо-викторины через ViewModel
-                    homeViewModel.addDemoQuizzes()
-                },
+                onClick = { homeViewModel.addDemoQuizzes() },
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(
@@ -126,7 +123,7 @@ fun HomeScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
-            // Категории
+            // Горизонтальная прокрутка категорий
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -136,17 +133,15 @@ fun HomeScreen(
             ) {
                 uiState.categories.forEach { category ->
                     FilterChip(
-                        onClick = {
-                            homeViewModel.loadQuizzesByCategory(category)
-                        },
+                        // ✅ Исправлено: правильное имя метода из HomeViewModel
+                        onClick = { homeViewModel.loadQuizzesByCategory(category) },
                         selected = category == uiState.selectedCategory,
                         label = { Text(category) }
                     )
                 }
             }
 
-
-            // Содержимое экрана
+            // Содержимое: загрузка / пусто / сетка карточек
             when {
                 uiState.isLoading -> {
                     Box(
@@ -160,6 +155,7 @@ fun HomeScreen(
                         }
                     }
                 }
+
                 uiState.quizzes.isEmpty() -> {
                     Column(
                         modifier = Modifier
@@ -169,38 +165,32 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "Викторины не найдены",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            text = "Викторин пока нет",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Нажмите ➕ чтобы добавить демо-викторины",
+                            text = "Нажмите + чтобы добавить демо-викторины",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = { homeViewModel.loadQuizzes() } // Исправлено с loadQuizzesSimple на loadQuizzes
-                        ) {
-                            Text("Обновить")
-                        }
                     }
                 }
+
                 else -> {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
-                        modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize()
                     ) {
                         items(uiState.quizzes) { quiz ->
                             QuizCard(
                                 quiz = quiz,
-                                onQuizClick = {
-                                    /*navController.navigate("quiz/${quiz.id}")*/
-                                }
+                                onClick = { navController.navigate("quiz/${quiz.id}") }
                             )
                         }
                     }
@@ -210,104 +200,58 @@ fun HomeScreen(
     }
 }
 
-// QuizCard остается без изменений
+// ─────────────────────────────────────────────────────────────────────────────
+//  Карточка викторины
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
-fun QuizCard(
+private fun QuizCard(
     quiz: QuizItem,
-    onQuizClick: () -> Unit
+    onClick: () -> Unit
 ) {
     Card(
-        onClick = onQuizClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(180.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxWidth()
+                .padding(12.dp)
         ) {
-            // Заголовок и категория
-            Column {
-                Text(
-                    text = quiz.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
+            // Цветной бейдж категории
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            ) {
                 Text(
                     text = quiz.category,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Информация о викторине
-            Column {
-                // Количество вопросов и сложность
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "${quiz.questionCount} вопросов",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
+            Text(
+                text = quiz.title,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
 
-                    Text(
-                        text = when (quiz.difficulty) {
-                            "EASY" -> "Легко"
-                            "MEDIUM" -> "Средне"
-                            "HARD" -> "Сложно"
-                            "EXPERT" -> "Эксперт"
-                            else -> quiz.difficulty
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = when (quiz.difficulty) {
-                            "EASY" -> Color.Green
-                            "MEDIUM" -> Color(0xFFFFA500)
-                            "HARD" -> Color.Red
-                            "EXPERT" -> Color(0xFF8B00FF)
-                            else -> MaterialTheme.colorScheme.onSurface
-                        }
-                    )
-                }
+            Spacer(modifier = Modifier.height(4.dp))
 
-                // Рейтинг и количество игр
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Рейтинг
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.kid_star),
-                            contentDescription = "Рейтинг",
-                            modifier = Modifier.size(12.dp),
-                            tint = Color(0xFFFFD700)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = String.format("%.1f", quiz.rating),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-
-                    // Количество игр
-                    Text(
-                        text = "${quiz.playCount} игр",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                }
-            }
+            Text(
+                text = "${quiz.questionCount} вопросов",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

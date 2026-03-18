@@ -22,85 +22,48 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.brainracer.domain.entities.User
+import com.example.brainracer.ui.components.BottomBar
+import com.example.brainracer.ui.utils.FriendRequestUi
+import com.example.brainracer.ui.utils.OutgoingRequestUi
+import com.example.brainracer.ui.viewmodels.FriendsViewModel
 
-// Модели данных
-
-data class Friend(
-    val id: Int,
-    val name: String,
-    val avatarInitials: String,
-    val isOnline: Boolean,
-    val avatarColor: Color = Color(0xFF6C63FF)
-)
-
-data class FriendRequest(
-    val id: Int,
-    val name: String,
-    val avatarInitials: String,
-    val avatarColor: Color = Color(0xFF00BFA5)
-)
-
-data class OutgoingRequest(
-    val id: Int,
-    val name: String,
-    val avatarInitials: String,
-    val avatarColor: Color = Color(0xFFFF6B6B)
-)
-
-// Главный экран
+// ─────────────────────────────────────────────────────────────────────────────
+//  Главный composable-экран
+// ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FriendsScreen() {
-    // Состояние
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableIntStateOf(0) }
+fun FriendsScreen(
+    viewModel: FriendsViewModel = viewModel(),
+    onHomeClick: () -> Unit = {},
+    onFriendsClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
+    currentRoute: String = "friends"
+) {
+    // Подписываемся на единое состояние ViewModel.
+    // Каждый раз, когда ViewModel обновляет _uiState, Compose автоматически
+    // перерисует только те части дерева, которые читают изменившиеся поля.
+    val uiState by viewModel.uiState.collectAsState()
+
+    // Локальное состояние только для текста поля поиска —
+    // так мы избегаем лишних emit-ов в ViewModel при каждом нажатии клавиши.
+    var searchQuery by remember { mutableStateOf(uiState.searchQuery) }
 
     val tabs = listOf("My friends", "Incoming", "Outgoing")
 
-    // Тестовые данные
-    var friends by remember {
-        mutableStateOf(
-            listOf(
-                Friend(1, "Анна Смирнова", "АС", true, Color(0xFF6C63FF)),
-                Friend(2, "Максим Петров", "МП", false, Color(0xFF00BFA5)),
-                Friend(3, "Ольга Кузнецова", "ОК", true, Color(0xFFFF6B6B)),
-                Friend(4, "Дмитрий Иванов", "ДИ", false, Color(0xFFFFA726)),
-                Friend(5, "Екатерина Попова", "ЕП", true, Color(0xFF26C6DA)),
-            )
-        )
+    // Фильтрация на стороне UI (ViewModel уже возвращает полные списки).
+    val filteredFriends = uiState.friends.filter {
+        it.nickname.contains(searchQuery, ignoreCase = true)
     }
-
-    var incomingRequests by remember {
-        mutableStateOf(
-            listOf(
-                FriendRequest(1, "Алексей Новиков", "АН", Color(0xFF7E57C2)),
-                FriendRequest(2, "Мария Козлова", "МК", Color(0xFF26A69A)),
-            )
-        )
+    val filteredIncoming = uiState.incomingRequests.filter {
+        it.senderName.contains(searchQuery, ignoreCase = true)
     }
-
-    var outgoingRequests by remember {
-        mutableStateOf(
-            listOf(
-                OutgoingRequest(1, "Сергей Морозов", "СМ", Color(0xFFEF5350)),
-                OutgoingRequest(2, "Татьяна Волкова", "ТВ", Color(0xFF42A5F5)),
-            )
-        )
-    }
-
-    // Фильтрация по поиску
-    val filteredFriends = friends.filter {
-        it.name.contains(searchQuery, ignoreCase = true)
-    }
-    val filteredIncoming = incomingRequests.filter {
-        it.name.contains(searchQuery, ignoreCase = true)
-    }
-    val filteredOutgoing = outgoingRequests.filter {
-        it.name.contains(searchQuery, ignoreCase = true)
+    val filteredOutgoing = uiState.outgoingRequests.filter {
+        it.receiverName.contains(searchQuery, ignoreCase = true)
     }
 
     Scaffold(
@@ -111,8 +74,7 @@ fun FriendsScreen() {
                         text = "Friends",
                         fontFamily = FontFamily.SansSerif,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp,
-                        color = Color.Black
+                        fontSize = 22.sp
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -120,6 +82,15 @@ fun FriendsScreen() {
                     titleContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 modifier = Modifier.windowInsetsPadding(WindowInsets.systemBars)
+            )
+        },
+        bottomBar = {
+            BottomBar(
+                showBar = true,
+                currentRoute = currentRoute,
+                onHomeClick = onHomeClick,
+                onFriendsClick = onFriendsClick,
+                onProfileClick = onProfileClick
             )
         },
         containerColor = MaterialTheme.colorScheme.background
@@ -131,14 +102,19 @@ fun FriendsScreen() {
                 .padding(paddingValues)
         ) {
 
-            // Поиск
+            // ── Поле поиска ────────────────────────────────────────────────
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = { searchQuery = it },
+                onValueChange = { query ->
+                    searchQuery = query
+                    // Передаём запрос в ViewModel, чтобы она обновила
+                    // searchResults (поиск по Firestore выполняется там).
+                    viewModel.searchUsers(query)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("Find users...") },
+                placeholder = { Text("Find users…") },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Search,
@@ -152,7 +128,10 @@ fun FriendsScreen() {
                         enter = fadeIn(),
                         exit = fadeOut()
                     ) {
-                        IconButton(onClick = { searchQuery = "" }) {
+                        IconButton(onClick = {
+                            searchQuery = ""
+                            viewModel.searchUsers("")
+                        }) {
                             Icon(
                                 imageVector = Icons.Default.Clear,
                                 contentDescription = "Clear",
@@ -169,117 +148,201 @@ fun FriendsScreen() {
                 )
             )
 
-            // Вкладки
-            ScrollableTabRow(
-                selectedTabIndex = selectedTab,
-                edgePadding = 16.dp,
-                divider = {},
-                indicator = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            ) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = {
-                            Text(
-                                text = title,
-                                fontWeight = if (selectedTab == index) FontWeight.SemiBold else FontWeight.Normal,
-                                fontSize = 14.sp
-                            )
-                        },
-                        selectedContentColor = MaterialTheme.colorScheme.primary,
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            // ── Результаты поиска (показываем поверх вкладок) ──────────────
+            if (uiState.isSearching && uiState.searchResults.isNotEmpty()) {
+                SearchResultsList(
+                    results = uiState.searchResults,
+                    onSendRequest = { user -> viewModel.sendFriendRequest(user.id) }
+                )
+            } else {
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                // ── Вкладки ────────────────────────────────────────────────
+                var selectedTab by remember { mutableIntStateOf(0) }
 
-            // Контент вкладок
-            Box(modifier = Modifier.weight(1f)) {
-                when (selectedTab) {
-                    0 -> FriendsTab(
-                        friends = filteredFriends,
-                        onCall = { /* TODO: вызов */ },
-                        onDelete = { friend ->
-                            friends = friends.filter { it.id != friend.id }
-                        }
-                    )
+                // Показываем badge с количеством входящих заявок
+                val incomingBadge = uiState.incomingRequests.size
 
-                    1 -> IncomingRequestsTab(
-                        requests = filteredIncoming,
-                        onAccept = { req ->
-                            friends = friends + Friend(
-                                id = req.id + 100,
-                                name = req.name,
-                                avatarInitials = req.avatarInitials,
-                                isOnline = false,
-                                avatarColor = req.avatarColor
-                            )
-                            incomingRequests = incomingRequests.filter { it.id != req.id }
-                        },
-                        onDecline = { req ->
-                            incomingRequests = incomingRequests.filter { it.id != req.id }
-                        }
-                    )
-
-                    2 -> OutgoingRequestsTab(
-                        requests = filteredOutgoing,
-                        onCancel = { req ->
-                            outgoingRequests = outgoingRequests.filter { it.id != req.id }
-                        }
-                    )
-                }
-            }
-
-            // Кнопка "Пригласить друзей"
-            Surface(
-                shadowElevation = 8.dp,
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Button(
-                    onClick = { /* TODO: пригласить */ },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                        .height(52.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    indicator = { tabPositions ->
+                        TabRowDefaults.Indicator(
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.PersonAdd,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Invite friends",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index },
+                            text = {
+                                // На вкладке «Incoming» показываем счётчик
+                                if (index == 1 && incomingBadge > 0) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(title, fontSize = 13.sp)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Badge { Text("$incomingBadge") }
+                                    }
+                                } else {
+                                    Text(title, fontSize = 13.sp)
+                                }
+                            }
+                        )
+                    }
+                }
+
+                // ── Контент вкладок ────────────────────────────────────────
+                Box(modifier = Modifier.weight(1f)) {
+                    if (uiState.isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    } else {
+                        when (selectedTab) {
+                            0 -> FriendsTab(
+                                friends = filteredFriends,
+                                onDelete = { friend -> viewModel.removeFriend(friend.id) }
+                            )
+                            1 -> IncomingRequestsTab(
+                                requests = filteredIncoming,
+                                onAccept = { req ->
+                                    viewModel.acceptFriendRequest(req.id, req.senderId)
+                                },
+                                onDecline = { req ->
+                                    viewModel.declineFriendRequest(req.id)
+                                }
+                            )
+                            2 -> OutgoingRequestsTab(
+                                requests = filteredOutgoing,
+                                onCancel = { req ->
+                                    viewModel.cancelOutgoingRequest(req.id)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // ── Кнопка «Пригласить» ────────────────────────────────────
+                Surface(
+                    shadowElevation = 8.dp,
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Button(
+                        onClick = { /* TODO: поделиться ссылкой */ },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.PersonAdd,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Invite friends",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            // ── Сообщение об ошибке ────────────────────────────────────────
+            uiState.errorMessage?.let { message ->
+                Snackbar(
+                    modifier = Modifier.padding(16.dp),
+                    action = {
+                        TextButton(onClick = { viewModel.loadFriends() }) {
+                            Text("Retry")
+                        }
+                    }
+                ) {
+                    Text(message)
                 }
             }
         }
     }
 }
 
-// Вкладка "Мои друзья"
+// ─────────────────────────────────────────────────────────────────────────────
+//  Результаты поиска новых пользователей
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun FriendsTab(
-    friends: List<Friend>,
-    onCall: (Friend) -> Unit,
-    onDelete: (Friend) -> Unit
+private fun SearchResultsList(
+    results: List<User>,
+    onSendRequest: (User) -> Unit
+) {
+    LazyColumn(
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(results, key = { it.id }) { user ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Аватар-инициалы из никнейма
+                    AvatarCircle(
+                        initials = user.nickname.take(2).uppercase(),
+                        color = MaterialTheme.colorScheme.secondary,
+                        size = 48
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = user.nickname,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = user.rank.name,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { onSendRequest(user) }) {
+                        Icon(
+                            imageVector = Icons.Default.PersonAdd,
+                            contentDescription = "Add friend",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Вкладка «My friends»
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun FriendsTab(
+    friends: List<User>,
+    onDelete: (User) -> Unit
 ) {
     if (friends.isEmpty()) {
-        EmptyState(message = "Friends doesn't find")
+        EmptyState(message = "No friends yet. Find people using the search above!")
         return
     }
     LazyColumn(
@@ -287,25 +350,22 @@ fun FriendsTab(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(friends, key = { it.id }) { friend ->
-            FriendCard(
-                friend = friend,
-                onCall = { onCall(friend) },
-                onDelete = { onDelete(friend) }
-            )
+            FriendCard(friend = friend, onDelete = { onDelete(friend) })
         }
     }
 }
 
 @Composable
-fun FriendCard(
-    friend: Friend,
-    onCall: () -> Unit,
+private fun FriendCard(
+    friend: User,
     onDelete: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
@@ -314,67 +374,32 @@ fun FriendCard(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Аватар
             AvatarCircle(
-                initials = friend.avatarInitials,
-                color = friend.avatarColor,
+                initials = friend.nickname.take(2).uppercase(),
+                color = MaterialTheme.colorScheme.tertiary,
                 size = 48
             )
-
             Spacer(modifier = Modifier.width(12.dp))
-
-            // Имя и статус
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = friend.name,
+                    text = friend.nickname,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 15.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (friend.isOnline) Color(0xFF4CAF50)
-                                else MaterialTheme.colorScheme.outlineVariant
-                            )
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = if (friend.isOnline) "online" else "offline",
-                        fontSize = 12.sp,
-                        color = if (friend.isOnline) Color(0xFF4CAF50)
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(modifier = Modifier.width(5.dp))
-                ElevatedButton(onClick = { /* TODO: блокировать пользователя */ },
-                    modifier=Modifier.fillMaxWidth()) {
-                    Text(text="Block")
-
-                }
-            }
-
-            // Кнопка звонка
-            IconButton(onClick = onCall) {
-                Icon(
-                    imageVector = Icons.Default.Rocket,
-                    contentDescription = "Call",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp)
+                Text(
+                    text = friend.rank.name,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-            // Кнопка удаления
+            // Удалить из друзей
             IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Icons.Default.PersonRemove,
-                    contentDescription = "Delete",
+                    contentDescription = "Remove friend",
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(22.dp)
                 )
@@ -383,13 +408,15 @@ fun FriendCard(
     }
 }
 
-// Вкладка "Входящие заявки"
+// ─────────────────────────────────────────────────────────────────────────────
+//  Вкладка «Incoming»
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun IncomingRequestsTab(
-    requests: List<FriendRequest>,
-    onAccept: (FriendRequest) -> Unit,
-    onDecline: (FriendRequest) -> Unit
+private fun IncomingRequestsTab(
+    requests: List<FriendRequestUi>,
+    onAccept: (FriendRequestUi) -> Unit,
+    onDecline: (FriendRequestUi) -> Unit
 ) {
     if (requests.isEmpty()) {
         EmptyState(message = "No incoming requests")
@@ -410,34 +437,36 @@ fun IncomingRequestsTab(
 }
 
 @Composable
-fun IncomingRequestCard(
-    request: FriendRequest,
+private fun IncomingRequestCard(
+    request: FriendRequestUi,
     onAccept: () -> Unit,
     onDecline: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AvatarCircle(
-                    initials = request.avatarInitials,
-                    color = request.avatarColor,
+                    initials = request.senderName.take(2).uppercase(),
+                    color = MaterialTheme.colorScheme.secondary,
                     size = 48
                 )
                 Spacer(modifier = Modifier.width(12.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = request.name,
+                        text = request.senderName,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 15.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Would like to make a friendship",
+                        text = "Wants to be your friend",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -445,40 +474,55 @@ fun IncomingRequestCard(
             }
             Spacer(modifier = Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Принять
                 Button(
                     onClick = onAccept,
-                    modifier = Modifier.weight(1f).height(40.dp),
+                    modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
-                    Text("Accept", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Accept", fontSize = 13.sp)
                 }
+                // Отклонить
                 OutlinedButton(
                     onClick = onDecline,
-                    modifier = Modifier.weight(1f).height(40.dp),
+                    modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp, MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Text("Dismiss", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Decline", fontSize = 13.sp)
                 }
             }
         }
     }
 }
 
-// Вкладка "Исходящие заявки"
+// ─────────────────────────────────────────────────────────────────────────────
+//  Вкладка «Outgoing»
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun OutgoingRequestsTab(
-    requests: List<OutgoingRequest>,
-    onCancel: (OutgoingRequest) -> Unit
+private fun OutgoingRequestsTab(
+    requests: List<OutgoingRequestUi>,
+    onCancel: (OutgoingRequestUi) -> Unit
 ) {
     if (requests.isEmpty()) {
         EmptyState(message = "No outgoing requests")
@@ -498,107 +542,97 @@ fun OutgoingRequestsTab(
 }
 
 @Composable
-fun OutgoingRequestCard(
-    request: OutgoingRequest,
+private fun OutgoingRequestCard(
+    request: OutgoingRequestUi,
     onCancel: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AvatarCircle(
-                initials = request.avatarInitials,
-                color = request.avatarColor,
+                initials = request.receiverName.take(2).uppercase(),
+                color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
                 size = 48
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = request.name,
+                    text = request.receiverName,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "application is pushed",
+                    text = "Request pending…",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            OutlinedButton(
-                onClick = onCancel,
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Text("Deny", fontSize = 12.sp)
+            // Отозвать запрос
+            IconButton(onClick = onCancel) {
+                Icon(
+                    imageVector = Icons.Default.Cancel,
+                    contentDescription = "Cancel request",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp)
+                )
             }
         }
     }
 }
 
-// Общие компоненты
+// ─────────────────────────────────────────────────────────────────────────────
+//  Общие вспомогательные composable-ы
+// ─────────────────────────────────────────────────────────────────────────────
 
+/** Цветной круг с инициалами — заменяет реальный аватар, пока нет фото. */
 @Composable
-fun AvatarCircle(initials: String, color: Color, size: Int) {
+private fun AvatarCircle(
+    initials: String,
+    color: Color,
+    size: Int
+) {
     Box(
+        contentAlignment = Alignment.Center,
         modifier = Modifier
             .size(size.dp)
             .clip(CircleShape)
-            .background(color.copy(alpha = 0.15f)),
-        contentAlignment = Alignment.Center
+            .background(color)
     ) {
         Text(
             text = initials,
-            color = color,
+            color = Color.White,
             fontWeight = FontWeight.Bold,
-            fontSize = (size * 0.33f).sp
+            fontSize = (size / 3).sp
         )
     }
 }
 
+/** Заглушка, когда список пустой. */
 @Composable
-fun EmptyState(message: String) {
+private fun EmptyState(message: String) {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = Icons.Default.PersonSearch,
-                contentDescription = null,
-                modifier = Modifier.size(56.dp),
-                tint = MaterialTheme.colorScheme.outlineVariant
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = message,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 15.sp
-            )
-        }
+        Text(
+            text = message,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
-
-// Preview
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-fun FriendsScreenPreview() {
-    MaterialTheme {
-        FriendsScreen()
-    }
-}
-
-
-
