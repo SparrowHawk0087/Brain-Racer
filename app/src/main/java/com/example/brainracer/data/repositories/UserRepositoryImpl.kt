@@ -129,6 +129,23 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
+    override suspend fun sendFriendRequest(senderId: String, receiverId: String): Result<Unit> = try {
+        val requestRef = firestore.collection("friend_requests").document()
+        val request = FriendRequest(
+            id = requestRef.id,
+            senderId = senderId,
+            receiverId = receiverId,
+            status = FriendRequestStatus.PENDING.name,
+            createdAt = Timestamp.now()
+        )
+        requestRef.set(request).await()
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.error(e)
+    }
+
+    //Дописать для остальных
+
     // Расчет ранга пользователя
     private fun calculateRank(points: Int): UserRank {
         return UserRank.entries
