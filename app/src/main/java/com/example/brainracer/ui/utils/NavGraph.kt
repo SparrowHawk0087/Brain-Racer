@@ -16,6 +16,7 @@ import com.example.brainracer.ui.screens.ForgotPasswordScreen
 import com.example.brainracer.ui.screens.HomeScreen
 import com.example.brainracer.ui.screens.ProfileScreen
 import com.example.brainracer.ui.screens.QuizListScreen
+import com.example.brainracer.ui.screens.FriendsScreen
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import com.google.firebase.auth.FirebaseAuth
 
@@ -62,6 +63,18 @@ fun NavGraph(
                 }
             } else {
                 println("DEBUG NavGraph: Already on profile screen")
+            }
+        }
+    }
+
+    val navigateToFriends: () -> Unit = {
+        user?.let {
+            val friendsRoute = "friends/${it.uid}"
+            if (currentRoute != friendsRoute) {
+                println("DEBUG NavGraph: Navigating to $friendsRoute from $currentRoute")
+                navController.navigate(friendsRoute) {
+                    launchSingleTop = true
+                }
             }
         }
     }
@@ -122,6 +135,21 @@ fun NavGraph(
             QuizListScreen(onQuizClick = { quizId ->
                 navController.navigate("quiz/$quizId")
             })
+        }
+
+        composable(
+            "friends/{userId}",
+            arguments = listOf(navArgument("userId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val userId = backStackEntry.arguments?.getString("userId") ?: ""
+            FriendsScreen(
+                navController = navController,
+                userId = userId,
+                onHomeClick = navigateToHome,
+                onProfileClick = navigateToProfile,
+                onFriendsClick = navigateToFriends,
+                currentRoute = currentRoute
+            )
         }
 
         composable(
