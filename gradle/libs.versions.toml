@@ -1,6 +1,6 @@
 
 [versions]
-agp = "9.0.1"
+agp = "9.1.0"
 firebaseBom = "34.5.0"
 firebaseBomVersion = "34.6.0"
 kotlin = "2.2.10"

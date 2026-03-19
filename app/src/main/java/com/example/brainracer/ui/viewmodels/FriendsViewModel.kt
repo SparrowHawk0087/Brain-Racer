@@ -14,7 +14,8 @@ import com.example.brainracer.domain.entities.FriendRequest
 import com.example.brainracer.domain.entities.FriendshipStatus
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
+// ← импорт Query удалён: он был нужен только для Query.Direction.DESCENDING,
+//   которого больше нет — сортировку делаем на клиенте.
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,7 +36,8 @@ class FriendsViewModel: ViewModel() {
         loadFriends()
         loadFriendRequests()
     }
-    //Загружаем друзей
+
+    // Загружаем друзей
     fun loadFriends() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
@@ -48,7 +50,6 @@ class FriendsViewModel: ViewModel() {
             }
 
             try {
-                // Получаем документ пользователя со списком друзей
                 val userDoc = firestore.collection("users").document(userId).get().await()
                 val friendIds = userDoc.get("friends") as? List<String> ?: emptyList()
 
@@ -57,89 +58,93 @@ class FriendsViewModel: ViewModel() {
                     return@launch
                 }
 
-                // Загружаем данные друзей
                 val friends = friendIds.mapNotNull { friendId ->
                     firestore.collection("users").document(friendId).get().await()
                         .toObject(User::class.java)?.copy(id = friendId)
                 }
 
                 _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        friends = friends,
-                        errorMessage = null
-                    )
+                    it.copy(isLoading = false, friends = friends, errorMessage = null)
                 }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Ошибка загрузки друзей: ${e.message}"
-                    )
+                    it.copy(isLoading = false, errorMessage = "Ошибка загрузки друзей: ${e.message}")
                 }
             }
         }
     }
 
-    //Загружаем запросы
+    // Загружаем запросы
     fun loadFriendRequests() {
         viewModelScope.launch {
             val userId = auth.currentUser?.uid ?: return@launch
 
             try {
-                // Входящие запросы
+                // ── Входящие запросы ──────────────────────────────────────────────────
+                // Было: .orderBy("createdAt", Query.Direction.DESCENDING)
+                // Стало: orderBy убран → Firebase не требует составного индекса.
+                // Сортировка выполняется на клиенте через sortedByDescending — для
+                // десятков записей это абсолютно равнозначно по скорости.
                 val incomingSnapshot = firestore.collection("friend_requests")
                     .whereEqualTo("receiverId", userId)
                     .whereEqualTo("status", FriendshipStatus.PENDING.name)
-                    .orderBy("createdAt", Query.Direction.DESCENDING)
+                    // ← .orderBy(...) удалён
                     .get()
                     .await()
 
-                val incomingRequests = incomingSnapshot.documents.mapNotNull { doc ->
-                    val request = doc.toObject(FriendRequest::class.java) ?: return@mapNotNull null
+                val incomingRequests = incomingSnapshot.documents
+                    .mapNotNull { doc ->
+                        val request = doc.toObject(FriendRequest::class.java)
+                            ?: return@mapNotNull null
 
-                    // Получение данных отправителя
-                    val senderDoc = firestore.collection("users")
-                        .document(request.senderId)
-                        .get()
-                        .await()
-                    val sender = senderDoc.toObject(User::class.java)
+                        val senderDoc = firestore.collection("users")
+                            .document(request.senderId)
+                            .get()
+                            .await()
+                        val sender = senderDoc.toObject(User::class.java)
 
-                    FriendRequestUi(
-                        id = doc.id,
-                        senderId = request.senderId,
-                        senderName = sender?.nickname ?: "Пользователь",
-                        senderAvatarUrl = sender?.avatarUrl,
-                        createdAt = request.createdAt.toString()
-                    )
-                }
+                        FriendRequestUi(
+                            id = doc.id,
+                            senderId = request.senderId,
+                            senderName = sender?.nickname ?: "Пользователь",
+                            senderAvatarUrl = sender?.avatarUrl,
+                            createdAt = request.createdAt.toString()
+                        )
+                    }
+                    // ← сортировка на клиенте: новые запросы отображаются первыми.
+                    //   Timestamp реализует Comparable, поэтому seconds доступен напрямую.
+                    .sortedByDescending { it.createdAt }
 
-                // Исходящие запросы
+                // ── Исходящие запросы ─────────────────────────────────────────────────
+                // Та же логика: убираем orderBy, сортируем после маппинга.
                 val outgoingSnapshot = firestore.collection("friend_requests")
                     .whereEqualTo("senderId", userId)
                     .whereEqualTo("status", FriendshipStatus.PENDING.name)
-                    .orderBy("createdAt", Query.Direction.DESCENDING)
+                    // ← .orderBy(...) удалён
                     .get()
                     .await()
 
-                val outgoingRequests = outgoingSnapshot.documents.mapNotNull { doc ->
-                    val request = doc.toObject(FriendRequest::class.java) ?: return@mapNotNull null
+                val outgoingRequests = outgoingSnapshot.documents
+                    .mapNotNull { doc ->
+                        val request = doc.toObject(FriendRequest::class.java)
+                            ?: return@mapNotNull null
 
-                    // Получаем данные получателя
-                    val receiverDoc = firestore.collection("users")
-                        .document(request.receiverId)
-                        .get()
-                        .await()
-                    val receiver = receiverDoc.toObject(User::class.java)
+                        val receiverDoc = firestore.collection("users")
+                            .document(request.receiverId)
+                            .get()
+                            .await()
+                        val receiver = receiverDoc.toObject(User::class.java)
 
-                    OutgoingRequestUi(
-                        id = doc.id,
-                        receiverId = request.receiverId,
-                        receiverName = receiver?.nickname ?: "Пользователь",
-                        receiverAvatarUrl = receiver?.avatarUrl,
-                        createdAt = request.createdAt.toString()
-                    )
-                }
+                        OutgoingRequestUi(
+                            id = doc.id,
+                            receiverId = request.receiverId,
+                            receiverName = receiver?.nickname ?: "Пользователь",
+                            receiverAvatarUrl = receiver?.avatarUrl,
+                            createdAt = request.createdAt.toString()
+                        )
+                    }
+                    // ← сортировка на клиенте
+                    .sortedByDescending { it.createdAt }
 
                 _uiState.update {
                     it.copy(
@@ -183,13 +188,12 @@ class FriendsViewModel: ViewModel() {
         }
     }
 
-    //Отправка запроса в друзья
+    // Отправка запроса в друзья
     fun sendFriendRequest(receiverId: String) {
         viewModelScope.launch {
             val senderId = auth.currentUser?.uid ?: return@launch
 
             try {
-                // Проверяем, не друзья ли уже
                 val senderDoc = firestore.collection("users").document(senderId).get().await()
                 val friendIds = senderDoc.get("friends") as? List<String> ?: emptyList()
 
@@ -198,7 +202,6 @@ class FriendsViewModel: ViewModel() {
                     return@launch
                 }
 
-                // Проверяем, нет ли уже запроса
                 val existingRequest = firestore.collection("friend_requests")
                     .whereEqualTo("senderId", senderId)
                     .whereEqualTo("receiverId", receiverId)
@@ -211,7 +214,6 @@ class FriendsViewModel: ViewModel() {
                     return@launch
                 }
 
-                // Создаём запрос
                 val requestRef = firestore.collection("friend_requests").document()
                 val request = FriendRequest(
                     id = requestRef.id,
@@ -223,16 +225,15 @@ class FriendsViewModel: ViewModel() {
                 )
 
                 requestRef.set(request).await()
-
                 _uiState.update { it.copy(errorMessage = null) }
-                loadFriendRequests() // Обновляем список
+                loadFriendRequests()
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = "Ошибка: ${e.message}") }
             }
         }
     }
 
-    //Принятие запроса
+    // Принятие запроса
     fun acceptFriendRequest(requestId: String, senderId: String) {
         viewModelScope.launch {
             val receiverId = auth.currentUser?.uid ?: return@launch
@@ -240,14 +241,11 @@ class FriendsViewModel: ViewModel() {
             try {
                 firestore.runTransaction { transaction ->
                     val requestRef = firestore.collection("friend_requests").document(requestId)
-                    val senderRef = firestore.collection("users").document(senderId)
+                    val senderRef  = firestore.collection("users").document(senderId)
                     val receiverRef = firestore.collection("users").document(receiverId)
 
-                    // Обновляем статус запроса
                     transaction.update(requestRef, "status", FriendshipStatus.ACCEPTED.name)
-
-                    // Добавляем в друзья обоим пользователям
-                    transaction.update(senderRef, "friends", com.google.firebase.firestore.FieldValue.arrayUnion(receiverId))
+                    transaction.update(senderRef,  "friends", com.google.firebase.firestore.FieldValue.arrayUnion(receiverId))
                     transaction.update(receiverRef, "friends", com.google.firebase.firestore.FieldValue.arrayUnion(senderId))
 
                     null
@@ -261,7 +259,7 @@ class FriendsViewModel: ViewModel() {
         }
     }
 
-    //Отклонение запроса
+    // Отклонение запроса
     fun declineFriendRequest(requestId: String) {
         viewModelScope.launch {
             try {
@@ -269,7 +267,6 @@ class FriendsViewModel: ViewModel() {
                     .document(requestId)
                     .update("status", FriendshipStatus.BLOCKED.name)
                     .await()
-
                 loadFriendRequests()
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = "Ошибка: ${e.message}") }
@@ -277,8 +274,7 @@ class FriendsViewModel: ViewModel() {
         }
     }
 
-
-    //Отмена исходящего запроса в друзья
+    // Отмена исходящего запроса в друзья
     fun cancelOutgoingRequest(requestId: String) {
         viewModelScope.launch {
             try {
@@ -286,7 +282,6 @@ class FriendsViewModel: ViewModel() {
                     .document(requestId)
                     .delete()
                     .await()
-
                 loadFriendRequests()
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = "Ошибка: ${e.message}") }
@@ -294,17 +289,17 @@ class FriendsViewModel: ViewModel() {
         }
     }
 
-    //Удаление друга
+    // Удаление друга
     fun removeFriend(friendId: String) {
         viewModelScope.launch {
             val userId = auth.currentUser?.uid ?: return@launch
 
             try {
                 firestore.runTransaction { transaction ->
-                    val userRef = firestore.collection("users").document(userId)
+                    val userRef   = firestore.collection("users").document(userId)
                     val friendRef = firestore.collection("users").document(friendId)
 
-                    transaction.update(userRef, "friends", com.google.firebase.firestore.FieldValue.arrayRemove(friendId))
+                    transaction.update(userRef,   "friends", com.google.firebase.firestore.FieldValue.arrayRemove(friendId))
                     transaction.update(friendRef, "friends", com.google.firebase.firestore.FieldValue.arrayRemove(userId))
 
                     null
@@ -316,7 +311,7 @@ class FriendsViewModel: ViewModel() {
         }
     }
 
-    //Вызов другу
+    // Вызов другу
     fun sendChallenge(friendId: String, quizId: String, quizTitle: String) {
         viewModelScope.launch {
             val challengerId = auth.currentUser?.uid ?: return@launch
@@ -331,12 +326,8 @@ class FriendsViewModel: ViewModel() {
                 )
 
                 challengeRepository.createChallenge(challenge).fold(
-                    onSuccess = {
-                        _uiState.update { it.copy(errorMessage = null) }
-                    },
-                    onFailure = { error ->
-                        _uiState.update { it.copy(errorMessage = error.message) }
-                    }
+                    onSuccess = { _uiState.update { it.copy(errorMessage = null) } },
+                    onFailure = { error -> _uiState.update { it.copy(errorMessage = error.message) } }
                 )
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = "Ошибка: ${e.message}") }

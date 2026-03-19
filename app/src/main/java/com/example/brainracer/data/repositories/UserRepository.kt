@@ -1,6 +1,7 @@
 package com.example.brainracer.data.repositories
 
 import com.example.brainracer.domain.entities.ChallengeResult
+import com.example.brainracer.domain.entities.FriendRequest
 import com.example.brainracer.domain.entities.User
 import com.example.brainracer.data.utils.Result
 

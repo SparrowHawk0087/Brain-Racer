@@ -13,6 +13,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.brainracer.ui.screens.AuthScreen
 import com.example.brainracer.ui.screens.ForgotPasswordScreen
+import com.example.brainracer.ui.screens.FriendsScreen
 import com.example.brainracer.ui.screens.HomeScreen
 import com.example.brainracer.ui.screens.ProfileScreen
 import com.example.brainracer.ui.screens.QuizListScreen
@@ -28,44 +29,40 @@ fun NavGraph(
     val navController = rememberNavController()
     val user by authViewModel.user.collectAsState()
 
-    // Получаем текущий маршрут из back stack
+    // Текущий маршрут — нужен BottomBar-у для подсветки активной вкладки
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
-        ?: if (user != null) "home/${user?.uid}" else "auth"
+    val currentRoute = navBackStackEntry?.destination?.route ?: ""
 
-    // Функции навигации для BottomBar - УПРОЩЕННЫЕ версии
+    // ── Функции навигации для BottomBar ────────────────────────────────────
+
     val navigateToHome: () -> Unit = {
         user?.let {
-            val homeRoute = "home/${it.uid}"
-            // Проверяем, не находимся ли уже на домашнем экране
-            if (currentRoute != homeRoute) {
-                println("DEBUG NavGraph: Navigating to $homeRoute from $currentRoute")
-                navController.navigate(homeRoute) {
-                    // Простая навигация без popUpTo
-                    launchSingleTop = true
-                }
-            } else {
-                println("DEBUG NavGraph: Already on home screen")
+            val route = "home/${it.uid}"
+            if (currentRoute != route) {
+                navController.navigate(route) { launchSingleTop = true }
+            }
+        }
+    }
+
+    val navigateToFriends: () -> Unit = {
+        user?.let {
+            val route = "friends/${it.uid}"
+            if (currentRoute != route) {
+                navController.navigate(route) { launchSingleTop = true }
             }
         }
     }
 
     val navigateToProfile: () -> Unit = {
         user?.let {
-            val profileRoute = "profile/${it.uid}"
-            // Проверяем, не находимся ли уже на профиле
-            if (currentRoute != profileRoute) {
-                println("DEBUG NavGraph: Navigating to $profileRoute from $currentRoute")
-                navController.navigate(profileRoute) {
-                    // Простая навигация без popUpTo
-                    launchSingleTop = true
-                }
-            } else {
-                println("DEBUG NavGraph: Already on profile screen")
+            val route = "profile/${it.uid}"
+            if (currentRoute != route) {
+                navController.navigate(route) { launchSingleTop = true }
             }
         }
     }
 
+    // После входа — автоматически отправляем на home, убирая auth из стека
     LaunchedEffect(user) {
         user?.let { currentUser ->
             val userId = currentUser.uid
@@ -82,55 +79,65 @@ fun NavGraph(
         navController = navController,
         startDestination = if (user != null) "home/${user?.uid}" else "auth"
     ) {
+
+        // ── Auth ───────────────────────────────────────────────────────────
         composable("auth") {
             AuthScreen(
                 authViewModel = authViewModel,
-                onForgotPassword = {
-                    navController.navigate("forgot_password")
-                }
+                onForgotPassword = { navController.navigate("forgot_password") }
             )
         }
 
+        composable("forgot_password") {
+            ForgotPasswordScreen(
+                authViewModel = authViewModel,
+                onPasswordResetSent = { navController.popBackStack() },
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        // ── Home ───────────────────────────────────────────────────────────
         composable(
             "home/{userId}",
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val userId = backStackEntry.arguments?.getString("userId") ?: ""
+        ) {
             HomeScreen(
                 navController = navController,
                 authViewModel = authViewModel,
                 onHomeClick = navigateToHome,
+                onFriendsClick = navigateToFriends,   // <-- передаём новую лямбду
                 onProfileClick = navigateToProfile,
                 currentRoute = currentRoute
             )
         }
 
-
-        composable("forgot_password") {
-            ForgotPasswordScreen(
-                authViewModel = authViewModel,
-                onPasswordResetSent = {
-                    navController.popBackStack()
-                },
-                onNavigateBack = {
-                    navController.popBackStack()
-                }
+        // ── Friends ────────────────────────────────────────────────────────
+        composable(
+            "friends/{userId}",
+            arguments = listOf(navArgument("userId") { type = NavType.StringType })
+        ) {
+            FriendsScreen(
+                onHomeClick = navigateToHome,
+                onFriendsClick = navigateToFriends,
+                onProfileClick = navigateToProfile,
+                currentRoute = currentRoute
             )
         }
 
+        // ── Quizzes ────────────────────────────────────────────────────────
         composable("quizzes") {
             QuizListScreen(onQuizClick = { quizId ->
                 navController.navigate("quiz/$quizId")
             })
         }
 
+        // ── Profile ────────────────────────────────────────────────────────
         composable(
             "profile/{userId}",
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
         ) { backStackEntry ->
             val userId = backStackEntry.arguments?.getString("userId") ?: ""
-            val currentUserId = user?.uid ?: ""
-            val isOwnProfile = userId == currentUserId
+            val isOwnProfile = userId == (user?.uid ?: "")
 
             ProfileScreen(
                 onNavigateToAuth = {
@@ -141,6 +148,7 @@ fun NavGraph(
                 userId = userId,
                 authViewModel = authViewModel,
                 onHomeClick = navigateToHome,
+                onFriendsClick = navigateToFriends,
                 onProfileClick = navigateToProfile,
                 currentRoute = currentRoute,
                 isOwnProfile = isOwnProfile

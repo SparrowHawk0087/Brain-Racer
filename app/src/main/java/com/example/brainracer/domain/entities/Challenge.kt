@@ -5,12 +5,12 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.PropertyName
 
 enum class ChallengeStatus {
-    PENDING,      // Вызов отправлен, ожидает ответа
-    ACCEPTED,     // Вызов принят, можно проходить
-    DECLINED,     // Вызов отклонён
-    COMPLETED,    // Оба игрока прошли викторину
-    EXPIRED,      // Срок действия истёк (7 дней)
-    CANCELLED     // Отправитель отменил вызов
+    PENDING,
+    ACCEPTED,
+    DECLINED,
+    COMPLETED,
+    EXPIRED,
+    CANCELLED
 }
 
 data class Challenge(
@@ -21,19 +21,19 @@ data class Challenge(
     val quizId: String = "",
 
     @PropertyName("quizTitle")
-    val quizTitle: String = "",  // Денормализация для быстрого отображения
+    val quizTitle: String = "",
 
     @PropertyName("challengerUserId")
-    val challengerUserId: String = "",  // Кто бросил вызов
+    val challengerUserId: String = "",
 
     @PropertyName("challengerNickname")
-    val challengerNickname: String = "",  // Денормализация
+    val challengerNickname: String = "",
 
     @PropertyName("challengedUserId")
-    val challengedUserId: String = "",  // Кому бросили
+    val challengedUserId: String = "",
 
     @PropertyName("challengedNickname")
-    val challengedNickname: String = "",  // Денормализация
+    val challengedNickname: String = "",
 
     @PropertyName("status")
     val status: ChallengeStatus = ChallengeStatus.PENDING,
@@ -42,7 +42,7 @@ data class Challenge(
     val createdAt: Timestamp = Timestamp.now(),
 
     @PropertyName("expiresAt")
-    val expiresAt: Timestamp = Timestamp(Date(System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000)), // 7 дней
+    val expiresAt: Timestamp = Timestamp(Date(System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000)),
 
     @PropertyName("completedAt")
     val completedAt: Timestamp? = null,
@@ -53,14 +53,18 @@ data class Challenge(
     @PropertyName("challengedResult")
     val challengedResult: ChallengeResult? = null,
 
+    // Поле winnerId остаётся — оно хранит победителя, записанного в Firestore.
+    // Конфликт устранён переименованием метода ниже.
     @PropertyName("winnerId")
     val winnerId: String? = null,
 
     @PropertyName("isDraw")
     val isDraw: Boolean = false
 ) {
-    // Определяем победителя
-    fun getWinnerId(): String? {
+    // Переименовано: getWinnerId() → resolveWinnerId().
+    // Старое имя getWinnerId() совпадало с JVM-геттером свойства winnerId,
+    // что и вызывало "Platform declaration clash".
+    fun resolveWinnerId(): String? {
         return if (status == ChallengeStatus.COMPLETED) {
             when {
                 isDraw -> null
