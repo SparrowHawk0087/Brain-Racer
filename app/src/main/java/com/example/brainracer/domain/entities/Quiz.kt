@@ -3,6 +3,7 @@ package com.example.brainracer.domain.entities
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.PropertyName
 
+
 data class Quiz(
     val id: String = "",
     val title: String = "",
@@ -16,6 +17,13 @@ data class Quiz(
     val timePerQuestion: Int = 30,
     var totalTime: Int = 0,
     val imageUrl: String = "",
+
+    // Поле для фильтрации публичных викторин.
+    // @PropertyName нужен, потому что "public" — ключевое слово Kotlin,
+    // поэтому Kotlin-поле называется isPublic, а в Firestore хранится как "public"
+    @get:PropertyName("public")
+    @set:PropertyName("public")
+    var isPublic: Boolean = true
 ) {
     val questionCount: Int
         get() = questions.size
