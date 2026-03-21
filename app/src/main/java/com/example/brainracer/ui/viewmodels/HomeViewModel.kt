@@ -110,7 +110,7 @@ class HomeViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                val result = quizRepository.getPopularQuizzes(limit = 20)
+                val result = quizRepository.getPopularQuizzes(limit = 100)
                 result.fold(
                     onSuccess = { quizzes ->
                         val quizItems = quizzes.map { quiz ->

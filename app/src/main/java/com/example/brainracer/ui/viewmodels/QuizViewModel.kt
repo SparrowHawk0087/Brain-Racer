@@ -26,7 +26,7 @@ class QuizViewModel : ViewModel() {
     private var currentUserId: String? = null
     private var totalTimeSpent: Int = 0
     private var questionStartTime: Long = 0L
-    private fun loadQuiz(quizId: String) {
+    fun loadQuiz(quizId: String) {
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
         viewModelScope.launch {
             try{
