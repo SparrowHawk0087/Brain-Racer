@@ -17,7 +17,7 @@ import com.example.brainracer.ui.screens.FriendsScreen
 import com.example.brainracer.ui.screens.HomeScreen
 import com.example.brainracer.ui.screens.ProfileScreen
 import com.example.brainracer.ui.screens.SearchScreen
-import com.example.brainracer.ui.screens.QuizDetailScreen
+import com.example.brainracer.ui.components.QuizDetailScreen
 import com.example.brainracer.ui.screens.QuizListScreen
 import com.example.brainracer.ui.screens.QuizPlayScreen
 import com.example.brainracer.ui.viewmodels.AuthViewModel

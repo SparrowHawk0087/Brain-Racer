@@ -2,20 +2,17 @@ package com.example.brainracer.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.data.repositories.ChallengeRepositoryImpl
-import com.example.brainracer.data.utils.Result
+import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.data.utils.fold
-import com.example.brainracer.ui.utils.FriendsUiState
-import com.example.brainracer.ui.utils.FriendRequestUi
-import com.example.brainracer.ui.utils.OutgoingRequestUi
-import com.example.brainracer.domain.entities.User
 import com.example.brainracer.domain.entities.FriendRequest
 import com.example.brainracer.domain.entities.FriendshipStatus
+import com.example.brainracer.domain.entities.User
+import com.example.brainracer.ui.utils.FriendRequestUi
+import com.example.brainracer.ui.utils.FriendsUiState
+import com.example.brainracer.ui.utils.OutgoingRequestUi
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-// ← импорт Query удалён: он был нужен только для Query.Direction.DESCENDING,
-//   которого больше нет — сортировку делаем на клиенте.
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

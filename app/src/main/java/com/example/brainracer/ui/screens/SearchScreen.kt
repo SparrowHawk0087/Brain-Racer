@@ -34,7 +34,6 @@ import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.domain.entities.QuizDifficulty
 import com.example.brainracer.ui.utils.QuizItem
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 // ─── Палитра ───────────────────────────────────────────────────────────────
 private val SBg       = Color(0xFF0F0F1A)

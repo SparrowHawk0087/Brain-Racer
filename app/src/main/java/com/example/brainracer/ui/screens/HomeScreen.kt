@@ -173,7 +173,6 @@ fun HomeScreen(
                     isLoading     = uiState.isLoading,
                     currentCategory = currentCategory,
                     onQuizClick   = { id -> navController.navigate("quiz_detail/$id") },
-                    onAddDemo     = { homeViewModel.addDemoQuizzes() },
                     onShowAll     = { cat ->
                         navController.navigate("search?category=$cat")
                     }
@@ -425,7 +424,6 @@ private fun AllQuizzesSection(
     isLoading: Boolean,
     currentCategory: String,
     onQuizClick: (String) -> Unit,
-    onAddDemo: () -> Unit,
     onShowAll: (String) -> Unit
 ) {
     Column {
@@ -448,15 +446,11 @@ private fun AllQuizzesSection(
                 }
             }
             quizzes.isEmpty() -> {
-                Column(
-                    modifier            = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Box(
+                    Modifier.fillMaxWidth().height(90.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text("Викторин нет в этой категории", color = TextSec, fontSize = 14.sp)
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = onAddDemo) {
-                        Text("Добавить демо-викторины", color = AccentPurple)
-                    }
+                    CircularProgressIndicator(color = AccentPurple)
                 }
             }
             else -> {
