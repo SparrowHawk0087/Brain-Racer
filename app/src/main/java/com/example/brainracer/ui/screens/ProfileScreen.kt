@@ -34,7 +34,7 @@ fun ProfileScreen(
     authViewModel: AuthViewModel = viewModel(),
     userId: String,
     onHomeClick: () -> Unit = {},
-    onFriendsClick: () -> Unit = {}, // ← новый параметр
+    onFriendsClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
     currentRoute: String = "profile",
     isOwnProfile: Boolean = true
@@ -121,7 +121,7 @@ fun ProfileScreen(
                 showBar = true,
                 currentRoute = currentRoute,
                 onHomeClick = onHomeClick,
-                onFriendsClick = onFriendsClick, // ← пробрасываем в BottomBar
+                onFriendsClick = onFriendsClick,
                 onProfileClick = onProfileClick
             )
         },
@@ -156,7 +156,7 @@ fun ProfileScreen(
 
             // Краткая статистика
             item {
-                StatsRow(
+                ProfileStatsRow(
                     totalQuizzes = totalQuizzes,
                     winPercentage = winPercentage,
                     averageScore = averageScore
@@ -232,7 +232,7 @@ fun ProfileHeader(
 }
 
 @Composable
-fun StatsRow(totalQuizzes: Int, winPercentage: Int, averageScore: Double) {
+fun ProfileStatsRow(totalQuizzes: Int, winPercentage: Int, averageScore: Double) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
