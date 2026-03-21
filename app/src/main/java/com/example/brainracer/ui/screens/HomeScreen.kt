@@ -97,13 +97,14 @@ fun HomeScreen(
     val tabs = remember(uiState.categories) { uiState.categories.filter { it != "Все" } }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
 
-    // Один LaunchedEffect — обновляет фильтр в ViewModel при смене вкладки
+    // Текущая категория для кнопки «Смотреть все»
+    val currentCategory = tabs.getOrNull(selectedTabIndex) ?: "Все"
+
     LaunchedEffect(selectedTabIndex, tabs) {
         if (tabs.isNotEmpty())
-            homeViewModel.loadQuizzesByCategory(tabs.getOrNull(selectedTabIndex) ?: "Все")
+            homeViewModel.loadQuizzesByCategory(currentCategory)
     }
 
-    // Одно объявление — uiState.quizzes уже отфильтрован ViewModel-ом
     val tabQuizzes = uiState.quizzes.take(5)
 
     LaunchedEffect(uiState.errorMessage) {
@@ -116,9 +117,10 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             HomeTopBar(
-                userLevel = uiState.userStats?.totalQuizzesTaken ?: 0,
-                userXp    = (uiState.userStats?.totalPoints ?: 0) % 100,
-                onSignOut = {
+                userLevel   = uiState.userStats?.totalQuizzesTaken ?: 0,
+                userXp      = (uiState.userStats?.totalPoints ?: 0) % 100,
+                onSearchClick = { navController.navigate("search") },
+                onSignOut   = {
                     authViewModel.signOut()
                     navController.navigate("auth") { popUpTo(0) { inclusive = true } }
                 }
@@ -167,10 +169,14 @@ fun HomeScreen(
 
             item {
                 AllQuizzesSection(
-                    quizzes     = tabQuizzes,
-                    isLoading   = uiState.isLoading,
-                    onQuizClick = { id -> navController.navigate("quiz_detail/$id") },
-                    onAddDemo   = { homeViewModel.addDemoQuizzes() }
+                    quizzes       = tabQuizzes,
+                    isLoading     = uiState.isLoading,
+                    currentCategory = currentCategory,
+                    onQuizClick   = { id -> navController.navigate("quiz_detail/$id") },
+                    onAddDemo     = { homeViewModel.addDemoQuizzes() },
+                    onShowAll     = { cat ->
+                        navController.navigate("search?category=$cat")
+                    }
                 )
             }
 
@@ -180,7 +186,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeTopBar(userLevel: Int, userXp: Int, onSignOut: () -> Unit) {
+private fun HomeTopBar(userLevel: Int, userXp: Int, onSearchClick: () -> Unit, onSignOut: () -> Unit) {
     Surface(color = BgDeep) {
         Column {
             Row(
@@ -196,7 +202,7 @@ private fun HomeTopBar(userLevel: Int, userXp: Int, onSignOut: () -> Unit) {
                     Text("Уровень $userLevel", fontSize = 12.sp, color = AccentPurple, fontWeight = FontWeight.SemiBold)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    IconButton(onClick = {}) {
+                    IconButton(onClick = onSearchClick) {
                         Icon(Icons.Outlined.Search, null, tint = TextPri.copy(0.7f))
                     }
                     IconButton(onClick = {}) {
@@ -417,8 +423,10 @@ private fun HotQuizzesSection(quizzes: List<QuizItem>, onQuizClick: (String) -> 
 private fun AllQuizzesSection(
     quizzes: List<QuizItem>,
     isLoading: Boolean,
+    currentCategory: String,
     onQuizClick: (String) -> Unit,
-    onAddDemo: () -> Unit
+    onAddDemo: () -> Unit,
+    onShowAll: (String) -> Unit
 ) {
     Column {
         Row(
@@ -427,7 +435,9 @@ private fun AllQuizzesSection(
             verticalAlignment     = Alignment.CenterVertically
         ) {
             Text("📖 Все викторины", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPri)
-            TextButton(onClick = {}) { Text("Смотреть все", color = AccentPurple, fontSize = 13.sp) }
+            TextButton(onClick = { onShowAll(currentCategory) }) {
+                Text("Смотреть все", color = AccentPurple, fontSize = 13.sp)
+            }
         }
         Spacer(Modifier.height(6.dp))
 
