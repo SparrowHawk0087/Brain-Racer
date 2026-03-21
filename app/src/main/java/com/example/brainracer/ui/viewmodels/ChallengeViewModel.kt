@@ -4,12 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.ChallengeRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
-import com.example.brainracer.data.utils.Result
 import com.example.brainracer.data.utils.fold
 import com.example.brainracer.data.utils.getOrNull
 import com.example.brainracer.domain.entities.Challenge
 import com.example.brainracer.domain.entities.ChallengeResult
-import com.example.brainracer.domain.entities.ChallengeStatus
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

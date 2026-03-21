@@ -2,7 +2,6 @@ package com.example.brainracer.ui.utils
 
 import androidx.compose.runtime.Stable
 import com.example.brainracer.domain.entities.User
-import com.example.brainracer.domain.entities.FriendRequest as DomainFriendRequest
 
 @Stable
 data class FriendsUiState(
