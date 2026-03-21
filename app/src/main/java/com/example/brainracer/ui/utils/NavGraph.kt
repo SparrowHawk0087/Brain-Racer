@@ -16,7 +16,9 @@ import com.example.brainracer.ui.screens.ForgotPasswordScreen
 import com.example.brainracer.ui.screens.FriendsScreen
 import com.example.brainracer.ui.screens.HomeScreen
 import com.example.brainracer.ui.screens.ProfileScreen
+import com.example.brainracer.ui.components.QuizDetailScreen
 import com.example.brainracer.ui.screens.QuizListScreen
+import com.example.brainracer.ui.screens.QuizPlayScreen
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import com.google.firebase.auth.FirebaseAuth
 
@@ -29,7 +31,6 @@ fun NavGraph(
     val navController = rememberNavController()
     val user by authViewModel.user.collectAsState()
 
-    // Текущий маршрут — нужен BottomBar-у для подсветки активной вкладки
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: ""
 
@@ -62,7 +63,7 @@ fun NavGraph(
         }
     }
 
-    // После входа — автоматически отправляем на home, убирая auth из стека
+    // После входа — автоматически на home
     LaunchedEffect(user) {
         user?.let { currentUser ->
             val userId = currentUser.uid
@@ -105,9 +106,36 @@ fun NavGraph(
                 navController = navController,
                 authViewModel = authViewModel,
                 onHomeClick = navigateToHome,
-                onFriendsClick = navigateToFriends,   // <-- передаём новую лямбду
+                onFriendsClick = navigateToFriends,
                 onProfileClick = navigateToProfile,
                 currentRoute = currentRoute
+            )
+        }
+
+        // ── Quiz Detail (NEW) ──────────────────────────────────────────────
+        composable(
+            "quiz_detail/{quizId}",
+            arguments = listOf(navArgument("quizId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val quizId = backStackEntry.arguments?.getString("quizId") ?: ""
+            QuizDetailScreen(
+                quizId = quizId,
+                navController = navController,
+                onStartQuiz = { id ->
+                    navController.navigate("quiz_play/$id")
+                }
+            )
+        }
+
+        // ── Quiz Play ──────────────────────────────────────────────────────
+        composable(
+            "quiz_play/{quizId}",
+            arguments = listOf(navArgument("quizId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val quizId = backStackEntry.arguments?.getString("quizId") ?: ""
+            QuizPlayScreen(
+                quizId = quizId,
+                navController = navController
             )
         }
 
@@ -124,10 +152,10 @@ fun NavGraph(
             )
         }
 
-        // ── Quizzes ────────────────────────────────────────────────────────
+        // ── Quizzes list ───────────────────────────────────────────────────
         composable("quizzes") {
             QuizListScreen(onQuizClick = { quizId ->
-                navController.navigate("quiz/$quizId")
+                navController.navigate("quiz_detail/$quizId")
             })
         }
 
