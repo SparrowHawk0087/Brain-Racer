@@ -16,10 +16,11 @@ import com.example.brainracer.ui.screens.ForgotPasswordScreen
 import com.example.brainracer.ui.screens.FriendsScreen
 import com.example.brainracer.ui.screens.HomeScreen
 import com.example.brainracer.ui.screens.ProfileScreen
-import com.example.brainracer.ui.screens.SearchScreen
 import com.example.brainracer.ui.components.QuizDetailScreen
 import com.example.brainracer.ui.screens.QuizListScreen
+import com.example.brainracer.ui.screens.QuizCreatorScreen
 import com.example.brainracer.ui.screens.QuizPlayScreen
+import com.example.brainracer.ui.screens.SearchScreen
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import com.google.firebase.auth.FirebaseAuth
 
@@ -113,24 +114,7 @@ fun NavGraph(
             )
         }
 
-        // ── Search ────────────────────────────────────────────────────────
-        // Простой вход: /search
-        composable("search") {
-            SearchScreen(navController = navController)
-        }
-        // Вход с предвыбранной категорией: /search?category=История
-        composable(
-            "search?category={category}",
-            arguments = listOf(navArgument("category") {
-                type = NavType.StringType
-                defaultValue = "Все"
-            })
-        ) { backStackEntry ->
-            val category = backStackEntry.arguments?.getString("category") ?: "Все"
-            SearchScreen(navController = navController, initialCategory = category)
-        }
-
-        // ── Quiz Detail ────────────────────────────────────────────────────
+        // ── Quiz Detail (NEW) ──────────────────────────────────────────────
         composable(
             "quiz_detail/{quizId}",
             arguments = listOf(navArgument("quizId") { type = NavType.StringType })
@@ -155,6 +139,27 @@ fun NavGraph(
                 quizId = quizId,
                 navController = navController
             )
+        }
+
+
+        // ── Search ────────────────────────────────────────────────────────
+        composable("search") {
+            SearchScreen(navController = navController)
+        }
+        composable(
+            "search?category={category}",
+            arguments = listOf(navArgument("category") {
+                type         = NavType.StringType
+                defaultValue = "Все"
+            })
+        ) { backStackEntry ->
+            val category = backStackEntry.arguments?.getString("category") ?: "Все"
+            SearchScreen(navController = navController, initialCategory = category)
+        }
+
+        // ── Quiz Creator ───────────────────────────────────────────────────
+        composable("quiz_creator") {
+            QuizCreatorScreen(navController = navController)
         }
 
         // ── Friends ────────────────────────────────────────────────────────

@@ -97,7 +97,6 @@ fun HomeScreen(
     val tabs = remember(uiState.categories) { uiState.categories.filter { it != "Все" } }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
 
-    // Текущая категория для кнопки «Смотреть все»
     val currentCategory = tabs.getOrNull(selectedTabIndex) ?: "Все"
 
     LaunchedEffect(selectedTabIndex, tabs) {
@@ -117,10 +116,10 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             HomeTopBar(
-                userLevel   = uiState.userStats?.totalQuizzesTaken ?: 0,
-                userXp      = (uiState.userStats?.totalPoints ?: 0) % 100,
+                userLevel     = uiState.userStats?.totalQuizzesTaken ?: 0,
+                userXp        = (uiState.userStats?.totalPoints ?: 0) % 100,
                 onSearchClick = { navController.navigate("search") },
-                onSignOut   = {
+                onSignOut     = {
                     authViewModel.signOut()
                     navController.navigate("auth") { popUpTo(0) { inclusive = true } }
                 }
@@ -137,8 +136,8 @@ fun HomeScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick        = { homeViewModel.addDemoQuizzes() },
-                icon           = { Icon(Icons.Default.Add, null) },
+                onClick        = { navController.navigate("quiz_creator") },
+                icon           = { Icon(Icons.Default.Create, null) },
                 text           = { Text("Создать", fontWeight = FontWeight.SemiBold) },
                 containerColor = AccentPurple,
                 contentColor   = Color.White,
@@ -169,13 +168,12 @@ fun HomeScreen(
 
             item {
                 AllQuizzesSection(
-                    quizzes       = tabQuizzes,
-                    isLoading     = uiState.isLoading,
+                    quizzes         = tabQuizzes,
+                    isLoading       = uiState.isLoading,
                     currentCategory = currentCategory,
-                    onQuizClick   = { id -> navController.navigate("quiz_detail/$id") },
-                    onShowAll     = { cat ->
-                        navController.navigate("search?category=$cat")
-                    }
+                    onQuizClick     = { id -> navController.navigate("quiz_detail/$id") },
+                    onCreateQuiz    = { navController.navigate("quiz_creator") },
+                    onShowAll       = { cat -> navController.navigate("search?category=$cat") }
                 )
             }
 
@@ -424,6 +422,7 @@ private fun AllQuizzesSection(
     isLoading: Boolean,
     currentCategory: String,
     onQuizClick: (String) -> Unit,
+    onCreateQuiz: () -> Unit,
     onShowAll: (String) -> Unit
 ) {
     Column {
@@ -446,11 +445,34 @@ private fun AllQuizzesSection(
                 }
             }
             quizzes.isEmpty() -> {
-                Box(
-                    Modifier.fillMaxWidth().height(90.dp),
-                    contentAlignment = Alignment.Center
+                Column(
+                    modifier            = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    CircularProgressIndicator(color = AccentPurple)
+                    Spacer(Modifier.height(8.dp))
+                    Icon(
+                        Icons.Default.Quiz,
+                        contentDescription = null,
+                        tint     = TextSec,
+                        modifier = Modifier.size(40.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "В этой категории пока нет викторин",
+                        color    = TextSec,
+                        fontSize = 14.sp
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = onCreateQuiz,
+                        colors  = ButtonDefaults.buttonColors(containerColor = AccentPurple),
+                        shape   = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Create, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Создать викторину", fontSize = 13.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
                 }
             }
             else -> {
