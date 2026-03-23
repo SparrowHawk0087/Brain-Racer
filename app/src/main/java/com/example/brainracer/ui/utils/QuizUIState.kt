@@ -44,7 +44,13 @@ data class QuizUIState(
     /** Все вопросы викторины — нужны для экрана разбора */
     val reviewQuestions: List<Question> = emptyList(),
     /** Ответы пользователя в том же порядке, что и вопросы */
-    val reviewAnswers: List<UserAnswer> = emptyList()
+    val reviewAnswers: List<UserAnswer> = emptyList(),
+
+    // ── Режим вызова ──────────────────────────────────────────────────────
+    /** ID вызова, если викторина проходится в режиме Challenge. null = обычный режим */
+    val challengeId: String? = null,
+    /** Название викторины (для экрана старта вызова) */
+    val quizTitle: String = ""
 )
 
 data class XpBreakdown(
