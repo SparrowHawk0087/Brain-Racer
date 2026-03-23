@@ -7,13 +7,17 @@ import com.example.brainracer.domain.entities.User
 data class FriendsUiState(
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
+    /** Сообщение после успешной отправки вызова (показать Toast и сбросить). */
+    val challengeSentMessage: String? = null,
     val friends: List<User> = emptyList(),
     val incomingRequests: List<FriendRequestUi> = emptyList(),
     val outgoingRequests: List<OutgoingRequestUi> = emptyList(),
     val searchResults: List<User> = emptyList(),
     val searchQuery: String = "",
     val selectedTab: Int = 0,
-    val isSearching: Boolean = false
+    val isSearching: Boolean = false,
+    val challengePickerQuizzes: List<QuizItem> = emptyList(),
+    val challengePickerLoading: Boolean = false
 )
 
 @Stable
