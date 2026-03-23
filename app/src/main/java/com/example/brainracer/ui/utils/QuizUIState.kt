@@ -1,5 +1,8 @@
 package com.example.brainracer.ui.utils
 
+import com.example.brainracer.domain.entities.Question
+import com.example.brainracer.domain.entities.UserAnswer
+
 /**
  * UI-состояние экрана прохождения викторины.
  */
@@ -35,7 +38,13 @@ data class QuizUIState(
     val xpBreakdown: XpBreakdown? = null,
     val leveledUp: Boolean = false,
     val newLevel: Int = 1,
-    val newLevelProgress: Float = 0f
+    val newLevelProgress: Float = 0f,
+
+    // ── Разбор ответов (заполняются после завершения) ─────────────────────
+    /** Все вопросы викторины — нужны для экрана разбора */
+    val reviewQuestions: List<Question> = emptyList(),
+    /** Ответы пользователя в том же порядке, что и вопросы */
+    val reviewAnswers: List<UserAnswer> = emptyList()
 )
 
 data class XpBreakdown(

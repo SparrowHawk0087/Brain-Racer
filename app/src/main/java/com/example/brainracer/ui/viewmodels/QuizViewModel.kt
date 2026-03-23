@@ -255,7 +255,9 @@ class QuizViewModel : ViewModel() {
                 xpBreakdown      = breakdown,
                 leveledUp        = xpResult.leveledUp,
                 newLevel         = newLevel,
-                newLevelProgress = newProgress
+                newLevelProgress = newProgress,
+                reviewQuestions  = quiz.questions,
+                reviewAnswers    = userAnswers.toList()
             )
         }
 

@@ -1,3 +1,4 @@
+
 package com.example.brainracer.ui.screens
 
 import androidx.compose.animation.AnimatedContent
@@ -14,6 +15,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -90,21 +94,30 @@ fun QuizPlayScreen(
         uiState.isLoading -> LoadingScreen()
         uiState.errorMessage != null ->
             ErrorScreen(uiState.errorMessage!!) { navController.popBackStack() }
-        uiState.showResults || uiState.isQuizCompleted ->
-            ResultsScreen(
-                uiState   = uiState,
-                onBack    = { navController.popBackStack() },
-                onRestart = { quizViewModel.restartQuiz() }
-            )
-        uiState.question.isNotEmpty() ->
-            QuestionScreen(
-                uiState    = uiState,
-                onBack     = { navController.popBackStack() },
-                onSelect   = { quizViewModel.selectAnswer(it) },
-                onSubmit   = { quizViewModel.submitAnswer() },
-                onNext     = { quizViewModel.nextQuestion() },
-                onTimeout  = { quizViewModel.timeoutQuestion() }
-            )
+        uiState.showResults || uiState.isQuizCompleted -> {
+            var showReview by remember { mutableStateOf(false) }
+            if (showReview) {
+                AnswerReviewScreen(
+                    uiState = uiState,
+                    onBack  = { showReview = false }
+                )
+            } else {
+                ResultsScreen(
+                    uiState      = uiState,
+                    onBack       = { navController.popBackStack() },
+                    onRestart    = { quizViewModel.restartQuiz() },
+                    onShowReview = { showReview = true }
+                )
+            }
+        }        uiState.question.isNotEmpty() ->
+        QuestionScreen(
+            uiState    = uiState,
+            onBack     = { navController.popBackStack() },
+            onSelect   = { quizViewModel.selectAnswer(it) },
+            onSubmit   = { quizViewModel.submitAnswer() },
+            onNext     = { quizViewModel.nextQuestion() },
+            onTimeout  = { quizViewModel.timeoutQuestion() }
+        )
     }
 }
 
@@ -560,7 +573,8 @@ private fun ActionZone(
 private fun ResultsScreen(
     uiState: QuizUIState,
     onBack: () -> Unit,
-    onRestart: () -> Unit
+    onRestart: () -> Unit,
+    onShowReview: () -> Unit
 ) {
     val accuracyPct = if (uiState.totalQuestions > 0)
         (uiState.correctAnswers * 100) / uiState.totalQuestions else 0
@@ -674,6 +688,21 @@ private fun ResultsScreen(
                 Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Пройти снова", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            }
+
+            // Кнопка разбора — показывается только если есть что разбирать
+            if (uiState.reviewQuestions.isNotEmpty()) {
+                OutlinedButton(
+                    onClick  = onShowReview,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape    = RoundedCornerShape(14.dp),
+                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = QGreen),
+                    border   = androidx.compose.foundation.BorderStroke(1.5.dp, QGreen)
+                ) {
+                    Icon(Icons.Default.Checklist, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Разбор ответов", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                }
             }
 
             OutlinedButton(
@@ -803,3 +832,216 @@ private fun ResultStat(value: String, label: String, color: Color) {
         Text(label, fontSize = 11.sp, color = QTextSec)
     }
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ЭКРАН РАЗБОРА ОТВЕТОВ
+// ══════════════════════════════════════════════════════════════════════════════
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AnswerReviewScreen(
+    uiState: QuizUIState,
+    onBack: () -> Unit
+) {
+    val questions = uiState.reviewQuestions
+    val answers   = uiState.reviewAnswers
+
+    val correctCount   = answers.count { it.isCorrect }
+    val incorrectCount = answers.count { !it.isCorrect }
+
+    Scaffold(
+        containerColor      = QBg,
+        contentWindowInsets = WindowInsets.systemBars,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("Разбор ответов", color = QTextPri,
+                            fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("${questions.size} вопросов  ·  $correctCount правильно  ·  $incorrectCount неверно",
+                            color = QTextSec, fontSize = 12.sp)
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Box(
+                            modifier = Modifier.size(36.dp).clip(CircleShape).background(QCard),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null,
+                                tint = QTextPri, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = QBg)
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier            = Modifier.fillMaxSize().padding(padding),
+            contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            itemsIndexed(questions) { i, question ->
+                val answer = answers.getOrNull(i)
+                ReviewQuestionCard(
+                    index    = i,
+                    question = question,
+                    answer   = answer
+                )
+            }
+            item { Spacer(Modifier.height(16.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun ReviewQuestionCard(
+    index: Int,
+    question: com.example.brainracer.domain.entities.Question,
+    answer: com.example.brainracer.domain.entities.UserAnswer?
+) {
+    val isCorrect     = answer?.isCorrect == true
+    val isTimeout     = answer == null || answer.selectedAnswerIndex == -1
+    val accentColor   = when {
+        isTimeout  -> QOrange
+        isCorrect  -> QGreen
+        else       -> QRed
+    }
+    val statusLabel   = when {
+        isTimeout -> "Время вышло"
+        isCorrect -> "Правильно"
+        else      -> "Неверно"
+    }
+    val statusIcon    = when {
+        isTimeout -> Icons.Default.Timer
+        isCorrect -> Icons.Default.CheckCircle
+        else      -> Icons.Default.Cancel
+    }
+
+    Card(
+        modifier  = Modifier.fillMaxWidth(),
+        shape     = RoundedCornerShape(18.dp),
+        colors    = CardDefaults.cardColors(containerColor = QCard),
+        elevation = CardDefaults.cardElevation(0.dp),
+        border    = CardDefaults.outlinedCardBorder()
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+            // ── Заголовок: номер + статус ─────────────────────────────────
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                // Номер вопроса
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = QPurple.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        "Вопрос ${index + 1}",
+                        modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        fontSize   = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color      = QPurple
+                    )
+                }
+                // Статус
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(statusIcon, null, tint = accentColor, modifier = Modifier.size(16.dp))
+                    Text(statusLabel, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                        color = accentColor)
+                    // Время ответа
+                    if (answer != null && answer.timeSpent > 0) {
+                        Text("·", fontSize = 12.sp, color = QTextSec)
+                        Text("${answer.timeSpent}с", fontSize = 12.sp, color = QTextSec)
+                    }
+                }
+            }
+
+            // ── Текст вопроса ─────────────────────────────────────────────
+            Text(
+                text       = question.questionText,
+                fontSize   = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color      = QTextPri,
+                lineHeight = 22.sp
+            )
+
+            // ── Варианты ответов ──────────────────────────────────────────
+            val letters = listOf("A", "B", "C", "D", "E")
+            question.options.forEachIndexed { optIdx, optText ->
+                val isUserChoice    = answer?.selectedAnswerIndex == optIdx
+                val isRightAnswer   = question.correctAnswerIndex == optIdx
+
+                val (bg, border, text, icon) = when {
+                    // Правильный вариант — всегда зелёный
+                    isRightAnswer && isUserChoice ->
+                        Quad(QGreen.copy(.15f), QGreen, QGreen, Icons.Default.CheckCircle)
+                    isRightAnswer ->
+                        Quad(QGreen.copy(.08f), QGreen.copy(.6f), QGreen, null)
+                    // Ответ пользователя, но неверный
+                    isUserChoice ->
+                        Quad(QRed.copy(.15f), QRed, QRed, Icons.Default.Cancel)
+                    // Остальные варианты — приглушённые
+                    else ->
+                        Quad(QCard, QBorder, QTextSec.copy(.4f), null)
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(bg)
+                        .border(1.dp, border, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Row(
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Буква варианта
+                        Box(
+                            modifier = Modifier.size(24.dp).clip(CircleShape)
+                                .background(border.copy(alpha = .18f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(letters.getOrElse(optIdx) { "${optIdx + 1}" },
+                                fontSize = 11.sp, fontWeight = FontWeight.Bold, color = border)
+                        }
+                        Text(optText, fontSize = 14.sp, color = text, modifier = Modifier.weight(1f))
+                        if (icon != null) {
+                            Icon(icon, null, tint = border, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+
+            // ── Объяснение (если есть) ────────────────────────────────────
+            val explanation = question.explanation
+            if (!explanation.isNullOrBlank()) {
+                HorizontalDivider(color = QBorder.copy(alpha = .5f))
+                Row(
+                    verticalAlignment     = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Lightbulb, null,
+                        tint = QGold, modifier = Modifier.size(16.dp).padding(top = 2.dp))
+                    Text(
+                        text       = explanation,
+                        fontSize   = 13.sp,
+                        color      = QTextSec,
+                        lineHeight = 19.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Вспомогательный data class для деструктурирования четырёх значений стиля варианта */
+private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
