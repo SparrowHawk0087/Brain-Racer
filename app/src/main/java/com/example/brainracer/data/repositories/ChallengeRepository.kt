@@ -3,6 +3,7 @@ package com.example.brainracer.data.repositories
 import com.example.brainracer.domain.entities.Challenge
 import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.data.utils.Result
+import kotlinx.coroutines.flow.Flow
 
 interface ChallengeRepository {
     // Создание нового вызова
@@ -44,4 +45,17 @@ interface ChallengeRepository {
 
     // Проверить и обновить истёкшие вызовы
     suspend fun checkExpiredChallenges(): Result<Unit>
+
+    /**
+     * Подписка на изменения: два snapshot-listener (`challengedUserId`, `challengerUserId`) без `orderBy` —
+     * не требуются составные индексы, соперник видит вызов сразу после записи.
+     *
+     * В Firebase Console для `challenges` нужны правила, чтобы получатель мог **читать** документ, например:
+     * `allow read: if request.auth != null && (resource.data.challengerUserId == request.auth.uid || resource.data.challengedUserId == request.auth.uid);`
+     * и `allow create` при `request.resource.data.challengerUserId == request.auth.uid`.
+     */
+    fun observeUserChallengeSides(userId: String): Flow<UserChallengeSides>
+
+    /** Одноразовая загрузка тех же данных (pull-to-refresh и т.п.). */
+    suspend fun fetchUserChallengeSides(userId: String): Result<UserChallengeSides>
 }
