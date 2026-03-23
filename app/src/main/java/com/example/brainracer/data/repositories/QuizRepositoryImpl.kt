@@ -6,6 +6,7 @@ import com.example.brainracer.data.utils.Result
 import com.example.brainracer.data.utils.getOrNull
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
@@ -149,37 +150,67 @@ class QuizRepositoryImpl: QuizRepository {
     }
 
     // Запись результатов прохождения квиза с поддержкой вызовов
-    override suspend fun recordQuizResult(quizResult: ChallengeResult): Result<Unit> = try {
-        val resWithId = quizResult.copy(id = quizResultsCollection.document().id)
-        quizResultsCollection.document(resWithId.id).set(resWithId).await()
+    override suspend fun recordQuizResult(quizResult: ChallengeResult): Result<Unit> {
+        return try {
+            val resWithId = quizResult.copy(id = quizResultsCollection.document().id)
 
-        // Обновляем статистику викторины
-        val quizRef = quizzesCollection.document(quizResult.quizId)
-        firestore.runTransaction { transaction ->
-            val quizDoc = transaction.get(quizRef)
-            val currentStats = quizDoc.get("stats") as? Map<String, Any> ?: mapOf()
-            val newTimesTaken = (currentStats["times_taken"] as? Long ?: 0) + 1
-            val currentAverage = currentStats["average_score"] as? Double ?: 0.0
-            val newAverageScore = (currentAverage * (newTimesTaken - 1) + quizResult.accuracy) / newTimesTaken
-            val updates = mapOf(
-                "stats.times_taken" to newTimesTaken,
-                "stats.average_score" to newAverageScore
-            )
-            transaction.update(quizRef, updates)
-        }.await()
+            // 1) Дуэль: сначала вызов — иначе при PERMISSION_DENIED на quiz_results/users квиз не засчитается.
+            if (!quizResult.challengeId.isNullOrBlank()) {
+                val challengeRepository = ChallengeRepositoryImpl()
+                when (
+                    val sub = challengeRepository.submitChallengeResult(
+                        challengeId = quizResult.challengeId!!,
+                        userId = quizResult.userId,
+                        result = quizResult
+                    )
+                ) {
+                    is Result.Error   -> return Result.error(sub.exception)
+                    is Result.Success -> Unit
+                }
+            }
 
-        // Если результат связан с вызовом — обновляем вызов
-        if (!quizResult.challengeId.isNullOrBlank()) {
-            val challengeRepository = ChallengeRepositoryImpl()
-            challengeRepository.submitChallengeResult(
-                challengeId = quizResult.challengeId!!,
-                userId = quizResult.userId,
-                result = quizResult
-            )
+            // 2) Архив прохождения (в правилах обязателен match /quiz_results/{id} allow create)
+            try {
+                quizResultsCollection.document(resWithId.id).set(resWithId).await()
+            } catch (e: FirebaseFirestoreException) {
+                if (e.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw e
+            }
+
+            // 3) Профиль игрока
+            when (val ur = UserRepositoryImpl().updateUserStats(quizResult.userId, quizResult)) {
+                is Result.Success -> Unit
+                is Result.Error   -> {
+                    val code = (ur.exception as? FirebaseFirestoreException)?.code
+                        ?: (ur.exception.cause as? FirebaseFirestoreException)?.code
+                    if (code != FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                        return Result.error(ur.exception)
+                    }
+                }
+            }
+
+            // 4) Счётчики на документе квиза
+            val quizRef = quizzesCollection.document(quizResult.quizId)
+            try {
+                firestore.runTransaction { transaction ->
+                    val quizDoc = transaction.get(quizRef)
+                    val currentStats = quizDoc.get("stats") as? Map<String, Any> ?: mapOf()
+                    val newTimesTaken = (currentStats["times_taken"] as? Long ?: 0) + 1
+                    val currentAverage = currentStats["average_score"] as? Double ?: 0.0
+                    val newAverageScore =
+                        (currentAverage * (newTimesTaken - 1) + quizResult.accuracy) / newTimesTaken
+                    val updates = mapOf(
+                        "stats.times_taken" to newTimesTaken,
+                        "stats.average_score" to newAverageScore
+                    )
+                    transaction.update(quizRef, updates)
+                }.await()
+            } catch (e: FirebaseFirestoreException) {
+                if (e.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw e
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.error(e)
         }
-
-        Result.success(Unit)
-    } catch (e: Exception) {
-        Result.error(e)
     }
 }

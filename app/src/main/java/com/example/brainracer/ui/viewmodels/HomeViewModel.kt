@@ -2,9 +2,14 @@ package com.example.brainracer.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.brainracer.data.repositories.ChallengeRepositoryImpl
+import com.example.brainracer.data.repositories.UserChallengeSides
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.data.utils.Result
+import com.example.brainracer.data.utils.fold
+import com.example.brainracer.domain.entities.Challenge
+import com.example.brainracer.domain.entities.ChallengeStatus
 import com.example.brainracer.domain.entities.LevelSystem
 import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.QuizDifficulty
@@ -12,8 +17,8 @@ import com.example.brainracer.domain.entities.QuizStats
 import com.example.brainracer.domain.entities.QuestionType
 import com.example.brainracer.ui.utils.HomeUiState
 import com.example.brainracer.ui.utils.QuizItem
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,9 +31,10 @@ class HomeViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    private val quizRepository = QuizRepositoryImpl()
-    private val userRepository = UserRepositoryImpl()
-    private val auth           = FirebaseAuth.getInstance()
+    private val quizRepository       = QuizRepositoryImpl()
+    private val userRepository        = UserRepositoryImpl()
+    private val challengeRepository   = ChallengeRepositoryImpl()
+    private val auth                  = FirebaseAuth.getInstance()
 
     // Кэш полного списка викторин для фильтрации по категории
     private var allQuizzes: List<QuizItem> = emptyList()
@@ -44,11 +50,25 @@ class HomeViewModel : ViewModel() {
             // loadUserData и loadQuizzes теперь suspend — вызываем напрямую
             val userId = auth.currentUser?.uid
             if (userId != null) {
+                _uiState.update { it.copy(currentUserId = userId) }
                 loadUserData(userId)
             } else {
                 _uiState.update { it.copy(userName = "Гость") }
             }
             loadQuizzes()
+            if (userId != null) {
+                launch {
+                    try {
+                        challengeRepository.observeUserChallengeSides(userId).collect { sides ->
+                            applyHomeChallengeSides(sides)
+                        }
+                    } catch (e: Exception) {
+                        _uiState.update {
+                            it.copy(errorMessage = "Вызовы: ${e.message ?: "ошибка сети"}")
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -149,13 +169,71 @@ class HomeViewModel : ViewModel() {
         val userId = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             loadUserData(userId)
+            when (val r = challengeRepository.fetchUserChallengeSides(userId)) {
+                is Result.Success -> applyHomeChallengeSides(r.data)
+                is Result.Error   -> { }
+            }
         }
     }
 
     fun refreshUserName() {
         val userId = auth.currentUser?.uid ?: return
+        viewModelScope.launch { loadUserData(userId) }
+    }
+
+    fun refreshChallenges() {
+        val userId = auth.currentUser?.uid ?: return
         viewModelScope.launch {
-            loadUserData(userId)
+            when (val r = challengeRepository.fetchUserChallengeSides(userId)) {
+                is Result.Success -> applyHomeChallengeSides(r.data)
+                is Result.Error   -> { }
+            }
+        }
+    }
+
+    // ── Вызовы (данные с merge на клиенте, синхронно со snapshot в репозитории) ─
+
+    private fun applyHomeChallengeSides(sides: UserChallengeSides) {
+        val incoming = sides.asChallenged.filter { it.status == ChallengeStatus.PENDING }
+            .sortedWith(
+                compareByDescending<Challenge> { it.createdAt.seconds }
+                    .thenByDescending { it.createdAt.nanoseconds }
+            )
+        val outgoing = sides.asChallenger.filter {
+            it.status == ChallengeStatus.PENDING ||
+                it.status == ChallengeStatus.ACCEPTED ||
+                it.status == ChallengeStatus.COMPLETED
+        }
+        val outgoingPending = outgoing.filter { it.status == ChallengeStatus.PENDING }
+        val nowDate = Timestamp.now().toDate()
+        val activeAccepted = (sides.asChallenged + sides.asChallenger)
+            .distinctBy { it.id }
+            .filter {
+                it.status == ChallengeStatus.ACCEPTED &&
+                    it.expiresAt.toDate().after(nowDate)
+            }
+        val completed = (sides.asChallenged + sides.asChallenger)
+            .filter { it.status == ChallengeStatus.COMPLETED }
+            .distinctBy { it.id }
+            .sortedWith(
+                compareByDescending<Challenge> { it.completedAt?.seconds ?: 0L }
+                    .thenByDescending { it.completedAt?.nanoseconds ?: 0 }
+            )
+            .take(20)
+
+        val homeActive = (incoming + outgoingPending + activeAccepted)
+            .distinctBy { it.id }
+            .sortedWith(
+                compareByDescending<Challenge> { it.createdAt.seconds }
+                    .thenByDescending { it.createdAt.nanoseconds }
+            )
+
+        _uiState.update {
+            it.copy(
+                pendingChallenges      = incoming,
+                homeActiveChallenges   = homeActive,
+                homeFinishedChallenges = completed
+            )
         }
     }
 
@@ -179,6 +257,84 @@ class HomeViewModel : ViewModel() {
 
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    fun loadChallengePickerData() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(challengePickerLoading = true) }
+            val userId = auth.currentUser?.uid ?: run {
+                _uiState.update { it.copy(challengePickerLoading = false) }
+                return@launch
+            }
+            val friends = when (val me = userRepository.getUser(userId)) {
+                is Result.Success -> me.data.friends.mapNotNull { fid ->
+                    when (val fr = userRepository.getUser(fid)) {
+                        is Result.Success -> fr.data.copy(id = fid)
+                        else -> null
+                    }
+                }
+                else -> emptyList()
+            }
+            val quizzes = when (val r = quizRepository.getPopularQuizzes(limit = 80)) {
+                is Result.Success -> r.data.map { quiz ->
+                    QuizItem(
+                        id            = quiz.id,
+                        title         = quiz.title,
+                        category      = quiz.categoryId,
+                        questionCount = quiz.questions.size,
+                        difficulty    = quiz.difficulty.name,
+                        description   = quiz.description,
+                        rating        = quiz.stats.averageRating,
+                        playCount     = quiz.stats.timesTaken
+                    )
+                }
+                is Result.Error -> emptyList()
+            }
+            val quizList = quizzes.ifEmpty { allQuizzes }
+            _uiState.update {
+                it.copy(
+                    friendsForChallenge    = friends,
+                    challengePickerQuizzes = quizList,
+                    challengePickerLoading = false
+                )
+            }
+        }
+    }
+
+    fun sendChallengeToFriend(friendId: String, quizId: String, quizTitle: String) {
+        viewModelScope.launch {
+            val challengerId = auth.currentUser?.uid ?: return@launch
+            val challenge = Challenge(
+                quizId           = quizId,
+                quizTitle        = quizTitle,
+                challengerUserId = challengerId,
+                challengedUserId = friendId,
+                status           = ChallengeStatus.PENDING
+            )
+            challengeRepository.createChallenge(challenge).fold(
+                onSuccess = {
+                    _uiState.update {
+                        it.copy(
+                            errorMessage         = null,
+                            challengeSentMessage = "Вызов отправлен"
+                        )
+                    }
+                    viewModelScope.launch {
+                        when (val r = challengeRepository.fetchUserChallengeSides(challengerId)) {
+                            is Result.Success -> applyHomeChallengeSides(r.data)
+                            is Result.Error   -> { }
+                        }
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(errorMessage = e.message) }
+                }
+            )
+        }
+    }
+
+    fun consumeChallengeSentMessage() {
+        _uiState.update { it.copy(challengeSentMessage = null) }
     }
 
     // ── Добавление демо-викторин ──────────────────────────────────────────

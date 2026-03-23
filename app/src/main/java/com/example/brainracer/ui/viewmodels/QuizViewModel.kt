@@ -38,7 +38,17 @@ class QuizViewModel : ViewModel() {
 
     // ── Загрузка викторины ────────────────────────────────────────────────
 
-    fun loadQuiz(quizId: String) {
+    fun loadQuiz(quizId: String, challengeId: String? = null) {
+        val prior = _uiState.value
+        val challengeMatches = prior.challengeId == challengeId ||
+            (prior.challengeId.isNullOrBlank() && challengeId.isNullOrBlank())
+        // Поворот экрана / повторный LaunchedEffect не должен сбрасывать уже начатое или завершённое прохождение
+        if (currentQuiz?.id == quizId && challengeMatches &&
+            (prior.showResults || prior.isQuizCompleted || prior.question.isNotEmpty())
+        ) {
+            return
+        }
+
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
         viewModelScope.launch {
             quizRepository.getQuiz(quizId).fold(
@@ -56,7 +66,9 @@ class QuizViewModel : ViewModel() {
                             options                  = first.options,
                             totalQuestions           = quiz.questions.size,
                             currentQuestionTimeLimit = first.timeLimit.coerceAtLeast(5),
-                            attachedImageUrl         = first.imageUrl ?: first.gifUrl
+                            attachedImageUrl         = first.imageUrl ?: first.gifUrl,
+                            challengeId              = challengeId,
+                            quizTitle                = quiz.title
                         )
                     } else {
                         _uiState.update {
@@ -269,6 +281,7 @@ class QuizViewModel : ViewModel() {
             is Result.Error   -> "Игрок"
         }
 
+        val cid = _uiState.value.challengeId
         val quizResult = com.example.brainracer.domain.entities.ChallengeResult(
             quizId                 = quiz.id,
             userId                 = userId,
@@ -280,21 +293,31 @@ class QuizViewModel : ViewModel() {
             timeSpent              = totalTimeSpent,
             averageTimePerQuestion = avgTime,
             answers                = userAnswers.toList(),
-            pointsEarned           = xpResult.totalXp
+            pointsEarned           = xpResult.totalXp,
+            challengeId            = cid
         )
 
-        quizRepository.recordQuizResult(quizResult)
-        userRepository.updateUserStats(userId, quizResult)
+        when (val rec = quizRepository.recordQuizResult(quizResult)) {
+            is Result.Success -> Unit
+            is Result.Error   ->
+                _uiState.update {
+                    it.copy(
+                        errorMessage = "Не удалось завершить сохранение: ${rec.exception.message}"
+                    )
+                }
+        }
     }
 
     // ── Утилиты ───────────────────────────────────────────────────────────
 
     fun restartQuiz() {
+        if (!_uiState.value.challengeId.isNullOrBlank()) return
         currentQuiz?.id?.let { id ->
+            val cid = _uiState.value.challengeId
             userAnswers.clear()
             totalTimeSpent = 0
             _uiState.value = QuizUIState()
-            loadQuiz(id)
+            loadQuiz(id, cid)
         }
     }
 

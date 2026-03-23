@@ -3,7 +3,9 @@ package com.example.brainracer.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.ChallengeRepositoryImpl
+import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
+import com.example.brainracer.data.utils.Result
 import com.example.brainracer.data.utils.fold
 import com.example.brainracer.domain.entities.FriendRequest
 import com.example.brainracer.domain.entities.FriendshipStatus
@@ -11,6 +13,7 @@ import com.example.brainracer.domain.entities.User
 import com.example.brainracer.ui.utils.FriendRequestUi
 import com.example.brainracer.ui.utils.FriendsUiState
 import com.example.brainracer.ui.utils.OutgoingRequestUi
+import com.example.brainracer.ui.utils.QuizItem
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +28,7 @@ class FriendsViewModel: ViewModel() {
     val uiState: StateFlow<FriendsUiState> = _uiState.asStateFlow()
 
     private val userRepository = UserRepositoryImpl()
+    private val quizRepository = QuizRepositoryImpl()
     private val challengeRepository = ChallengeRepositoryImpl()
     private val auth = FirebaseAuth.getInstance()
     private val firestore = FirebaseFirestore.getInstance()
@@ -308,6 +312,39 @@ class FriendsViewModel: ViewModel() {
         }
     }
 
+    fun loadChallengePickerQuizzes() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(challengePickerLoading = true) }
+            when (val r = quizRepository.getPopularQuizzes(limit = 80)) {
+                is Result.Success -> {
+                    val items = r.data.map { quiz ->
+                        QuizItem(
+                            id            = quiz.id,
+                            title         = quiz.title,
+                            category      = quiz.categoryId,
+                            questionCount = quiz.questions.size,
+                            difficulty    = quiz.difficulty.name,
+                            description   = quiz.description,
+                            rating        = quiz.stats.averageRating,
+                            playCount     = quiz.stats.timesTaken
+                        )
+                    }
+                    _uiState.update {
+                        it.copy(challengePickerQuizzes = items, challengePickerLoading = false)
+                    }
+                }
+                is Result.Error -> {
+                    _uiState.update {
+                        it.copy(
+                            challengePickerLoading = false,
+                            errorMessage           = "Не удалось загрузить викторины: ${r.exception.message}"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     // Вызов другу
     fun sendChallenge(friendId: String, quizId: String, quizTitle: String) {
         viewModelScope.launch {
@@ -323,13 +360,26 @@ class FriendsViewModel: ViewModel() {
                 )
 
                 challengeRepository.createChallenge(challenge).fold(
-                    onSuccess = { _uiState.update { it.copy(errorMessage = null) } },
-                    onFailure = { error -> _uiState.update { it.copy(errorMessage = error.message) } }
+                    onSuccess = {
+                        _uiState.update {
+                            it.copy(
+                                errorMessage         = null,
+                                challengeSentMessage = "Вызов отправлен"
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiState.update { it.copy(errorMessage = error.message) }
+                    }
                 )
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = "Ошибка: ${e.message}") }
             }
         }
+    }
+
+    fun consumeChallengeSentMessage() {
+        _uiState.update { it.copy(challengeSentMessage = null) }
     }
 
     fun clearError() {

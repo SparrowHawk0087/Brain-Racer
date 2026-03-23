@@ -5,10 +5,13 @@ import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.domain.entities.ChallengeStatus
 import com.example.brainracer.data.utils.Result
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 class ChallengeRepositoryImpl : ChallengeRepository {
@@ -16,35 +19,28 @@ class ChallengeRepositoryImpl : ChallengeRepository {
     private val challengesCollection = firestore.collection("challenges")
     private val usersCollection = firestore.collection("users")
 
-    // Чтение
-    override suspend fun getChallengesForUser(userId: String): Result<List<Challenge>> = try {
-        val snapshot = challengesCollection
-            .whereEqualTo("status", ChallengeStatus.PENDING.name)
-            .whereIn("challengedUserId", listOf(userId))
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .get()
-            .await()
-
-        val challenges = snapshot.documents.mapNotNull { doc ->
+    private fun mapDocsToChallenges(docs: Iterable<com.google.firebase.firestore.DocumentSnapshot>): List<Challenge> =
+        docs.mapNotNull { doc ->
             doc.toObject(Challenge::class.java)?.copy(id = doc.id)
         }
-        Result.success(challenges)
-    } catch (e: Exception) {
-        Result.error(e)
-    }
+
+    // Чтение — только одно поле в запросе + фильтр на клиенте (не нужны составные индексы).
+
+    override suspend fun getChallengesForUser(userId: String): Result<List<Challenge>> =
+        getIncomingChallenges(userId)
 
     override suspend fun getIncomingChallenges(userId: String): Result<List<Challenge>> = try {
         val snapshot = challengesCollection
             .whereEqualTo("challengedUserId", userId)
-            .whereEqualTo("status", ChallengeStatus.PENDING.name)
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .limit(50)
+            .limit(100)
             .get()
             .await()
-
-        val challenges = snapshot.documents.mapNotNull { doc ->
-            doc.toObject(Challenge::class.java)?.copy(id = doc.id)
-        }
+        val challenges = mapDocsToChallenges(snapshot.documents)
+            .filter { it.status == ChallengeStatus.PENDING }
+            .sortedWith(
+                compareByDescending<Challenge> { it.createdAt.seconds }
+                    .thenByDescending { it.createdAt.nanoseconds }
+            )
         Result.success(challenges)
     } catch (e: Exception) {
         Result.error(e)
@@ -53,54 +49,72 @@ class ChallengeRepositoryImpl : ChallengeRepository {
     override suspend fun getOutgoingChallenges(userId: String): Result<List<Challenge>> = try {
         val snapshot = challengesCollection
             .whereEqualTo("challengerUserId", userId)
-            .whereIn("status", listOf(
-                ChallengeStatus.PENDING.name,
-                ChallengeStatus.ACCEPTED.name,
-                ChallengeStatus.COMPLETED.name
-            ))
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .limit(50)
+            .limit(100)
             .get()
             .await()
-
-        val challenges = snapshot.documents.mapNotNull { doc ->
-            doc.toObject(Challenge::class.java)?.copy(id = doc.id)
-        }
+        val allowed = setOf(
+            ChallengeStatus.PENDING,
+            ChallengeStatus.ACCEPTED,
+            ChallengeStatus.COMPLETED
+        )
+        val challenges = mapDocsToChallenges(snapshot.documents)
+            .filter { it.status in allowed }
+            .sortedWith(
+                compareByDescending<Challenge> { it.createdAt.seconds }
+                    .thenByDescending { it.createdAt.nanoseconds }
+            )
         Result.success(challenges)
     } catch (e: Exception) {
         Result.error(e)
     }
 
     override suspend fun getActiveChallenges(userId: String): Result<List<Challenge>> = try {
-        val snapshot = challengesCollection
+        val now = Timestamp.now()
+        val asChallenged = challengesCollection
             .whereEqualTo("status", ChallengeStatus.ACCEPTED.name)
-            .whereIn("challengedUserId", listOf(userId))
-            .whereGreaterThan("expiresAt", Timestamp.now())
-            .orderBy("expiresAt", Query.Direction.ASCENDING)
+            .whereEqualTo("challengedUserId", userId)
+            .get()
+            .await()
+        val asChallenger = challengesCollection
+            .whereEqualTo("status", ChallengeStatus.ACCEPTED.name)
+            .whereEqualTo("challengerUserId", userId)
             .get()
             .await()
 
-        val challenges = snapshot.documents.mapNotNull { doc ->
-            doc.toObject(Challenge::class.java)?.copy(id = doc.id)
-        }
-        Result.success(challenges)
+        val merged = (asChallenged.documents + asChallenger.documents)
+            .distinctBy { it.id }
+            .mapNotNull { doc ->
+                doc.toObject(Challenge::class.java)?.copy(id = doc.id)
+            }
+            .filter { it.expiresAt.toDate().after(now.toDate()) }
+            .sortedWith(compareBy<Challenge> { it.expiresAt.seconds }.thenBy { it.expiresAt.nanoseconds })
+        Result.success(merged)
     } catch (e: Exception) {
         Result.error(e)
     }
 
     override suspend fun getCompletedChallenges(userId: String, limit: Int): Result<List<Challenge>> = try {
-        val snapshot = challengesCollection
-            .whereEqualTo("status", ChallengeStatus.COMPLETED.name)
-            .whereIn("challengedUserId", listOf(userId))
-            .orderBy("completedAt", Query.Direction.DESCENDING)
-            .limit(limit.toLong())
+        val lim = 80L
+        val asChallenged = challengesCollection
+            .whereEqualTo("challengedUserId", userId)
+            .limit(lim)
+            .get()
+            .await()
+        val asChallenger = challengesCollection
+            .whereEqualTo("challengerUserId", userId)
+            .limit(lim)
             .get()
             .await()
 
-        val challenges = snapshot.documents.mapNotNull { doc ->
-            doc.toObject(Challenge::class.java)?.copy(id = doc.id)
-        }
-        Result.success(challenges)
+        val merged = (mapDocsToChallenges(asChallenged.documents) + mapDocsToChallenges(asChallenger.documents))
+            .filter { it.status == ChallengeStatus.COMPLETED }
+            .distinctBy { it.id }
+            .sortedWith(
+                compareByDescending<Challenge> { it.completedAt?.seconds ?: 0L }
+                    .thenByDescending { it.completedAt?.nanoseconds ?: 0 }
+            )
+            .take(limit)
+        Result.success(merged)
     } catch (e: Exception) {
         Result.error(e)
     }
@@ -122,23 +136,97 @@ class ChallengeRepositoryImpl : ChallengeRepository {
         Result.error(e)
     }
 
+    override suspend fun fetchUserChallengeSides(userId: String): Result<UserChallengeSides> = try {
+        val s1 = challengesCollection
+            .whereEqualTo("challengedUserId", userId)
+            .limit(100)
+            .get()
+            .await()
+        val s2 = challengesCollection
+            .whereEqualTo("challengerUserId", userId)
+            .limit(100)
+            .get()
+            .await()
+        Result.success(
+            UserChallengeSides(
+                asChallenged = mapDocsToChallenges(s1.documents),
+                asChallenger = mapDocsToChallenges(s2.documents)
+            )
+        )
+    } catch (e: Exception) {
+        Result.error(e)
+    }
+
+    override fun observeUserChallengeSides(userId: String): Flow<UserChallengeSides> = callbackFlow {
+        val lock = Any()
+        var challenged: List<Challenge> = emptyList()
+        var challenger: List<Challenge> = emptyList()
+
+        fun emitSides() {
+            val snap = synchronized(lock) {
+                UserChallengeSides(
+                    challenged.toList(),
+                    challenger.toList()
+                )
+            }
+            trySend(snap)
+        }
+
+        val regChallenged = challengesCollection
+            .whereEqualTo("challengedUserId", userId)
+            .limit(100)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    synchronized(lock) {
+                        challenged = mapDocsToChallenges(snapshot.documents)
+                    }
+                    emitSides()
+                }
+            }
+
+        val regChallenger = challengesCollection
+            .whereEqualTo("challengerUserId", userId)
+            .limit(100)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    synchronized(lock) {
+                        challenger = mapDocsToChallenges(snapshot.documents)
+                    }
+                    emitSides()
+                }
+            }
+
+        awaitClose {
+            regChallenged.remove()
+            regChallenger.remove()
+        }
+    }
+
     // Создание
 
     override suspend fun createChallenge(challenge: Challenge): Result<String> {
         return try {
-            // Проверка: не существует ли уже активный вызов между этими пользователями на эту викторину
             val existingSnapshot = challengesCollection
                 .whereEqualTo("challengerUserId", challenge.challengerUserId)
-                .whereEqualTo("challengedUserId", challenge.challengedUserId)
-                .whereEqualTo("quizId", challenge.quizId)
-                .whereIn("status", listOf(
-                    ChallengeStatus.PENDING.name,
-                    ChallengeStatus.ACCEPTED.name
-                ))
+                .limit(80)
                 .get()
                 .await()
 
-            if (!existingSnapshot.isEmpty) {
+            val hasConflict = existingSnapshot.documents.any { doc ->
+                val c = doc.toObject(Challenge::class.java) ?: return@any false
+                c.challengedUserId == challenge.challengedUserId &&
+                    c.quizId == challenge.quizId &&
+                    (c.status == ChallengeStatus.PENDING || c.status == ChallengeStatus.ACCEPTED)
+            }
+            if (hasConflict) {
                 return Result.error(Exception("Уже есть активный вызов на эту викторину"))
             }
 
@@ -218,46 +306,57 @@ class ChallengeRepositoryImpl : ChallengeRepository {
                 throw Exception("Пользователь не участвует в этом вызове")
             }
 
+            val parsed = challengeDoc.toObject(Challenge::class.java)
+                ?: throw Exception("Не удалось прочитать вызов")
+
+            if (parsed.status != ChallengeStatus.ACCEPTED) {
+                throw Exception("Вызов не в статусе «принят»")
+            }
+
             // Определяем поле для результата
             val resultField = if (userId == challengerId) "challengerResult" else "challengedResult"
 
             // Проверяем, не отправлен ли уже результат
-            val existingResult = challengeDoc.get(resultField)
-            if (existingResult != null) {
-                throw Exception("Результат уже отправлен")
+            val alreadySent = if (userId == challengerId) parsed.challengerResult != null
+            else parsed.challengedResult != null
+            if (alreadySent) {
+                return@runTransaction null
             }
 
-            // Обновляем результат
             transaction.update(challengeRef, resultField, result)
 
-            // Проверяем, есть ли оба результата
-            val challengerResult = challengeDoc.get("challengerResult") as? ChallengeResult
-            val challengedResult = challengeDoc.get("challengedResult") as? ChallengeResult
+            val newChallenger = if (userId == challengerId) result else parsed.challengerResult
+            val newChallenged = if (userId == challengedId) result else parsed.challengedResult
 
-            // Если оба результата есть — определяем победителя
-            if (challengerResult != null && challengedResult != null) {
-                val winnerId = when {
-                    challengerResult.score > challengedResult.score -> challengerId
-                    challengedResult.score > challengerResult.score -> challengedId
-                    else -> "draw"
+            if (newChallenger != null && newChallenged != null) {
+                val isDraw = newChallenger.score == newChallenged.score
+                val winnerId: String? = when {
+                    isDraw -> null
+                    newChallenger.score > newChallenged.score -> challengerId
+                    else -> challengedId
                 }
 
-                val updates = mapOf(
-                    "status" to ChallengeStatus.COMPLETED.name,
-                    "completedAt" to Timestamp.now(),
-                    "winnerId" to winnerId,
-                    "isDraw" to (winnerId == "draw")
-                )
-
-                transaction.update(challengeRef, updates)
+                if (winnerId != null) {
+                    transaction.update(
+                        challengeRef,
+                        "status", ChallengeStatus.COMPLETED.name,
+                        "completedAt", Timestamp.now(),
+                        "winnerId", winnerId,
+                        "isDraw", isDraw
+                    )
+                } else {
+                    transaction.update(
+                        challengeRef,
+                        "status", ChallengeStatus.COMPLETED.name,
+                        "completedAt", Timestamp.now(),
+                        "winnerId", FieldValue.delete(),
+                        "isDraw", isDraw
+                    )
+                }
             }
 
-            null // Transaction не возвращает значение
+            null
         }.await()
-
-        // Обновляем статистику пользователя
-        val userRepository = UserRepositoryImpl()
-        userRepository.updateUserStats(userId, result)
 
         Result.success(Unit)
     } catch (e: Exception) {

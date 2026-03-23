@@ -4,6 +4,14 @@ import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.data.utils.Result
 
+/**
+ * [recordQuizResult] пишет в `challenges` (дуэль), `quiz_results`, `users` (stats+rank), `quizzes` (stats).
+ *
+ * Обязательно в правилах должны быть:
+ * - `match /quiz_results/{resultId} { allow read, create: if request.auth != null; }` — без блока запись падает с PERMISSION_DENIED.
+ * - `quizzes`: update для чужих прохождений только по полю `stats` (см. ниже).
+ * - `users`: явный `allow update` для владельца документа (любые поля), отдельно — чужой update только `friends`.
+ */
 interface QuizRepository {
     suspend fun getQuiz(quizId: String): Result<Quiz>
     suspend fun getQuizzesByCategory(category: String,limit: Int = 20): Result<List<Quiz>>

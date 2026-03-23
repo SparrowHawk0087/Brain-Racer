@@ -1,4 +1,4 @@
-package com.example.brainracer.ui.utils
+﻿package com.example.brainracer.ui.utils
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -12,6 +12,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.brainracer.ui.screens.AuthScreen
+import com.example.brainracer.ui.screens.ChallengeRoundReviewScreen
+import com.example.brainracer.ui.screens.ChallengesScreen
 import com.example.brainracer.ui.screens.ForgotPasswordScreen
 import com.example.brainracer.ui.screens.FriendsScreen
 import com.example.brainracer.ui.screens.HomeScreen
@@ -36,36 +38,33 @@ fun NavGraph(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: ""
 
-    // ── Функции навигации для BottomBar ────────────────────────────────────
+    // ── Навигация BottomBar ────────────────────────────────────────────────
 
     val navigateToHome: () -> Unit = {
         user?.let {
             val route = "home/${it.uid}"
-            if (currentRoute != route) {
+            if (currentRoute != route)
                 navController.navigate(route) { launchSingleTop = true }
-            }
         }
     }
 
     val navigateToFriends: () -> Unit = {
         user?.let {
             val route = "friends/${it.uid}"
-            if (currentRoute != route) {
+            if (currentRoute != route)
                 navController.navigate(route) { launchSingleTop = true }
-            }
         }
     }
 
     val navigateToProfile: () -> Unit = {
         user?.let {
             val route = "profile/${it.uid}"
-            if (currentRoute != route) {
+            if (currentRoute != route)
                 navController.navigate(route) { launchSingleTop = true }
-            }
         }
     }
 
-    // После входа — автоматически на home
+    // После входа — на home
     LaunchedEffect(user) {
         user?.let { currentUser ->
             val userId = currentUser.uid
@@ -79,23 +78,23 @@ fun NavGraph(
     }
 
     NavHost(
-        navController = navController,
+        navController    = navController,
         startDestination = if (user != null) "home/${user?.uid}" else "auth"
     ) {
 
         // ── Auth ───────────────────────────────────────────────────────────
         composable("auth") {
             AuthScreen(
-                authViewModel = authViewModel,
+                authViewModel    = authViewModel,
                 onForgotPassword = { navController.navigate("forgot_password") }
             )
         }
 
         composable("forgot_password") {
             ForgotPasswordScreen(
-                authViewModel = authViewModel,
+                authViewModel      = authViewModel,
                 onPasswordResetSent = { navController.popBackStack() },
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack     = { navController.popBackStack() }
             )
         }
 
@@ -105,42 +104,58 @@ fun NavGraph(
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
         ) {
             HomeScreen(
-                navController = navController,
-                authViewModel = authViewModel,
-                onHomeClick = navigateToHome,
+                navController  = navController,
+                authViewModel  = authViewModel,
+                onHomeClick    = navigateToHome,
                 onFriendsClick = navigateToFriends,
                 onProfileClick = navigateToProfile,
-                currentRoute = currentRoute
+                currentRoute   = currentRoute
             )
         }
 
-        // ── Quiz Detail (NEW) ──────────────────────────────────────────────
+        // ── Quiz Detail ────────────────────────────────────────────────────
         composable(
             "quiz_detail/{quizId}",
             arguments = listOf(navArgument("quizId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val quizId = backStackEntry.arguments?.getString("quizId") ?: ""
+        ) { back ->
+            val quizId = back.arguments?.getString("quizId") ?: ""
             QuizDetailScreen(
-                quizId = quizId,
+                quizId       = quizId,
                 navController = navController,
-                onStartQuiz = { id ->
-                    navController.navigate("quiz_play/$id")
-                }
+                onStartQuiz  = { id -> navController.navigate("quiz_play/$id") }
             )
         }
 
-        // ── Quiz Play ──────────────────────────────────────────────────────
+        // ── Quiz Play (обычный режим) ──────────────────────────────────────
         composable(
             "quiz_play/{quizId}",
             arguments = listOf(navArgument("quizId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val quizId = backStackEntry.arguments?.getString("quizId") ?: ""
+        ) { back ->
+            val quizId = back.arguments?.getString("quizId") ?: ""
+            QuizPlayScreen(quizId = quizId, navController = navController)
+        }
+
+        // ── Quiz Play (режим вызова) ───────────────────────────────────────
+        // Маршрут: quiz_play/{quizId}?challengeId={challengeId}
+        composable(
+            route     = "quiz_play/{quizId}?challengeId={challengeId}",
+            arguments = listOf(
+                navArgument("quizId")      { type = NavType.StringType },
+                navArgument("challengeId") {
+                    type             = NavType.StringType
+                    nullable         = true
+                    defaultValue     = null
+                }
+            )
+        ) { back ->
+            val quizId      = back.arguments?.getString("quizId") ?: ""
+            val challengeId = back.arguments?.getString("challengeId")
             QuizPlayScreen(
-                quizId = quizId,
+                quizId      = quizId,
+                challengeId = challengeId,
                 navController = navController
             )
         }
-
 
         // ── Search ────────────────────────────────────────────────────────
         composable("search") {
@@ -152,8 +167,8 @@ fun NavGraph(
                 type         = NavType.StringType
                 defaultValue = "Все"
             })
-        ) { backStackEntry ->
-            val category = backStackEntry.arguments?.getString("category") ?: "Все"
+        ) { back ->
+            val category = back.arguments?.getString("category") ?: "Все"
             SearchScreen(navController = navController, initialCategory = category)
         }
 
@@ -168,10 +183,38 @@ fun NavGraph(
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
         ) {
             FriendsScreen(
-                onHomeClick = navigateToHome,
+                onHomeClick    = navigateToHome,
                 onFriendsClick = navigateToFriends,
                 onProfileClick = navigateToProfile,
-                currentRoute = currentRoute
+                currentRoute   = currentRoute
+            )
+        }
+
+        // ── Challenges (вкладки: входящие / активные / история) ───────────
+        composable(
+            "challenges/{userId}",
+            arguments = listOf(navArgument("userId") { type = NavType.StringType })
+        ) { back ->
+            val userId = back.arguments?.getString("userId") ?: ""
+            ChallengesScreen(
+                navController  = navController,
+                currentUserId  = userId,
+                onHomeClick    = navigateToHome,
+                onFriendsClick = navigateToFriends,
+                onProfileClick = navigateToProfile,
+                currentRoute   = currentRoute
+            )
+        }
+
+        // ── Challenge Round Review ─────────────────────────────────────────
+        composable(
+            "challenge_review/{challengeId}",
+            arguments = listOf(navArgument("challengeId") { type = NavType.StringType })
+        ) { back ->
+            val challengeId = back.arguments?.getString("challengeId") ?: ""
+            ChallengeRoundReviewScreen(
+                challengeId   = challengeId,
+                navController = navController
             )
         }
 
@@ -186,8 +229,8 @@ fun NavGraph(
         composable(
             "profile/{userId}",
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val userId = backStackEntry.arguments?.getString("userId") ?: ""
+        ) { back ->
+            val userId       = back.arguments?.getString("userId") ?: ""
             val isOwnProfile = userId == (user?.uid ?: "")
 
             ProfileScreen(
@@ -196,13 +239,13 @@ fun NavGraph(
                         popUpTo(0) { inclusive = true }
                     }
                 },
-                userId = userId,
-                authViewModel = authViewModel,
-                onHomeClick = navigateToHome,
+                userId         = userId,
+                authViewModel  = authViewModel,
+                onHomeClick    = navigateToHome,
                 onFriendsClick = navigateToFriends,
                 onProfileClick = navigateToProfile,
-                currentRoute = currentRoute,
-                isOwnProfile = isOwnProfile
+                currentRoute   = currentRoute,
+                isOwnProfile   = isOwnProfile
             )
         }
     }

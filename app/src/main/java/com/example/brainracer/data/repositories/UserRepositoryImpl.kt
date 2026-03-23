@@ -78,10 +78,10 @@ class UserRepositoryImpl : UserRepository {
                 "stats.correct_answers"          to newCorrectAnswers,
                 "stats.incorrect_answers"        to newIncorrectAnswers,
                 "stats.total_points"             to newTotalPoints,
-                "stats.average_score"            to newAverageScore
+                "stats.average_score"            to newAverageScore,
+                "rank"                           to calculateRank(newTotalPoints.toInt()).name
             )
             transaction.update(userRef, updates)
-            transaction.update(userRef, "rank", calculateRank(newTotalPoints.toInt()).name)
         }.await()
         Result.success(Unit)
     } catch (e: Exception) {
