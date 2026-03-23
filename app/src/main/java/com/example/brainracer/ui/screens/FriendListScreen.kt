@@ -1,5 +1,6 @@
 package com.example.brainracer.ui.screens
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -17,6 +18,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
@@ -27,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.brainracer.domain.entities.User
 import com.example.brainracer.ui.components.BottomBar
+import com.example.brainracer.ui.components.ChallengeFriendQuizSheetContent
 import com.example.brainracer.ui.utils.FriendRequestUi
 import com.example.brainracer.ui.utils.OutgoingRequestUi
 import com.example.brainracer.ui.viewmodels.FriendsViewModel
@@ -48,6 +51,18 @@ fun FriendsScreen(
     // Каждый раз, когда ViewModel обновляет _uiState, Compose автоматически
     // перерисует только те части дерева, которые читают изменившиеся поля.
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
+    var challengeTargetFriend by remember { mutableStateOf<User?>(null) }
+    val challengeSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    LaunchedEffect(uiState.challengeSentMessage) {
+        uiState.challengeSentMessage?.let { msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            viewModel.consumeChallengeSentMessage()
+            challengeTargetFriend = null
+        }
+    }
 
     // Локальное состояние только для текста поля поиска —
     // так мы избегаем лишних emit-ов в ViewModel при каждом нажатии клавиши.
@@ -64,6 +79,26 @@ fun FriendsScreen(
     }
     val filteredOutgoing = uiState.outgoingRequests.filter {
         it.receiverName.contains(searchQuery, ignoreCase = true)
+    }
+
+    if (challengeTargetFriend != null) {
+        ModalBottomSheet(
+            onDismissRequest = { challengeTargetFriend = null },
+            sheetState       = challengeSheetState
+        ) {
+            val f = challengeTargetFriend!!
+            LaunchedEffect(f.id) { viewModel.loadChallengePickerQuizzes() }
+            ChallengeFriendQuizSheetContent(
+                fixedFriend   = f,
+                friends       = emptyList(),
+                quizzes       = uiState.challengePickerQuizzes,
+                isLoading     = uiState.challengePickerLoading,
+                onDismiss     = { challengeTargetFriend = null },
+                onSendChallenge = { fid, qid, title ->
+                    viewModel.sendChallenge(fid, qid, title)
+                }
+            )
+        }
     }
 
     Scaffold(
@@ -201,7 +236,8 @@ fun FriendsScreen(
                         when (selectedTab) {
                             0 -> FriendsTab(
                                 friends = filteredFriends,
-                                onDelete = { friend -> viewModel.removeFriend(friend.id) }
+                                onDelete = { friend -> viewModel.removeFriend(friend.id) },
+                                onChallengeFriend = { challengeTargetFriend = it }
                             )
                             1 -> IncomingRequestsTab(
                                 requests = filteredIncoming,
@@ -339,7 +375,8 @@ private fun SearchResultsList(
 @Composable
 private fun FriendsTab(
     friends: List<User>,
-    onDelete: (User) -> Unit
+    onDelete: (User) -> Unit,
+    onChallengeFriend: (User) -> Unit
 ) {
     if (friends.isEmpty()) {
         EmptyState(message = "No friends yet. Find people using the search above!")
@@ -350,7 +387,11 @@ private fun FriendsTab(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(friends, key = { it.id }) { friend ->
-            FriendCard(friend = friend, onDelete = { onDelete(friend) })
+            FriendCard(
+                friend     = friend,
+                onDelete   = { onDelete(friend) },
+                onChallenge = { onChallengeFriend(friend) }
+            )
         }
     }
 }
@@ -358,7 +399,8 @@ private fun FriendsTab(
 @Composable
 private fun FriendCard(
     friend: User,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onChallenge: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -390,12 +432,19 @@ private fun FriendCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = friend.rank.name,
+                    text = friend.rank.displayName,
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            // Удалить из друзей
+            IconButton(onClick = onChallenge) {
+                Icon(
+                    imageVector = Icons.Default.Sports,
+                    contentDescription = "Challenge friend",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
             IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Icons.Default.PersonRemove,

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.brainracer.domain.entities.LevelSystem
@@ -84,18 +86,35 @@ private fun resultLevel(pct: Int) = when {
 fun QuizPlayScreen(
     quizId: String,
     navController: NavController,
+    challengeId: String? = null,
     quizViewModel: QuizViewModel = viewModel()
 ) {
     val uiState by quizViewModel.uiState.collectAsState()
 
-    LaunchedEffect(quizId) { quizViewModel.loadQuiz(quizId) }
+    LaunchedEffect(quizId, challengeId) { quizViewModel.loadQuiz(quizId, challengeId) }
+
+    var challengeIntroAcknowledged by rememberSaveable(quizId, challengeId) {
+        mutableStateOf(false)
+    }
 
     when {
         uiState.isLoading -> LoadingScreen()
         uiState.errorMessage != null ->
             ErrorScreen(uiState.errorMessage!!) { navController.popBackStack() }
+        !challengeId.isNullOrBlank() && !challengeIntroAcknowledged -> {
+            BackHandler { navController.popBackStack() }
+            ChallengeDuelIntroScreen(
+                quizTitle       = uiState.quizTitle.ifBlank { "Викторина" },
+                totalQuestions  = uiState.totalQuestions,
+                onStart         = { challengeIntroAcknowledged = true },
+                onCancel        = { navController.popBackStack() }
+            )
+        }
         uiState.showResults || uiState.isQuizCompleted -> {
-            var showReview by remember { mutableStateOf(false) }
+            var showReview by rememberSaveable(quizId, challengeId) { mutableStateOf(false) }
+            val challengeMode = !uiState.challengeId.isNullOrBlank()
+            BackHandler(enabled = challengeMode && showReview) { showReview = false }
+            BackHandler(enabled = challengeMode && !showReview) { navController.popBackStack() }
             if (showReview) {
                 AnswerReviewScreen(
                     uiState = uiState,
@@ -103,21 +122,124 @@ fun QuizPlayScreen(
                 )
             } else {
                 ResultsScreen(
-                    uiState      = uiState,
-                    onBack       = { navController.popBackStack() },
-                    onRestart    = { quizViewModel.restartQuiz() },
-                    onShowReview = { showReview = true }
+                    uiState                 = uiState,
+                    onBack                  = { navController.popBackStack() },
+                    onRestart               = { quizViewModel.restartQuiz() },
+                    onShowReview            = { showReview = true },
+                    allowRestart            = uiState.challengeId.isNullOrBlank(),
+                    challengeId             = uiState.challengeId,
+                    onOpenChallengeSummary  = uiState.challengeId?.let { cid ->
+                        { navController.navigate("challenge_review/$cid") }
+                    }
                 )
             }
-        }        uiState.question.isNotEmpty() ->
-        QuestionScreen(
-            uiState    = uiState,
-            onBack     = { navController.popBackStack() },
-            onSelect   = { quizViewModel.selectAnswer(it) },
-            onSubmit   = { quizViewModel.submitAnswer() },
-            onNext     = { quizViewModel.nextQuestion() },
-            onTimeout  = { quizViewModel.timeoutQuestion() }
-        )
+        }
+        uiState.question.isNotEmpty() ->
+            QuestionScreen(
+                uiState    = uiState,
+                onBack     = { navController.popBackStack() },
+                onSelect   = { quizViewModel.selectAnswer(it) },
+                onSubmit   = { quizViewModel.submitAnswer() },
+                onNext     = { quizViewModel.nextQuestion() },
+                onTimeout  = { quizViewModel.timeoutQuestion() }
+            )
+        else -> LoadingScreen()
+    }
+}
+
+// ── Старт дуэли (вызов) ─────────────────────────────────────────────────────
+
+@Composable
+private fun ChallengeDuelIntroScreen(
+    quizTitle: String,
+    totalQuestions: Int,
+    onStart: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Box(Modifier.fillMaxSize().background(QBg)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Icon(
+                Icons.Default.Sports,
+                contentDescription = null,
+                tint     = QPurple,
+                modifier = Modifier.size(56.dp)
+            )
+            Text(
+                "Вызов",
+                fontWeight = FontWeight.Bold,
+                fontSize   = 26.sp,
+                color      = QTextPri
+            )
+            Text(
+                quizTitle,
+                fontSize   = 16.sp,
+                color      = QTextSec,
+                textAlign  = TextAlign.Center,
+                lineHeight = 22.sp
+            )
+            Card(
+                modifier  = Modifier.fillMaxWidth(),
+                shape     = RoundedCornerShape(20.dp),
+                colors    = CardDefaults.cardColors(containerColor = QCard),
+                elevation = CardDefaults.cardElevation(0.dp),
+                border    = CardDefaults.outlinedCardBorder()
+            ) {
+                Column(
+                    modifier              = Modifier.padding(20.dp),
+                    verticalArrangement   = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(
+                        "Перед стартом",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize   = 15.sp,
+                        color      = QTextPri
+                    )
+                    IntroBullet("Одна попытка: повторно пройти эту дуэль нельзя.")
+                    IntroBullet("Счёт станет виден обоим после того, как оба завершат викторину.")
+                    IntroBullet("По завершении дуэль окажется во вкладке «Завершённые».")
+                    if (totalQuestions > 0) {
+                        Text(
+                            "Вопросов: $totalQuestions",
+                            fontSize = 13.sp,
+                            color    = QPurple,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+            Button(
+                onClick  = onStart,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape    = RoundedCornerShape(14.dp),
+                colors   = ButtonDefaults.buttonColors(containerColor = QPurple)
+            ) {
+                Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Начать викторину", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            }
+            TextButton(onClick = onCancel) {
+                Text("Отмена", color = QTextSec, fontSize = 14.sp)
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun IntroBullet(text: String) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment     = Alignment.Top
+    ) {
+        Text("•", color = QPurple, fontSize = 16.sp, modifier = Modifier.padding(top = 1.dp))
+        Text(text, fontSize = 13.sp, color = QTextSec, lineHeight = 18.sp, modifier = Modifier.weight(1f))
     }
 }
 
@@ -574,7 +696,10 @@ private fun ResultsScreen(
     uiState: QuizUIState,
     onBack: () -> Unit,
     onRestart: () -> Unit,
-    onShowReview: () -> Unit
+    onShowReview: () -> Unit,
+    allowRestart: Boolean = true,
+    challengeId: String? = null,
+    onOpenChallengeSummary: (() -> Unit)? = null
 ) {
     val accuracyPct = if (uiState.totalQuestions > 0)
         (uiState.correctAnswers * 100) / uiState.totalQuestions else 0
@@ -679,15 +804,38 @@ private fun ResultsScreen(
                 XpCard(uiState = uiState, xpProgressAnimated = xpProgressAnimated)
             }
 
-            Button(
-                onClick  = onRestart,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape    = RoundedCornerShape(14.dp),
-                colors   = ButtonDefaults.buttonColors(containerColor = QPurple)
-            ) {
-                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Пройти снова", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            if (allowRestart) {
+                Button(
+                    onClick  = onRestart,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape    = RoundedCornerShape(14.dp),
+                    colors   = ButtonDefaults.buttonColors(containerColor = QPurple)
+                ) {
+                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Пройти снова", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                }
+            } else {
+                Text(
+                    "В режиме вызова повторное прохождение недоступно.",
+                    fontSize = 13.sp,
+                    color = QTextSec,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            if (!challengeId.isNullOrBlank() && onOpenChallengeSummary != null) {
+                Button(
+                    onClick  = onOpenChallengeSummary,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape    = RoundedCornerShape(14.dp),
+                    colors   = ButtonDefaults.buttonColors(containerColor = QGreen)
+                ) {
+                    Icon(Icons.Default.EmojiEvents, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Итоги вызова", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                }
             }
 
             // Кнопка разбора — показывается только если есть что разбирать
