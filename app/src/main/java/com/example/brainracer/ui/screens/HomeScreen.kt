@@ -30,8 +30,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.brainracer.domain.entities.Challenge
+import com.example.brainracer.domain.entities.ChallengeStatus
 import com.example.brainracer.domain.entities.UserStats
 import com.example.brainracer.ui.components.BottomBar
+import com.example.brainracer.ui.components.ChallengeFriendQuizSheetContent
 import com.example.brainracer.ui.utils.QuizItem
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import com.example.brainracer.ui.viewmodels.HomeViewModel
@@ -61,16 +64,6 @@ private data class Banner(
     val actionLabel: String = "Участвовать →"
 )
 
-private data class ChallengePreview(
-    val id: Int,
-    val title: String,
-    val opponent: String,
-    val avatarInitials: String,
-    val isWin: Boolean,
-    val score: String,
-    val timeAgo: String
-)
-
 private val homeBanners = listOf(
     Banner(1, "🏆 Турнир Чемпионов", "Призовой фонд 5000 монет",
         listOf(Color(0xFF667EEA), Color(0xFF764BA2))),
@@ -79,14 +72,6 @@ private val homeBanners = listOf(
     Banner(3, "🎯 Новая категория", "Искусство и Культура",
         listOf(Color(0xFF4facfe), Color(0xFF00f2fe)))
 )
-
-private val sampleChallenges = listOf(
-    ChallengePreview(1, "Дуэль", "Алексей К.", "AK", true,  "15:12", "2 мин назад"),
-    ChallengePreview(2, "Блиц",  "Мария С.",   "MS", false, "18:20", "1 час назад"),
-    ChallengePreview(3, "Дуэль", "Дмитрий В.", "DV", true,  "10:8",  "3 часа назад")
-)
-
-// ══════════════════════════════════════════════════════════════════════════════
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -131,7 +116,42 @@ fun HomeScreen(
         }
     }
 
+    var showChallengeSheet by remember { mutableStateOf(false) }
+    val challengeSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    LaunchedEffect(uiState.challengeSentMessage) {
+        uiState.challengeSentMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            homeViewModel.consumeChallengeSentMessage()
+            showChallengeSheet = false
+        }
+    }
+
+    LaunchedEffect(showChallengeSheet) {
+        if (showChallengeSheet) homeViewModel.loadChallengePickerData()
+    }
+
     val tabQuizzes = uiState.quizzes.take(5)
+
+    if (showChallengeSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showChallengeSheet = false },
+            sheetState       = challengeSheetState,
+            containerColor   = BgCard,
+            contentColor     = TextPri
+        ) {
+            ChallengeFriendQuizSheetContent(
+                fixedFriend   = null,
+                friends       = uiState.friendsForChallenge,
+                quizzes       = uiState.challengePickerQuizzes,
+                isLoading     = uiState.challengePickerLoading,
+                onDismiss     = { showChallengeSheet = false },
+                onSendChallenge = { fid, qid, title ->
+                    homeViewModel.sendChallengeToFriend(fid, qid, title)
+                }
+            )
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -196,7 +216,18 @@ fun HomeScreen(
                 )
             }
 
-            item { RecentChallengesSection(sampleChallenges) }
+            item {
+                RecentChallengesSection(
+                    activeChallenges   = uiState.homeActiveChallenges,
+                    finishedChallenges = uiState.homeFinishedChallenges,
+                    currentUserId      = uiState.currentUserId,
+                    onViewAll          = { navController.navigate("challenges/${uiState.currentUserId}") },
+                    onOpenChallenge    = { ch ->
+                        navigateFromHomeToChallenge(navController, ch, uiState.currentUserId)
+                    },
+                    onNewChallenge     = { showChallengeSheet = true }
+                )
+            }
         }
     }
 }
@@ -590,8 +621,37 @@ private fun QuizRowCard(quiz: QuizItem, colorIndex: Int, onClick: () -> Unit) {
     }
 }
 
+private fun navigateFromHomeToChallenge(
+    navController: NavController,
+    ch: Challenge,
+    currentUserId: String
+) {
+    if (currentUserId.isBlank()) return
+    when {
+        ch.status == ChallengeStatus.PENDING ->
+            navController.navigate("challenges/$currentUserId")
+        ch.status == ChallengeStatus.ACCEPTED &&
+                ch.canPlay(currentUserId) &&
+                !ch.hasUserResult(currentUserId) ->
+            navController.navigate("quiz_play/${ch.quizId}?challengeId=${ch.id}")
+        else ->
+            navController.navigate("challenge_review/${ch.id}")
+    }
+}
+
 @Composable
-private fun RecentChallengesSection(challenges: List<ChallengePreview>) {
+private fun RecentChallengesSection(
+    activeChallenges: List<Challenge>,
+    finishedChallenges: List<Challenge>,
+    currentUserId: String,
+    onViewAll: () -> Unit,
+    onOpenChallenge: (Challenge) -> Unit,
+    onNewChallenge: () -> Unit
+) {
+    var tabIndex by remember { mutableIntStateOf(0) }
+    val tabLabels = listOf("Активные", "Завершённые")
+    val listShown = if (tabIndex == 0) activeChallenges else finishedChallenges
+
     Column {
         Row(
             modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
@@ -599,51 +659,220 @@ private fun RecentChallengesSection(challenges: List<ChallengePreview>) {
             verticalAlignment     = Alignment.CenterVertically
         ) {
             Text("⚔️ Последние вызовы", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPri)
-            TextButton(onClick = {}) { Text("История", color = AccentPurple, fontSize = 13.sp) }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onNewChallenge) {
+                    Icon(
+                        Icons.Default.Sports,
+                        contentDescription = null,
+                        tint       = AccentPurple,
+                        modifier   = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("Вызов", color = AccentPurple, fontSize = 13.sp)
+                }
+                TextButton(onClick = onViewAll) {
+                    Text("Все вызовы", color = AccentPurple, fontSize = 13.sp)
+                }
+            }
         }
-        Spacer(Modifier.height(6.dp))
-        Column(
-            modifier            = Modifier.padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+        Spacer(Modifier.height(4.dp))
+
+        TabRow(
+            selectedTabIndex = tabIndex,
+            containerColor   = BgDeep,
+            contentColor     = AccentPurple,
+            indicator = { positions ->
+                if (tabIndex < positions.size) {
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(positions[tabIndex]),
+                        color    = AccentPurple,
+                        height   = 2.dp
+                    )
+                }
+            },
+            divider = { HorizontalDivider(color = BgBorder) }
         ) {
-            challenges.forEach { ch ->
-                val winColor = if (ch.isWin) Color(0xFF43e97b) else Color(0xFFf5576c)
-                Box(
-                    modifier = Modifier.fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(BgCard)
-                        .border(1.dp, winColor.copy(0.28f), RoundedCornerShape(16.dp))
-                ) {
-                    Row(
-                        modifier              = Modifier.fillMaxWidth().padding(14.dp),
-                        verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Box(
-                                modifier = Modifier.size(42.dp).clip(CircleShape)
-                                    .background(Brush.linearGradient(
-                                        listOf(Color(0xFF667EEA), Color(0xFFf093fb)))),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(ch.avatarInitials, color = Color.White,
-                                    fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            }
-                            Column {
-                                Text(ch.title, fontWeight = FontWeight.SemiBold,
-                                    fontSize = 14.sp, color = TextPri)
-                                Text("vs ${ch.opponent}", fontSize = 12.sp, color = TextSec)
-                            }
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(ch.score, fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp, color = winColor)
-                            Text(ch.timeAgo, fontSize = 11.sp, color = TextSec)
+            tabLabels.forEachIndexed { i, title ->
+                Tab(
+                    selected = tabIndex == i,
+                    onClick  = { tabIndex = i },
+                    text     = { Text(title, fontSize = 13.sp) },
+                    selectedContentColor   = AccentPurple,
+                    unselectedContentColor = TextSec
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+
+        if (listShown.isEmpty()) {
+            val (title, subtitle) = if (tabIndex == 0) {
+                "Нет активных вызовов" to "Примите вызов или бросьте вызов другу во вкладке друзей"
+            } else {
+                "Пока нет завершённых" to "Завершённые дуэли появятся здесь"
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(BgCard)
+                    .border(1.dp, BgBorder, RoundedCornerShape(16.dp))
+                    .padding(20.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(title, color = TextPri, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(subtitle, color = TextSec, fontSize = 12.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    if (tabIndex == 0) {
+                        Button(
+                            onClick     = onNewChallenge,
+                            colors      = ButtonDefaults.buttonColors(containerColor = AccentPurple),
+                            shape       = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Sports, null, Modifier.size(18.dp), Color.White)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Бросить вызов", color = Color.White, fontSize = 14.sp)
                         }
                     }
                 }
             }
+            return
         }
+
+        Column(
+            modifier            = Modifier.padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            listShown.forEach { ch ->
+                HomeChallengeRow(
+                    ch            = ch,
+                    currentUserId = currentUserId,
+                    onClick       = { onOpenChallenge(ch) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeChallengeRow(
+    ch: Challenge,
+    currentUserId: String,
+    onClick: () -> Unit
+) {
+    val isChallenger = ch.challengerUserId == currentUserId
+    val opponentName = if (isChallenger) ch.challengedNickname else ch.challengerNickname
+    val myResult     = if (isChallenger) ch.challengerResult else ch.challengedResult
+    val oppResult    = if (isChallenger) ch.challengedResult else ch.challengerResult
+
+    val (statusColor, statusLabel) = when {
+        ch.status == ChallengeStatus.PENDING && !isChallenger ->
+            Color(0xFFFFA726) to "Входящий"
+        ch.status == ChallengeStatus.PENDING && isChallenger ->
+            Color(0xFFFFA726) to "В обработке"
+        ch.status == ChallengeStatus.ACCEPTED ->
+            Color(0xFF4facfe) to when {
+                ch.hasUserResult(currentUserId) -> "Пройдено"
+                else -> "Нужно пройти"
+            }
+        ch.status == ChallengeStatus.COMPLETED -> {
+            val isDraw = ch.isDraw || ch.winnerId == "draw"
+            val isWin  = !isDraw && ch.winnerId == currentUserId
+            when {
+                isDraw -> Color(0xFFFFA726) to "Ничья"
+                isWin  -> Color(0xFF3ECFA3) to "Победа"
+                else   -> Color(0xFFEA5C7E) to "Поражение"
+            }
+        }
+        else -> Color(0xFF8B8AAE) to ch.status.name
+    }
+
+    val isFinishedRow = ch.status == ChallengeStatus.COMPLETED
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (isFinishedRow) 0.82f else 1f)
+            .clip(RoundedCornerShape(16.dp))
+            .background(BgCard)
+            .border(1.dp, statusColor.copy(0.3f), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier              = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier              = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier.size(42.dp).clip(CircleShape)
+                        .background(Brush.linearGradient(
+                            listOf(Color(0xFF667EEA), Color(0xFFf093fb)))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(opponentName.take(2).uppercase(),
+                        color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("vs $opponentName", fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp, color = TextPri,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(ch.quizTitle, fontSize = 11.sp, color = TextSec,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (ch.status == ChallengeStatus.COMPLETED) {
+                    Text(
+                        "${myResult?.score ?: 0} : ${oppResult?.score ?: 0}",
+                        fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPri
+                    )
+                }
+                if (ch.status == ChallengeStatus.ACCEPTED) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        HomeProgressDot(played = myResult != null, label = "Вы")
+                        HomeProgressDot(played = oppResult != null, label = opponentName.split(" ").first())
+                    }
+                }
+                Surface(shape = RoundedCornerShape(6.dp), color = statusColor.copy(.15f)) {
+                    Text(
+                        statusLabel,
+                        modifier   = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                        fontSize   = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color      = statusColor
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeProgressDot(played: Boolean, label: String) {
+    val color = if (played) Color(0xFF3ECFA3) else Color(0xFF8B8AAE)
+    Row(
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Icon(
+            imageVector = if (played) Icons.Default.CheckCircle else Icons.Default.HourglassEmpty,
+            contentDescription = null,
+            tint     = color,
+            modifier = Modifier.size(11.dp)
+        )
+        Text(label, fontSize = 10.sp, color = color, fontWeight = FontWeight.Medium)
     }
 }
