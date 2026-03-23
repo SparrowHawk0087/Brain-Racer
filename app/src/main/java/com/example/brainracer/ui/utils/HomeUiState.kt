@@ -1,5 +1,7 @@
 package com.example.brainracer.ui.utils
 
+import com.example.brainracer.domain.entities.Challenge
+import com.example.brainracer.domain.entities.User
 import com.example.brainracer.domain.entities.UserStats
 
 data class HomeUiState(
@@ -16,11 +18,24 @@ data class HomeUiState(
         "Фильмы и музыка", "Наука", "Спорт"
     ),
 
-    // ── Уровень (вычисляется через LevelSystem на основе totalPoints) ─────
-    /** Текущий уровень пользователя (1–50) */
+    // ── Уровень ───────────────────────────────────────────────────────────
     val userLevel: Int = 1,
-    /** Прогресс внутри текущего уровня 0.0–1.0 */
     val levelProgress: Float = 0f,
-    /** Название ранга (Beginner / Explorer / …) */
-    val rankName: String = "Новичок"
+    val rankName: String = "Новичок",
+
+    // ── Вызовы для HomeScreen ─────────────────────────────────────────────
+    /** Входящие ожидающие вызовы — показываем badge */
+    val pendingChallenges: List<Challenge> = emptyList(),
+    /** Активные вызовы: входящие на решение, исходящие в ожидании, принятые в процессе */
+    val homeActiveChallenges: List<Challenge> = emptyList(),
+    /** Завершённые вызовы для вкладки «Завершённые» */
+    val homeFinishedChallenges: List<Challenge> = emptyList(),
+    /** ID текущего пользователя — нужен для определения роли в вызове */
+    val currentUserId: String = "",
+
+    // ── Новый вызов с главной ─────────────────────────────────────────────
+    val friendsForChallenge: List<User> = emptyList(),
+    val challengePickerQuizzes: List<QuizItem> = emptyList(),
+    val challengePickerLoading: Boolean = false,
+    val challengeSentMessage: String? = null
 )
