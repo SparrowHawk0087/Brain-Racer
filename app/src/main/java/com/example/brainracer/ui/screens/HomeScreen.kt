@@ -1,6 +1,8 @@
 package com.example.brainracer.ui.screens
 
 import android.widget.Toast
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,6 +25,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.brainracer.domain.entities.UserStats
@@ -30,6 +35,23 @@ import com.example.brainracer.ui.components.BottomBar
 import com.example.brainracer.ui.utils.QuizItem
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import com.example.brainracer.ui.viewmodels.HomeViewModel
+
+// ─── Цвета ──────────────────────────────────────────────────────────────────
+private val BgDeep       = Color(0xFF0F0F1A)
+private val BgCard       = Color(0xFF1A1A2E)
+private val BgBorder     = Color(0xFF2A2A3E)
+private val AccentPurple = Color(0xFF667EEA)
+private val TextPri      = Color(0xFFFFFFFF)
+private val TextSec      = Color(0xFF8B8AAE)
+
+private val cardGradients = listOf(
+    listOf(Color(0xFF667EEA), Color(0xFF764BA2)),
+    listOf(Color(0xFFf093fb), Color(0xFFf5576c)),
+    listOf(Color(0xFF4facfe), Color(0xFF00f2fe)),
+    listOf(Color(0xFF43e97b), Color(0xFF38f9d7)),
+    listOf(Color(0xFFfa709a), Color(0xFFfee140)),
+    listOf(Color(0xFFa18cd1), Color(0xFFfbc2eb)),
+)
 
 private data class Banner(
     val id: Int,
@@ -64,21 +86,7 @@ private val sampleChallenges = listOf(
     ChallengePreview(3, "Дуэль", "Дмитрий В.", "DV", true,  "10:8",  "3 часа назад")
 )
 
-private val BgDeep       = Color(0xFF0F0F1A)
-private val BgCard       = Color(0xFF1A1A2E)
-private val BgBorder     = Color(0xFF2A2A3E)
-private val AccentPurple = Color(0xFF667EEA)
-private val TextPri      = Color(0xFFFFFFFF)
-private val TextSec      = Color(0xFF8B8AAE)
-
-private val cardGradients = listOf(
-    listOf(Color(0xFF667EEA), Color(0xFF764BA2)),
-    listOf(Color(0xFFf093fb), Color(0xFFf5576c)),
-    listOf(Color(0xFF4facfe), Color(0xFF00f2fe)),
-    listOf(Color(0xFF43e97b), Color(0xFF38f9d7)),
-    listOf(Color(0xFFfa709a), Color(0xFFfee140)),
-    listOf(Color(0xFFa18cd1), Color(0xFFfbc2eb)),
-)
+// ══════════════════════════════════════════════════════════════════════════════
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -91,20 +99,30 @@ fun HomeScreen(
     onProfileClick: () -> Unit = {},
     currentRoute: String = "home"
 ) {
-    val uiState by homeViewModel.uiState.collectAsState()
-    val context = LocalContext.current
+    val uiState       by homeViewModel.uiState.collectAsState()
+    val context       = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // ── Обновляем статистику при каждом возвращении на экран ─────────────
+    // Это нужно, чтобы уровень/XP обновились после прохождения викторины
+    // без полной перезагрузки страницы.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                homeViewModel.refreshUserStats()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val tabs = remember(uiState.categories) { uiState.categories.filter { it != "Все" } }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-
     val currentCategory = tabs.getOrNull(selectedTabIndex) ?: "Все"
 
     LaunchedEffect(selectedTabIndex, tabs) {
-        if (tabs.isNotEmpty())
-            homeViewModel.loadQuizzesByCategory(currentCategory)
+        if (tabs.isNotEmpty()) homeViewModel.loadQuizzesByCategory(currentCategory)
     }
-
-    val tabQuizzes = uiState.quizzes.take(5)
 
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let {
@@ -113,11 +131,14 @@ fun HomeScreen(
         }
     }
 
+    val tabQuizzes = uiState.quizzes.take(5)
+
     Scaffold(
         topBar = {
             HomeTopBar(
-                userLevel     = uiState.userStats?.totalQuizzesTaken ?: 0,
-                userXp        = (uiState.userStats?.totalPoints ?: 0) % 100,
+                userLevel     = uiState.userLevel,
+                levelProgress = uiState.levelProgress,
+                rankName      = uiState.rankName,
                 onSearchClick = { navController.navigate("search") },
                 onSignOut     = {
                     authViewModel.signOut()
@@ -151,7 +172,7 @@ fun HomeScreen(
             contentPadding      = PaddingValues(bottom = 100.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            item { UserStatRow(uiState.userStats) }
+            item { UserStatRow(uiState.userStats, uiState.userLevel, uiState.levelProgress) }
             item { WelcomeRow(uiState.userName.ifBlank { "Гость" }) }
             item { BannerCarousel(homeBanners) }
 
@@ -161,9 +182,7 @@ fun HomeScreen(
 
             val hot = tabQuizzes.take(2)
             if (hot.isNotEmpty()) {
-                item {
-                    HotQuizzesSection(hot) { id -> navController.navigate("quiz_detail/$id") }
-                }
+                item { HotQuizzesSection(hot) { id -> navController.navigate("quiz_detail/$id") } }
             }
 
             item {
@@ -182,8 +201,25 @@ fun HomeScreen(
     }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  TOP BAR — исправленный
+// ══════════════════════════════════════════════════════════════════════════════
+
 @Composable
-private fun HomeTopBar(userLevel: Int, userXp: Int, onSearchClick: () -> Unit, onSignOut: () -> Unit) {
+private fun HomeTopBar(
+    userLevel: Int,
+    levelProgress: Float,       // 0.0–1.0 реальный прогресс внутри уровня
+    rankName: String,
+    onSearchClick: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    // Анимируем прогресс-бар чтобы он плавно заполнялся при загрузке
+    val animatedProgress by animateFloatAsState(
+        targetValue   = levelProgress,
+        animationSpec = tween(durationMillis = 800),
+        label         = "levelProgress"
+    )
+
     Surface(color = BgDeep) {
         Column {
             Row(
@@ -195,8 +231,30 @@ private fun HomeTopBar(userLevel: Int, userXp: Int, onSearchClick: () -> Unit, o
                 verticalAlignment     = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Brain Racer", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = TextPri)
-                    Text("Уровень $userLevel", fontSize = 12.sp, color = AccentPurple, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Brain Racer",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize   = 20.sp,
+                        color      = TextPri
+                    )
+                    // Показываем уровень И ранг
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment     = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Ур. $userLevel",
+                            fontSize   = 12.sp,
+                            color      = AccentPurple,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text("·", fontSize = 12.sp, color = TextSec)
+                        Text(
+                            rankName,
+                            fontSize = 12.sp,
+                            color    = TextSec
+                        )
+                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     IconButton(onClick = onSearchClick) {
@@ -217,31 +275,44 @@ private fun HomeTopBar(userLevel: Int, userXp: Int, onSearchClick: () -> Unit, o
                     }
                 }
             }
-            LinearProgressIndicator(
-                progress  = { (userXp / 100f).coerceIn(0f, 1f) },
-                modifier  = Modifier.fillMaxWidth().height(4.dp),
-                color      = AccentPurple,
-                trackColor = BgCard
-            )
+
+            // Прогресс-бар с реальным прогрессом уровня
+            Box(modifier = Modifier.fillMaxWidth()) {
+                LinearProgressIndicator(
+                    progress  = { animatedProgress },
+                    modifier  = Modifier.fillMaxWidth().height(4.dp),
+                    color      = AccentPurple,
+                    trackColor = BgCard
+                )
+            }
         }
     }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  STAT ROW — обновлённый
+// ══════════════════════════════════════════════════════════════════════════════
+
 @Composable
-private fun UserStatRow(stats: UserStats?) {
+private fun UserStatRow(
+    stats: UserStats?,
+    userLevel: Int,
+    levelProgress: Float
+) {
     val winPct = if ((stats?.totalQuestionsAnswered ?: 0) > 0)
         "${stats!!.correctAnswers * 100 / stats.totalQuestionsAnswered}%"
     else "—"
 
+    // Три карточки: сыграно / XP (totalPoints) / точность
     Row(
         modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         listOf(
-            (stats?.totalQuizzesTaken ?: 0).toString() to "игр",
-            (stats?.totalPoints ?: 0).toString()       to "рейтинг",
-            winPct                                      to "побед"
-        ).forEach { (value, label) ->
+            Triple((stats?.totalQuizzesTaken ?: 0).toString(), "игр",     false),
+            Triple((stats?.totalPoints ?: 0).toString(),        "XP",      false),
+            Triple(winPct,                                       "точность", false)
+        ).forEach { (value, label, _) ->
             Box(
                 modifier = Modifier.weight(1f).height(72.dp)
                     .clip(RoundedCornerShape(16.dp))
@@ -257,6 +328,10 @@ private fun UserStatRow(stats: UserStats?) {
         }
     }
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  Остальные composable-ы без изменений
+// ══════════════════════════════════════════════════════════════════════════════
 
 @Composable
 private fun WelcomeRow(userName: String) {
@@ -276,9 +351,7 @@ private fun WelcomeRow(userName: String) {
         ) {
             Text(
                 userName.firstOrNull()?.uppercase() ?: "?",
-                fontSize   = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color      = Color.White
+                fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White
             )
         }
     }
@@ -288,7 +361,6 @@ private fun WelcomeRow(userName: String) {
 @Composable
 private fun BannerCarousel(banners: List<Banner>) {
     val pagerState = rememberPagerState { banners.size }
-
     Column {
         HorizontalPager(
             state          = pagerState,
@@ -297,8 +369,7 @@ private fun BannerCarousel(banners: List<Banner>) {
         ) { page ->
             val b = banners[page]
             Box(
-                modifier = Modifier
-                    .width(320.dp).height(150.dp)
+                modifier = Modifier.width(320.dp).height(150.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(Brush.linearGradient(b.gradient, Offset.Zero, Offset(1000f, 1000f))),
                 contentAlignment = Alignment.CenterStart
@@ -318,9 +389,7 @@ private fun BannerCarousel(banners: List<Banner>) {
                     Surface(shape = RoundedCornerShape(20.dp), color = Color.White.copy(0.22f)) {
                         Text(b.actionLabel,
                             modifier   = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                            color      = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize   = 13.sp)
+                            color      = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     }
                 }
             }
@@ -352,8 +421,7 @@ private fun CategoryTabs(tabs: List<String>, selectedIndex: Int, onSelect: (Int)
                 TabRowDefaults.Indicator(
                     modifier = Modifier.tabIndicatorOffset(positions[selectedIndex])
                         .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)),
-                    color    = AccentPurple,
-                    height   = 3.dp
+                    color = AccentPurple, height = 3.dp
                 )
             }
         },
@@ -380,7 +448,8 @@ private fun CategoryTabs(tabs: List<String>, selectedIndex: Int, onSelect: (Int)
 @Composable
 private fun HotQuizzesSection(quizzes: List<QuizItem>, onQuizClick: (String) -> Unit) {
     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("🔥", fontSize = 17.sp)
             Text("Популярное", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPri)
         }
@@ -395,19 +464,22 @@ private fun HotQuizzesSection(quizzes: List<QuizItem>, onQuizClick: (String) -> 
                         .clickable { onQuizClick(quiz.id) }
                         .padding(14.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxSize()) {
+                    Column(
+                        verticalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
                         Surface(shape = RoundedCornerShape(8.dp), color = Color.White.copy(0.2f)) {
                             Text("HOT",
                                 modifier   = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                color      = Color.White,
-                                fontSize   = 10.sp,
+                                color      = Color.White, fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold)
                         }
                         Column {
                             Text(quiz.category, color = Color.White.copy(0.8f), fontSize = 11.sp)
                             Text(quiz.title, color = Color.White, fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text("${quiz.questionCount} вопросов", color = Color.White.copy(0.72f), fontSize = 11.sp)
+                            Text("${quiz.questionCount} вопросов", color = Color.White.copy(0.72f),
+                                fontSize = 11.sp)
                         }
                     }
                 }
@@ -450,18 +522,9 @@ private fun AllQuizzesSection(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Spacer(Modifier.height(8.dp))
-                    Icon(
-                        Icons.Default.Quiz,
-                        contentDescription = null,
-                        tint     = TextSec,
-                        modifier = Modifier.size(40.dp)
-                    )
+                    Icon(Icons.Default.Quiz, null, tint = TextSec, modifier = Modifier.size(40.dp))
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        "В этой категории пока нет викторин",
-                        color    = TextSec,
-                        fontSize = 14.sp
-                    )
+                    Text("В этой категории пока нет викторин", color = TextSec, fontSize = 14.sp)
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = onCreateQuiz,
@@ -499,7 +562,10 @@ private fun QuizRowCard(quiz: QuizItem, colorIndex: Int, onClick: () -> Unit) {
             .border(1.dp, BgBorder, RoundedCornerShape(16.dp))
             .clickable { onClick() }
     ) {
-        Row(modifier = Modifier.fillMaxSize().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(13.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Box(
                 modifier = Modifier.size(54.dp).clip(RoundedCornerShape(13.dp))
                     .background(Brush.linearGradient(gradient, Offset.Zero, Offset(400f, 400f))),
@@ -512,7 +578,8 @@ private fun QuizRowCard(quiz: QuizItem, colorIndex: Int, onClick: () -> Unit) {
                 Text(quiz.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
                     color = TextPri, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
                     Text(quiz.category, fontSize = 12.sp, color = AccentPurple)
                     Text("·", color = TextSec)
                     Text("${quiz.questionCount} вопр.", fontSize = 12.sp, color = TextSec)
@@ -535,7 +602,10 @@ private fun RecentChallengesSection(challenges: List<ChallengePreview>) {
             TextButton(onClick = {}) { Text("История", color = AccentPurple, fontSize = 13.sp) }
         }
         Spacer(Modifier.height(6.dp))
-        Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(
+            modifier            = Modifier.padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             challenges.forEach { ch ->
                 val winColor = if (ch.isWin) Color(0xFF43e97b) else Color(0xFFf5576c)
                 Box(
@@ -549,21 +619,26 @@ private fun RecentChallengesSection(challenges: List<ChallengePreview>) {
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Box(
                                 modifier = Modifier.size(42.dp).clip(CircleShape)
-                                    .background(Brush.linearGradient(listOf(Color(0xFF667EEA), Color(0xFFf093fb)))),
+                                    .background(Brush.linearGradient(
+                                        listOf(Color(0xFF667EEA), Color(0xFFf093fb)))),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(ch.avatarInitials, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(ch.avatarInitials, color = Color.White,
+                                    fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                             Column {
-                                Text(ch.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPri)
+                                Text(ch.title, fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp, color = TextPri)
                                 Text("vs ${ch.opponent}", fontSize = 12.sp, color = TextSec)
                             }
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(ch.score, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = winColor)
+                            Text(ch.score, fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp, color = winColor)
                             Text(ch.timeAgo, fontSize = 11.sp, color = TextSec)
                         }
                     }

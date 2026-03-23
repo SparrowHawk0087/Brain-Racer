@@ -12,12 +12,15 @@ data class HomeUiState(
     val searchQuery: String = "",
     val selectedCategory: String = "Все",
     val categories: List<String> = listOf(
-    "Все",
-        "География",
-        "История",
-        "Математика",
-        "Фильмы и музыка",
-        "Наука",
-        "Спорт"
-)
+        "Все", "География", "История", "Математика",
+        "Фильмы и музыка", "Наука", "Спорт"
+    ),
+
+    // ── Уровень (вычисляется через LevelSystem на основе totalPoints) ─────
+    /** Текущий уровень пользователя (1–50) */
+    val userLevel: Int = 1,
+    /** Прогресс внутри текущего уровня 0.0–1.0 */
+    val levelProgress: Float = 0f,
+    /** Название ранга (Beginner / Explorer / …) */
+    val rankName: String = "Новичок"
 )
