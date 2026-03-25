@@ -55,6 +55,7 @@ class HomeViewModel : ViewModel() {
             val userId = auth.currentUser?.uid
             if (userId != null) {
                 _uiState.update { it.copy(currentUserId = userId) }
+                syncFcmTokenToProfile()
                 loadUserData(userId)
             } else {
                 _uiState.update { it.copy(userName = "Гость") }

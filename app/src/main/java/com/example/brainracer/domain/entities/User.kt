@@ -16,7 +16,11 @@ data class User(
     val createdAt: Timestamp = Timestamp.now(),
     val lastLogin: Timestamp = Timestamp.now(),
     val createdQuizzes: List<String> = emptyList(),
-    val friends: List<String> = emptyList()
+    val friends: List<String> = emptyList(),
+
+    /** FCM токен для push; обновляет клиент, читает Cloud Function. */
+    @PropertyName("fcmToken")
+    val fcmToken: String? = null
 ) {
     @get:Exclude
     val accuracy: Double

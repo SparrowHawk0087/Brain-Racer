@@ -5,6 +5,7 @@ import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.domain.entities.ChallengeStatus
 import com.example.brainracer.data.utils.Result
 import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
@@ -276,15 +277,23 @@ class ChallengeRepositoryImpl : ChallengeRepository {
         challengesCollection.document(challengeId)
             .update("status", ChallengeStatus.DECLINED.name)
             .await()
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        if (!uid.isNullOrBlank()) {
+            notificationRepository.deleteChallengeNotificationsForRecipient(challengeId, uid)
+        }
         Result.success(Unit)
     } catch (e: Exception) {
         Result.error(e)
     }
 
     override suspend fun cancelChallenge(challengeId: String): Result<Unit> = try {
-        challengesCollection.document(challengeId)
-            .update("status", ChallengeStatus.CANCELLED.name)
-            .await()
+        val ref = challengesCollection.document(challengeId)
+        val snap = ref.get().await()
+        val challengedId = snap.getString("challengedUserId").orEmpty()
+        ref.update("status", ChallengeStatus.CANCELLED.name).await()
+        if (challengedId.isNotBlank()) {
+            notificationRepository.deleteChallengeNotificationsForRecipient(challengeId, challengedId)
+        }
         Result.success(Unit)
     } catch (e: Exception) {
         Result.error(e)
@@ -365,6 +374,14 @@ class ChallengeRepositoryImpl : ChallengeRepository {
 
             null
         }.await()
+
+        val updated = challengesCollection.document(challengeId).get().await()
+        if (updated.exists() && updated.getString("status") == ChallengeStatus.COMPLETED.name) {
+            val challengedId = updated.getString("challengedUserId").orEmpty()
+            if (challengedId.isNotBlank()) {
+                notificationRepository.deleteChallengeNotificationsForRecipient(challengeId, challengedId)
+            }
+        }
 
         Result.success(Unit)
     } catch (e: Exception) {

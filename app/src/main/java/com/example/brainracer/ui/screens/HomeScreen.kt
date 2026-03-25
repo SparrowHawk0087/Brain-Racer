@@ -156,11 +156,19 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             HomeTopBar(
-                userLevel     = uiState.userLevel,
-                levelProgress = uiState.levelProgress,
-                rankName      = uiState.rankName,
-                onSearchClick = { navController.navigate("search") },
-                onSignOut     = {
+                userLevel                  = uiState.userLevel,
+                levelProgress              = uiState.levelProgress,
+                rankName                   = uiState.rankName,
+                unreadNotificationsCount   = uiState.unreadNotificationsCount,
+                onSearchClick              = { navController.navigate("search") },
+                onNotificationsClick       = {
+                    if (uiState.currentUserId.isNotBlank()) {
+                        navController.navigate("notifications/${uiState.currentUserId}")
+                    } else {
+                        Toast.makeText(context, "Войдите в аккаунт", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onSignOut                  = {
                     authViewModel.signOut()
                     navController.navigate("auth") { popUpTo(0) { inclusive = true } }
                 }
@@ -241,7 +249,9 @@ private fun HomeTopBar(
     userLevel: Int,
     levelProgress: Float,       // 0.0–1.0 реальный прогресс внутри уровня
     rankName: String,
+    unreadNotificationsCount: Int,
     onSearchClick: () -> Unit,
+    onNotificationsClick: () -> Unit,
     onSignOut: () -> Unit
 ) {
     // Анимируем прогресс-бар чтобы он плавно заполнялся при загрузке
@@ -291,14 +301,16 @@ private fun HomeTopBar(
                     IconButton(onClick = onSearchClick) {
                         Icon(Icons.Outlined.Search, null, tint = TextPri.copy(0.7f))
                     }
-                    IconButton(onClick = {}) {
+                    IconButton(onClick = onNotificationsClick) {
                         Box {
                             Icon(Icons.Outlined.Notifications, null, tint = TextPri.copy(0.7f))
-                            Box(
-                                Modifier.size(8.dp).align(Alignment.TopEnd)
-                                    .offset(x = 2.dp, y = (-2).dp)
-                                    .background(Color(0xFFf5576c), CircleShape)
-                            )
+                            if (unreadNotificationsCount > 0) {
+                                Box(
+                                    Modifier.size(8.dp).align(Alignment.TopEnd)
+                                        .offset(x = 2.dp, y = (-2).dp)
+                                        .background(Color(0xFFf5576c), CircleShape)
+                                )
+                            }
                         }
                     }
                     IconButton(onClick = onSignOut) {

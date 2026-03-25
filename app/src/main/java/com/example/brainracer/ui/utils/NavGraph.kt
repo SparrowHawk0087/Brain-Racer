@@ -13,10 +13,12 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.brainracer.ui.screens.AuthScreen
 import com.example.brainracer.ui.screens.ChallengeRoundReviewScreen
+import com.example.brainracer.ui.screens.ChallengeStartScreen
 import com.example.brainracer.ui.screens.ChallengesScreen
 import com.example.brainracer.ui.screens.ForgotPasswordScreen
 import com.example.brainracer.ui.screens.FriendsScreen
 import com.example.brainracer.ui.screens.HomeScreen
+import com.example.brainracer.ui.screens.NotificationsScreen
 import com.example.brainracer.ui.screens.ProfileScreen
 import com.example.brainracer.ui.components.QuizDetailScreen
 import com.example.brainracer.ui.screens.QuizListScreen
@@ -113,6 +115,25 @@ fun NavGraph(
             )
         }
 
+        composable(
+            "notifications/{userId}",
+            arguments = listOf(navArgument("userId") { type = NavType.StringType })
+        ) { back ->
+            val uid = back.arguments?.getString("userId") ?: ""
+            NotificationsScreen(
+                navController   = navController,
+                currentUserId   = uid
+            )
+        }
+
+        composable(
+            "challenge_start/{challengeId}",
+            arguments = listOf(navArgument("challengeId") { type = NavType.StringType })
+        ) { back ->
+            val cid = back.arguments?.getString("challengeId") ?: ""
+            ChallengeStartScreen(challengeId = cid, navController = navController)
+        }
+
         // ── Quiz Detail ────────────────────────────────────────────────────
         composable(
             "quiz_detail/{quizId}",
@@ -136,23 +157,35 @@ fun NavGraph(
         }
 
         // ── Quiz Play (режим вызова) ───────────────────────────────────────
-        // Маршрут: quiz_play/{quizId}?challengeId={challengeId}
+        // fromNotifFlow: сценарий «уведомление → старт вызова» — интро как с главной, «Отмена» = на главную
         composable(
-            route     = "quiz_play/{quizId}?challengeId={challengeId}",
+            route     = "quiz_play/{quizId}?challengeId={challengeId}&introShown={introShown}&fromNotifFlow={fromNotifFlow}",
             arguments = listOf(
                 navArgument("quizId")      { type = NavType.StringType },
                 navArgument("challengeId") {
                     type             = NavType.StringType
                     nullable         = true
                     defaultValue     = null
+                },
+                navArgument("introShown") {
+                    type         = NavType.BoolType
+                    defaultValue = false
+                },
+                navArgument("fromNotifFlow") {
+                    type         = NavType.BoolType
+                    defaultValue = false
                 }
             )
         ) { back ->
             val quizId      = back.arguments?.getString("quizId") ?: ""
             val challengeId = back.arguments?.getString("challengeId")
+            val introShown  = back.arguments?.getBoolean("introShown") ?: false
+            val fromNotif   = back.arguments?.getBoolean("fromNotifFlow") ?: false
             QuizPlayScreen(
                 quizId      = quizId,
                 challengeId = challengeId,
+                challengeIntroAlreadyShown = introShown,
+                challengeIntroCancelToHome = fromNotif,
                 navController = navController
             )
         }
