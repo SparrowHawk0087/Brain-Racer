@@ -11,7 +11,7 @@
  */
 const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const {initializeApp} = require("firebase-admin/app");
-const {getFirestore} = require("firebase-admin/firestore");
+const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {getMessaging} = require("firebase-admin/messaging");
 
 initializeApp();
@@ -43,17 +43,37 @@ exports.onNotificationCreatedPush = onDocumentCreated(
       typeof data.challengeId === "string" ? data.challengeId : "";
     const type = typeof data.type === "string" ? data.type : "";
 
-    await getMessaging().send({
-      token,
-      notification: {title, body},
-      data: {
-        type,
-        challengeId,
-      },
-      android: {
-        priority: "high",
-        notification: {channelId: "brain_racer_general"},
-      },
-    });
+    try {
+      await getMessaging().send({
+        token,
+        notification: {title, body},
+        data: {
+          type,
+          challengeId,
+        },
+        android: {
+          priority: "high",
+          notification: {channelId: "brain_racer_general"},
+        },
+      });
+    } catch (err) {
+      const code = err?.code || err?.errorInfo?.code;
+      const staleToken =
+        code === "messaging/invalid-registration-token" ||
+        code === "messaging/registration-token-not-registered";
+      if (staleToken) {
+        try {
+          await getFirestore().doc(`users/${uid}`).update({
+            fcmToken: FieldValue.delete(),
+          });
+        } catch (updateErr) {
+          console.error("Failed to clear stale FCM token", {uid, updateErr});
+        }
+        console.warn("FCM token removed (stale)", {uid, code});
+        return;
+      }
+      console.error("FCM send failed", {uid, code, message: err?.message});
+      throw err;
+    }
   }
 );
