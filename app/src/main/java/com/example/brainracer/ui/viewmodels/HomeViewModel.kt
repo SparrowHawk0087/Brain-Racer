@@ -3,6 +3,7 @@ package com.example.brainracer.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.ChallengeRepositoryImpl
+import com.example.brainracer.data.repositories.NotificationRepositoryImpl
 import com.example.brainracer.data.repositories.UserChallengeSides
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
@@ -19,12 +20,14 @@ import com.example.brainracer.ui.utils.HomeUiState
 import com.example.brainracer.ui.utils.QuizItem
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 class HomeViewModel : ViewModel() {
 
@@ -34,6 +37,7 @@ class HomeViewModel : ViewModel() {
     private val quizRepository       = QuizRepositoryImpl()
     private val userRepository        = UserRepositoryImpl()
     private val challengeRepository   = ChallengeRepositoryImpl()
+    private val notificationRepository = NotificationRepositoryImpl()
     private val auth                  = FirebaseAuth.getInstance()
 
     // Кэш полного списка викторин для фильтрации по категории
@@ -68,7 +72,28 @@ class HomeViewModel : ViewModel() {
                         }
                     }
                 }
+                launch {
+                    try {
+                        notificationRepository.observeNotificationsForUser(userId).collect { list ->
+                            val unread = list.count { !it.read }
+                            _uiState.update { it.copy(unreadNotificationsCount = unread) }
+                        }
+                    } catch (_: Exception) {
+                        _uiState.update { it.copy(unreadNotificationsCount = 0) }
+                    }
+                }
             }
+        }
+    }
+
+    /** Сохраняет FCM-токен в профиль для будущих push (Cloud Functions). */
+    fun syncFcmTokenToProfile() {
+        val uid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                val token = FirebaseMessaging.getInstance().token.await()
+                if (token.isNotBlank()) userRepository.updateFcmToken(uid, token)
+            } catch (_: Exception) { }
         }
     }
 
@@ -201,8 +226,8 @@ class HomeViewModel : ViewModel() {
             )
         val outgoing = sides.asChallenger.filter {
             it.status == ChallengeStatus.PENDING ||
-                it.status == ChallengeStatus.ACCEPTED ||
-                it.status == ChallengeStatus.COMPLETED
+                    it.status == ChallengeStatus.ACCEPTED ||
+                    it.status == ChallengeStatus.COMPLETED
         }
         val outgoingPending = outgoing.filter { it.status == ChallengeStatus.PENDING }
         val nowDate = Timestamp.now().toDate()
@@ -210,7 +235,7 @@ class HomeViewModel : ViewModel() {
             .distinctBy { it.id }
             .filter {
                 it.status == ChallengeStatus.ACCEPTED &&
-                    it.expiresAt.toDate().after(nowDate)
+                        it.expiresAt.toDate().after(nowDate)
             }
         val completed = (sides.asChallenged + sides.asChallenger)
             .filter { it.status == ChallengeStatus.COMPLETED }
