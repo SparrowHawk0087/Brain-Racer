@@ -9,12 +9,10 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
 
 class QuizRepositoryImpl: QuizRepository {
-    private val firestore: FirebaseFirestore = Firebase.firestore
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     // Firestore коллекции
     private val quizzesCollection = firestore.collection("quizzes")
     private val usersCollection = firestore.collection("users")

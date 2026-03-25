@@ -13,6 +13,7 @@ interface UserRepository {
     suspend fun searchUsers(query: String): Result<List<User>>
     suspend fun updateUserInterests(userId: String, interests: List<String>): Result<Unit>
     suspend fun updateUserAvatar(userId: String, avatarUrl: String): Result<Unit>
+    suspend fun updateFcmToken(userId: String, token: String): Result<Unit>
     suspend fun sendFriendRequest(senderId: String, receiverId: String): Result<Unit>
     suspend fun getFriendRequests(userId: String): Result<List<FriendRequest>>
     suspend fun acceptFriendRequest(requestId: String, userId: String, friendId: String): Result<Unit>
