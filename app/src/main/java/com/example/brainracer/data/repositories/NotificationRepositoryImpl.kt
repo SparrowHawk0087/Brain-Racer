@@ -56,6 +56,33 @@ class NotificationRepositoryImpl : NotificationRepository {
         Result.error(e)
     }
 
+    override suspend fun deleteChallengeNotificationsForRecipient(
+        challengeId: String,
+        recipientUserId: String
+    ): Result<Unit> {
+        return try {
+            if (challengeId.isBlank() || recipientUserId.isBlank()) {
+                Result.success(Unit)
+            } else {
+                val snap = col
+                    .whereEqualTo("recipientUserId", recipientUserId)
+                    .whereEqualTo("challengeId", challengeId)
+                    .get()
+                    .await()
+                if (snap.isEmpty) {
+                    Result.success(Unit)
+                } else {
+                    val batch = firestore.batch()
+                    snap.documents.forEach { batch.delete(it.reference) }
+                    batch.commit().await()
+                    Result.success(Unit)
+                }
+            }
+        } catch (e: Exception) {
+            Result.error(e)
+        }
+    }
+
     override suspend fun createChallengeNotification(
         challenge: Challenge,
         challengerAvatarUrl: String?,

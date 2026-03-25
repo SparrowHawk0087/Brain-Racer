@@ -40,6 +40,15 @@ interface NotificationRepository {
     suspend fun markAsRead(notificationId: String): Result<Unit>
 
     /**
+     * Удаляет in-app уведомления о вызове у получателя (после отклонения, отмены или завершения дуэли).
+     * Запрос: `recipientUserId` + `challengeId` (может потребоваться составной индекс в Firebase Console).
+     */
+    suspend fun deleteChallengeNotificationsForRecipient(
+        challengeId: String,
+        recipientUserId: String
+    ): Result<Unit>
+
+    /**
      * [challengerAvatarUrl] — из документа отправителя, для карточки в списке.
      * [quizTotalTimeSeconds] — время прохождения викторины (сек.), для отображения в списке уведомлений.
      */
