@@ -37,5 +37,8 @@ data class HomeUiState(
     val friendsForChallenge: List<User> = emptyList(),
     val challengePickerQuizzes: List<QuizItem> = emptyList(),
     val challengePickerLoading: Boolean = false,
-    val challengeSentMessage: String? = null
+    val challengeSentMessage: String? = null,
+
+    /** Непрочитанные in-app уведомления (коллекция notifications). */
+    val unreadNotificationsCount: Int = 0
 )

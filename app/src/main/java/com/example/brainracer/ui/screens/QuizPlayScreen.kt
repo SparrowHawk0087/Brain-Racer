@@ -87,14 +87,16 @@ fun QuizPlayScreen(
     quizId: String,
     navController: NavController,
     challengeId: String? = null,
+    challengeIntroAlreadyShown: Boolean = false,
+    challengeIntroCancelToHome: Boolean = false,
     quizViewModel: QuizViewModel = viewModel()
 ) {
     val uiState by quizViewModel.uiState.collectAsState()
 
     LaunchedEffect(quizId, challengeId) { quizViewModel.loadQuiz(quizId, challengeId) }
 
-    var challengeIntroAcknowledged by rememberSaveable(quizId, challengeId) {
-        mutableStateOf(false)
+    var challengeIntroAcknowledged by rememberSaveable(quizId, challengeId, challengeIntroAlreadyShown) {
+        mutableStateOf(challengeIntroAlreadyShown)
     }
 
     when {
@@ -107,7 +109,8 @@ fun QuizPlayScreen(
                 quizTitle       = uiState.quizTitle.ifBlank { "Викторина" },
                 totalQuestions  = uiState.totalQuestions,
                 onStart         = { challengeIntroAcknowledged = true },
-                onCancel        = { navController.popBackStack() }
+                onCancel        = { navController.popBackStack() },
+                cancelButtonLabel = if (challengeIntroCancelToHome) "На главную" else "Отмена"
             )
         }
         uiState.showResults || uiState.isQuizCompleted -> {
@@ -154,7 +157,8 @@ private fun ChallengeDuelIntroScreen(
     quizTitle: String,
     totalQuestions: Int,
     onStart: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    cancelButtonLabel: String = "Отмена"
 ) {
     Box(Modifier.fillMaxSize().background(QBg)) {
         Column(
@@ -225,7 +229,7 @@ private fun ChallengeDuelIntroScreen(
                 Text("Начать викторину", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
             }
             TextButton(onClick = onCancel) {
-                Text("Отмена", color = QTextSec, fontSize = 14.sp)
+                Text(cancelButtonLabel, color = QTextSec, fontSize = 14.sp)
             }
             Spacer(Modifier.height(16.dp))
         }
