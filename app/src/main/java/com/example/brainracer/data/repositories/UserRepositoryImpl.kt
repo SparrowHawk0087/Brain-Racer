@@ -10,14 +10,12 @@ import com.google.firebase.Timestamp                               // ← доб
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
 
 
 class UserRepositoryImpl : UserRepository {
 
-    private val firestore: FirebaseFirestore = Firebase.firestore
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     private val usersCollection = firestore.collection("users")
     private val friendRequestsCollection = firestore.collection("friend_requests")
 
@@ -113,6 +111,13 @@ class UserRepositoryImpl : UserRepository {
     // ── Обновить аватар ───────────────────────────────────────────────────
     override suspend fun updateUserAvatar(userId: String, avatarUrl: String): Result<Unit> = try {
         usersCollection.document(userId).update("avatarUrl", avatarUrl).await()
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.error(e)
+    }
+
+    override suspend fun updateFcmToken(userId: String, token: String): Result<Unit> = try {
+        usersCollection.document(userId).update("fcmToken", token).await()
         Result.success(Unit)
     } catch (e: Exception) {
         Result.error(e)

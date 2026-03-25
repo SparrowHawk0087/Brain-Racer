@@ -7,17 +7,17 @@ import com.example.brainracer.data.utils.Result
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 class ChallengeRepositoryImpl : ChallengeRepository {
-    private val firestore: FirebaseFirestore = Firebase.firestore
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     private val challengesCollection = firestore.collection("challenges")
     private val usersCollection = firestore.collection("users")
+    private val notificationRepository = NotificationRepositoryImpl()
+    private val quizRepository = QuizRepositoryImpl()
 
     private fun mapDocsToChallenges(docs: Iterable<com.google.firebase.firestore.DocumentSnapshot>): List<Challenge> =
         docs.mapNotNull { doc ->
@@ -223,8 +223,8 @@ class ChallengeRepositoryImpl : ChallengeRepository {
             val hasConflict = existingSnapshot.documents.any { doc ->
                 val c = doc.toObject(Challenge::class.java) ?: return@any false
                 c.challengedUserId == challenge.challengedUserId &&
-                    c.quizId == challenge.quizId &&
-                    (c.status == ChallengeStatus.PENDING || c.status == ChallengeStatus.ACCEPTED)
+                        c.quizId == challenge.quizId &&
+                        (c.status == ChallengeStatus.PENDING || c.status == ChallengeStatus.ACCEPTED)
             }
             if (hasConflict) {
                 return Result.error(Exception("Уже есть активный вызов на эту викторину"))
@@ -244,8 +244,16 @@ class ChallengeRepositoryImpl : ChallengeRepository {
 
             docRef.set(challengeWithId).await()
 
-            // TODO: Отправить FCM уведомление challenged пользователю
-            // sendChallengeNotification(challengeWithId)
+            val challengerAvatar = challengerDoc.getString("avatarUrl")
+            val quizTotalSec = when (val qr = quizRepository.getQuiz(challengeWithId.quizId)) {
+                is Result.Success -> qr.data.totalTime.takeIf { it > 0 }
+                is Result.Error -> null
+            }
+            notificationRepository.createChallengeNotification(
+                challengeWithId,
+                challengerAvatar,
+                quizTotalSec
+            )
 
             Result.success(docRef.id)
         } catch (e: Exception) {
@@ -381,32 +389,5 @@ class ChallengeRepositoryImpl : ChallengeRepository {
         Result.success(Unit)
     } catch (e: Exception) {
         Result.error(e)
-    }
-
-    // FCM уведомления  (TODO) ====================
-
-    private suspend fun sendChallengeNotification(challenge: Challenge) {
-        // Для реализации потребуется Firebase Cloud Functions
-        // Или Firebase Admin SDK на бэкенде
-        // Примерная логика:
-        /*
-        val userDoc = usersCollection.document(challenge.challengedUserId).get().await()
-        val fcmToken = userDoc.getString("fcmToken")
-
-        if (fcmToken != null) {
-            // Отправка через Firebase Cloud Messaging
-            val message = Message.builder()
-                .setToken(fcmToken)
-                .setNotification(Notification.builder()
-                    .setTitle("🎯 Новый вызов!")
-                    .setBody("${challenge.challengerNickname} бросил вам вызов в ${challenge.quizTitle}")
-                    .build())
-                .putData("challengeId", challenge.id)
-                .putData("type", "challenge")
-                .build()
-
-            FirebaseMessaging.getInstance().send(message)
-        }
-        */
     }
 }
