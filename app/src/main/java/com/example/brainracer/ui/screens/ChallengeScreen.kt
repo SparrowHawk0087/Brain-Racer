@@ -39,23 +39,11 @@ import com.example.brainracer.domain.entities.Challenge
 import com.example.brainracer.domain.entities.ChallengeStatus
 import com.example.brainracer.ui.components.BottomBar
 import com.example.brainracer.ui.components.ChallengeFriendQuizSheetContent
+import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.viewmodels.ChallengeViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-
-// ─── Палитра ────────────────────────────────────────────────────────────────
-private val CBg      = Color(0xFF0F0F1A)
-private val CCard    = Color(0xFF1A1A2E)
-private val CBorder  = Color(0xFF2A2A3E)
-private val CPurple  = Color(0xFF667EEA)
-private val CGreen   = Color(0xFF3ECFA3)
-private val CRed     = Color(0xFFEA5C7E)
-private val COrange  = Color(0xFFFFA726)
-private val CTextPri = Color(0xFFFFFFFF)
-private val CTextSec = Color(0xFF8B8AAE)
-
-// ══════════════════════════════════════════════════════════════════════════════
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -64,7 +52,9 @@ fun ChallengesScreen(
     currentUserId: String,
     vm: ChallengeViewModel = viewModel(),
     onHomeClick: () -> Unit = {},
-    onFriendsClick: () -> Unit = {},
+    onLeaderboardClick: () -> Unit = {},
+    onChallengesClick: () -> Unit = {},
+    onQuizzesClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
     currentRoute: String = "challenges"
 ) {
@@ -105,8 +95,8 @@ fun ChallengesScreen(
         ModalBottomSheet(
             onDismissRequest = { showChallengeSheet = false },
             sheetState       = challengeSheetState,
-            containerColor   = CCard,
-            contentColor     = CTextPri
+            containerColor   = MaterialTheme.colorScheme.surface,
+            contentColor     = MaterialTheme.colorScheme.onSurface
         ) {
             ChallengeFriendQuizSheetContent(
                 fixedFriend   = null,
@@ -122,37 +112,39 @@ fun ChallengesScreen(
     }
 
     Scaffold(
-        containerColor = CBg,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text("Вызовы", fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp, color = CTextPri)
+                        fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurface)
                 },
                 actions = {
                     TextButton(onClick = { showChallengeSheet = true }) {
                         Icon(
                             Icons.Default.Sports,
                             contentDescription = null,
-                            tint     = CPurple,
+                            tint     = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text("Вызов", color = CPurple, fontSize = 14.sp,
+                        Text("Вызов", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = CBg),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars)
             )
         },
         bottomBar = {
             BottomBar(
-                showBar        = true,
-                currentRoute   = currentRoute,
-                onHomeClick    = onHomeClick,
-                onFriendsClick = onFriendsClick,
-                onProfileClick = onProfileClick
+                showBar              = true,
+                currentRoute         = currentRoute,
+                onHomeClick          = onHomeClick,
+                onLeaderboardClick   = onLeaderboardClick,
+                onChallengesClick    = onChallengesClick,
+                onQuizzesClick       = onQuizzesClick,
+                onProfileClick       = onProfileClick
             )
         }
     ) { padding ->
@@ -161,18 +153,18 @@ fun ChallengesScreen(
             // ── Вкладки ───────────────────────────────────────────────────
             TabRow(
                 selectedTabIndex = pagerState.currentPage,
-                containerColor   = CBg,
-                contentColor     = CPurple,
+                containerColor   = MaterialTheme.colorScheme.background,
+                contentColor     = MaterialTheme.colorScheme.primary,
                 indicator = { positions ->
                     if (pagerState.currentPage < positions.size) {
                         TabRowDefaults.Indicator(
                             modifier = Modifier.tabIndicatorOffset(positions[pagerState.currentPage])
                                 .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)),
-                            color    = CPurple, height = 3.dp
+                            color    = MaterialTheme.colorScheme.primary, height = 3.dp
                         )
                     }
                 },
-                divider = { HorizontalDivider(color = CBorder) }
+                divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outline) }
             ) {
                 tabTitles.forEachIndexed { i, title ->
                     val badge = when (i) {
@@ -183,8 +175,8 @@ fun ChallengesScreen(
                     Tab(
                         selected               = pagerState.currentPage == i,
                         onClick                = { scope.launch { pagerState.animateScrollToPage(i) } },
-                        selectedContentColor   = CPurple,
-                        unselectedContentColor = CTextSec
+                        selectedContentColor   = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 13.dp),
@@ -289,37 +281,37 @@ private fun IncomingChallengeCard(
     Card(
         modifier  = Modifier.fillMaxWidth(),
         shape     = RoundedCornerShape(18.dp),
-        colors    = CardDefaults.cardColors(containerColor = CCard),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // Заголовок
             Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                AvatarCircle(challenge.challengerNickname.take(2).uppercase(), CPurple, 44)
+                AvatarCircle(challenge.challengerNickname.take(2).uppercase(), MaterialTheme.colorScheme.primary, 44)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(challenge.challengerNickname, fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp, color = CTextPri)
-                    Text("бросает вам вызов", fontSize = 12.sp, color = CTextSec)
+                        fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Text("бросает вам вызов", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Surface(shape = RoundedCornerShape(8.dp), color = COrange.copy(.15f)) {
+                Surface(shape = RoundedCornerShape(8.dp), color = LocalBrainRacerExtendedColors.current.statusOrange.copy(.15f)) {
                     Text("Новый", modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = COrange)
+                        fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = LocalBrainRacerExtendedColors.current.statusOrange)
                 }
             }
 
             // Викторина
             Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Quiz, null, tint = CPurple, modifier = Modifier.size(16.dp))
-                Text(challenge.quizTitle, fontSize = 13.sp, color = CTextSec,
+                Icon(Icons.Default.Quiz, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                Text(challenge.quizTitle, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             }
 
             // Срок истечения
             Text(
                 "Истекает: ${formatTimestamp(challenge.expiresAt.seconds * 1000)}",
-                fontSize = 11.sp, color = CTextSec
+                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             // Кнопки
@@ -328,18 +320,18 @@ private fun IncomingChallengeCard(
                     onClick = onAccept,
                     modifier = Modifier.weight(1f),
                     shape  = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = CGreen)
+                    colors = ButtonDefaults.buttonColors(containerColor = LocalBrainRacerExtendedColors.current.detailGreen)
                 ) {
                     Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Принять", fontSize = 13.sp, color = Color.White)
+                    Text("Принять", fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimary)
                 }
                 OutlinedButton(
                     onClick = onDecline,
                     modifier = Modifier.weight(1f),
                     shape  = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = CRed),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, CRed)
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error)
                 ) {
                     Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
@@ -415,8 +407,8 @@ private fun ActiveTab(
 @Composable
 private fun ActiveSectionHeader(title: String, subtitle: String) {
     Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-        Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = CTextPri)
-        Text(subtitle, fontSize = 11.sp, color = CTextSec, lineHeight = 14.sp)
+        Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        Text(subtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 14.sp)
     }
 }
 
@@ -437,7 +429,7 @@ private fun ActiveChallengeCard(
     Card(
         modifier  = Modifier.fillMaxWidth(),
         shape     = RoundedCornerShape(18.dp),
-        colors    = CardDefaults.cardColors(containerColor = CCard),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(0.dp),
         border    = CardDefaults.outlinedCardBorder()
     ) {
@@ -445,11 +437,11 @@ private fun ActiveChallengeCard(
             // Соперник
             Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                AvatarCircle(opponentName.take(2).uppercase(), CGreen, 44)
+                AvatarCircle(opponentName.take(2).uppercase(), LocalBrainRacerExtendedColors.current.detailGreen, 44)
                 Column(modifier = Modifier.weight(1f)) {
                     Text("vs $opponentName", fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp, color = CTextPri)
-                    Text(challenge.quizTitle, fontSize = 12.sp, color = CTextSec,
+                        fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Text(challenge.quizTitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
@@ -474,7 +466,7 @@ private fun ActiveChallengeCard(
                     onClick  = onPlay,
                     modifier = Modifier.fillMaxWidth(),
                     shape    = RoundedCornerShape(10.dp),
-                    colors   = ButtonDefaults.buttonColors(containerColor = CPurple)
+                    colors   = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
@@ -485,8 +477,8 @@ private fun ActiveChallengeCard(
                     onClick  = onViewRound,
                     modifier = Modifier.fillMaxWidth(),
                     shape    = RoundedCornerShape(10.dp),
-                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = CPurple),
-                    border   = androidx.compose.foundation.BorderStroke(1.dp, CPurple)
+                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+                    border   = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                 ) {
                     Icon(Icons.Default.Analytics, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
@@ -496,7 +488,7 @@ private fun ActiveChallengeCard(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape    = RoundedCornerShape(10.dp),
-                    color    = CBorder
+                    color    = MaterialTheme.colorScheme.outline
                 ) {
                     Row(
                         modifier              = Modifier.padding(12.dp),
@@ -505,11 +497,11 @@ private fun ActiveChallengeCard(
                     ) {
                         CircularProgressIndicator(
                             modifier  = Modifier.size(14.dp),
-                            color     = CTextSec,
+                            color     = MaterialTheme.colorScheme.onSurfaceVariant,
                             strokeWidth = 2.dp
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text("Ждём хода соперника…", fontSize = 13.sp, color = CTextSec)
+                        Text("Ждём хода соперника…", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -521,7 +513,7 @@ private fun ActiveChallengeCard(
 private fun PlayerStatusChip(label: String, played: Boolean, score: Int?) {
     Surface(
         shape  = RoundedCornerShape(8.dp),
-        color  = if (played) CGreen.copy(.12f) else CBorder
+        color  = if (played) LocalBrainRacerExtendedColors.current.detailGreen.copy(.12f) else MaterialTheme.colorScheme.outline
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -531,13 +523,13 @@ private fun PlayerStatusChip(label: String, played: Boolean, score: Int?) {
             Icon(
                 imageVector = if (played) Icons.Default.CheckCircle else Icons.Default.HourglassEmpty,
                 contentDescription = null,
-                tint = if (played) CGreen else CTextSec,
+                tint = if (played) LocalBrainRacerExtendedColors.current.detailGreen else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(13.dp)
             )
             Text(
                 text = if (score != null) "$label: $score" else label,
                 fontSize = 12.sp,
-                color    = if (played) CGreen else CTextSec,
+                color    = if (played) LocalBrainRacerExtendedColors.current.detailGreen else MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -578,7 +570,7 @@ private fun OutgoingPendingCard(challenge: Challenge, onCancel: () -> Unit) {
     Card(
         modifier  = Modifier.fillMaxWidth(),
         shape     = RoundedCornerShape(16.dp),
-        colors    = CardDefaults.cardColors(containerColor = CCard),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Row(
@@ -586,16 +578,16 @@ private fun OutgoingPendingCard(challenge: Challenge, onCancel: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AvatarCircle(challenge.challengedNickname.take(2).uppercase(), COrange, 42)
+            AvatarCircle(challenge.challengedNickname.take(2).uppercase(), LocalBrainRacerExtendedColors.current.statusOrange, 42)
             Column(modifier = Modifier.weight(1f)) {
                 Text("→ ${challenge.challengedNickname}", fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp, color = CTextPri)
-                Text(challenge.quizTitle, fontSize = 12.sp, color = CTextSec,
+                    fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                Text(challenge.quizTitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("В обработке · ждём соперника", fontSize = 11.sp, color = COrange)
+                Text("В обработке · ждём соперника", fontSize = 11.sp, color = LocalBrainRacerExtendedColors.current.statusOrange)
             }
             IconButton(onClick = onCancel) {
-                Icon(Icons.Default.Cancel, null, tint = CTextSec, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Cancel, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -617,15 +609,15 @@ private fun CompletedChallengeCard(
     val isDraw = challenge.isDraw || challenge.winnerId == "draw"
     val isWin  = !isDraw && challenge.winnerId == currentUserId
     val (resultLabel, resultColor) = when {
-        isDraw -> "Ничья" to COrange
-        isWin  -> "Победа" to CGreen
-        else   -> "Поражение" to CRed
+        isDraw -> "Ничья" to LocalBrainRacerExtendedColors.current.statusOrange
+        isWin  -> "Победа" to LocalBrainRacerExtendedColors.current.detailGreen
+        else   -> "Поражение" to MaterialTheme.colorScheme.error
     }
 
     Card(
         modifier  = Modifier.fillMaxWidth().clickable { onViewRound() },
         shape     = RoundedCornerShape(16.dp),
-        colors    = CardDefaults.cardColors(containerColor = CCard),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(0.dp),
         border    = CardDefaults.outlinedCardBorder()
     ) {
@@ -634,20 +626,20 @@ private fun CompletedChallengeCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AvatarCircle(opponentName.take(2).uppercase(), CPurple, 42)
+            AvatarCircle(opponentName.take(2).uppercase(), MaterialTheme.colorScheme.primary, 42)
             Column(modifier = Modifier.weight(1f)) {
                 Text("vs $opponentName", fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp, color = CTextPri)
-                Text(challenge.quizTitle, fontSize = 12.sp, color = CTextSec,
+                    fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                Text(challenge.quizTitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     formatTimestamp(challenge.completedAt?.seconds?.times(1000) ?: 0L),
-                    fontSize = 11.sp, color = CTextSec
+                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("$myScore : $opponentScore", fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp, color = CTextPri)
+                    fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
                 Surface(shape = RoundedCornerShape(6.dp), color = resultColor.copy(.15f)) {
                     Text(resultLabel,
                         modifier   = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
@@ -655,7 +647,7 @@ private fun CompletedChallengeCard(
                 }
             }
             Icon(Icons.AutoMirrored.Filled.ArrowForward, null,
-                tint = CTextSec, modifier = Modifier.size(16.dp))
+                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -665,7 +657,7 @@ private fun CompletedChallengeCard(
 @Composable
 private fun CenteredLoader() {
     Box(Modifier.fillMaxSize(), Alignment.Center) {
-        CircularProgressIndicator(color = CPurple)
+        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
     }
 }
 
@@ -674,12 +666,12 @@ private fun EmptyState(title: String, subtitle: String) {
     Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.size(72.dp).clip(CircleShape).background(CCard), Alignment.Center) {
-                Icon(Icons.Default.Sports, null, tint = CTextSec, modifier = Modifier.size(32.dp))
+            Box(Modifier.size(72.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface), Alignment.Center) {
+                Icon(Icons.Default.Sports, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
             }
             Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-                color = CTextPri, textAlign = TextAlign.Center)
-            Text(subtitle, fontSize = 14.sp, color = CTextSec, textAlign = TextAlign.Center)
+                color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
+            Text(subtitle, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         }
     }
 }

@@ -79,14 +79,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.brainracer.ui.components.BottomBar
-import com.example.brainracer.ui.theme.onBackgroundLight
-import com.example.brainracer.ui.theme.onSurfaceVariantLight
-import com.example.brainracer.ui.theme.primaryContainerLight
-import com.example.brainracer.ui.theme.primaryLight
-import com.example.brainracer.ui.theme.surfaceContainerHighLight
-import com.example.brainracer.ui.theme.surfaceContainerLight
-import com.example.brainracer.ui.theme.surfaceContainerLowLight
-import com.example.brainracer.ui.theme.surfaceLight
+import com.example.brainracer.ui.theme.BrainRacerColorTokens
+import com.example.brainracer.ui.theme.BrainRacerTheme
+import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 
 
@@ -146,12 +141,13 @@ fun ProfileScreenNew(
     }
 
     val topicStats = remember {
+        val c = BrainRacerColorTokens.TopicBarColors
         listOf(
-            ProfileTopicStat("Математика", 85f, Color(0xFF4CAF50), Icons.Default.TrendingUp),
-            ProfileTopicStat("История", 65f, Color(0xFF2196F3), Icons.Default.Person),
-            ProfileTopicStat("Программирование", 92f, Color(0xFF9C27B0), Icons.Default.Code),
-            ProfileTopicStat("География", 78f, Color(0xFFFF9800), Icons.Default.Public),
-            ProfileTopicStat("Биология", 54f, Color(0xFFE91E63), Icons.Default.Science)
+            ProfileTopicStat("Математика", 85f, c[2], Icons.Default.TrendingUp),
+            ProfileTopicStat("История", 65f, c[3], Icons.Default.Person),
+            ProfileTopicStat("Программирование", 92f, c[4], Icons.Default.Code),
+            ProfileTopicStat("География", 78f, c[0], Icons.Default.Public),
+            ProfileTopicStat("Биология", 54f, c[1], Icons.Default.Science)
         )
     }
 
@@ -177,7 +173,7 @@ fun ProfileScreenNew(
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets.systemBars,
-        containerColor = surfaceContainerLowLight,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         topBar = {
             TopAppBar(
                 title = {
@@ -185,7 +181,7 @@ fun ProfileScreenNew(
                         text = if (isOwnProfile) "Мой профиль" else "Профиль игрока",
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 18.sp,
-                        color = onBackgroundLight
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 },
                 actions = {
@@ -193,26 +189,29 @@ fun ProfileScreenNew(
                         IconButton(onClick = {
                             Toast.makeText(context, "Поделиться", Toast.LENGTH_SHORT).show()
                         }) {
-                            Icon(Icons.Default.Share, contentDescription = null, tint = onSurfaceVariantLight)
+                            Icon(Icons.Default.Share, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick = {}) {
-                            Icon(Icons.Default.Edit, contentDescription = null, tint = onSurfaceVariantLight)
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = surfaceContainerLowLight,
-                    scrolledContainerColor = surfaceContainerHighLight
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                 ),
                 scrollBehavior = scrollBehavior
             )
         },
         bottomBar = {
             BottomBar(
-                showBar = true,
-                currentRoute = currentRoute,
-                onHomeClick = onHomeClick,
-                onProfileClick = onProfileClick
+                showBar              = true,
+                currentRoute         = currentRoute,
+                onHomeClick          = onHomeClick,
+                onLeaderboardClick   = {},
+                onChallengesClick    = {},
+                onQuizzesClick       = {},
+                onProfileClick       = onProfileClick
             )
         },
         floatingActionButton = {
@@ -221,7 +220,7 @@ fun ProfileScreenNew(
                     onClick = { Toast.makeText(context, "Вызов отправлен!", Toast.LENGTH_SHORT).show() },
                     icon = { Icon(Icons.Default.Sports, contentDescription = null) },
                     text = { Text("Вызвать") },
-                    containerColor = primaryLight,
+                    containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = Color.White
                 )
             }
@@ -285,7 +284,7 @@ fun ProfileScreenNew(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            containerColor = surfaceLight,
+            containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(20.dp),
             title = {
                 Text("Удалить аккаунт?", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
@@ -293,7 +292,7 @@ fun ProfileScreenNew(
             text = {
                 Text(
                     "Все данные, прогресс и достижения будут удалены навсегда.",
-                    color = onSurfaceVariantLight
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {
@@ -306,7 +305,7 @@ fun ProfileScreenNew(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Отмена", color = onBackgroundLight)
+                    Text("Отмена", color = MaterialTheme.colorScheme.onBackground)
                 }
             }
         )
@@ -333,7 +332,7 @@ fun ProfileHeaderSection(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceLight),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column(
@@ -345,40 +344,41 @@ fun ProfileHeaderSection(
                 modifier = Modifier
                     .size(90.dp)
                     .clip(CircleShape)
-                    .background(primaryContainerLight.copy(alpha = 0.25f))
-                    .border(3.dp, primaryLight.copy(alpha = 0.35f), CircleShape),
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f))
+                    .border(3.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Person, null, Modifier.size(44.dp), tint = primaryLight)
+                Icon(Icons.Default.Person, null, Modifier.size(44.dp), tint = MaterialTheme.colorScheme.primary)
             }
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(userName, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = onBackgroundLight)
+                Text(userName, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MaterialTheme.colorScheme.onBackground)
                 if (userEmail.isNotEmpty()) {
-                    Text(userEmail, fontSize = 13.sp, color = onSurfaceVariantLight)
+                    Text(userEmail, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Surface(shape = RoundedCornerShape(12.dp), color = primaryLight.copy(alpha = 0.10f)) {
+                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)) {
                     Row(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(Icons.Default.EmojiEvents, null, Modifier.size(15.dp), tint = primaryLight)
-                        Text("Уровень $userLevel", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = primaryLight)
+                        Icon(Icons.Default.EmojiEvents, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
+                        Text("Уровень $userLevel", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
                     }
                 }
                 if (currentStreak > 0) {
-                    Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFFFA726).copy(alpha = 0.10f)) {
+                    val streak = LocalBrainRacerExtendedColors.current.statusOrange
+                    Surface(shape = RoundedCornerShape(12.dp), color = streak.copy(alpha = 0.10f)) {
                         Row(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Icon(Icons.Default.LocalFireDepartment, null, Modifier.size(15.dp), tint = Color(0xFFFFA726))
-                            Text("$currentStreak дней", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = Color(0xFFE65100))
+                            Icon(Icons.Default.LocalFireDepartment, null, Modifier.size(15.dp), tint = streak)
+                            Text("$currentStreak дней", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = streak)
                         }
                     }
                 }
@@ -386,14 +386,14 @@ fun ProfileHeaderSection(
 
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("До уровня ${userLevel + 1}", fontSize = 12.sp, color = onSurfaceVariantLight)
-                    Text("${(progress * 100).toInt()}%", fontSize = 12.sp, color = primaryLight, fontWeight = FontWeight.SemiBold)
+                    Text("До уровня ${userLevel + 1}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${(progress * 100).toInt()}%", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                 }
                 LinearProgressIndicator(
                     progress = { animatedProgress },
                     modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(4.dp)),
-                    color = primaryLight,
-                    trackColor = surfaceContainerLight,
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainer,
                     strokeCap = StrokeCap.Round
                 )
             }
@@ -408,9 +408,9 @@ fun StatsRow(totalQuizzes: Int, winPercentage: Int, averageScore: Double) {
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        SimpleStatCard("Сыграно", "$totalQuizzes", Icons.Default.Gamepad, Color(0xFF5C6BC0), Modifier.weight(1f))
-        SimpleStatCard("Побед", "$winPercentage%", Icons.Default.EmojiEvents, primaryLight, Modifier.weight(1f))
-        SimpleStatCard("Рейтинг", String.format("%.1f", averageScore), Icons.Default.Star, Color(0xFFFF8F00), Modifier.weight(1f))
+        SimpleStatCard("Сыграно", "$totalQuizzes", Icons.Default.Gamepad, BrainRacerColorTokens.TopicBarColors[3], Modifier.weight(1f))
+        SimpleStatCard("Побед", "$winPercentage%", Icons.Default.EmojiEvents, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+        SimpleStatCard("Рейтинг", String.format("%.1f", averageScore), Icons.Default.Star, BrainRacerColorTokens.TopicBarColors[0], Modifier.weight(1f))
     }
 }
 
@@ -419,7 +419,7 @@ fun SimpleStatCard(title: String, value: String, icon: ImageVector, color: Color
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceLight),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(1.dp)
     ) {
         Column(
@@ -433,8 +433,8 @@ fun SimpleStatCard(title: String, value: String, icon: ImageVector, color: Color
             ) {
                 Icon(icon, null, Modifier.size(17.dp), tint = color)
             }
-            Text(value, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = onBackgroundLight)
-            Text(title, fontSize = 11.sp, color = onSurfaceVariantLight)
+            Text(value, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = MaterialTheme.colorScheme.onBackground)
+            Text(title, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -446,7 +446,7 @@ fun SectionHeader(title: String) {
         text = title,
         fontWeight = FontWeight.SemiBold,
         fontSize = 14.sp,
-        color = onSurfaceVariantLight,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 4.dp)
     )
 }
@@ -457,7 +457,7 @@ fun TopicsCard(topics: List<ProfileTopicStat>) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceLight),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(1.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -475,7 +475,7 @@ fun TopicsCard(topics: List<ProfileTopicStat>) {
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(topic.icon, null, Modifier.size(15.dp), tint = topic.color)
-                            Text(topic.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = onBackgroundLight)
+                            Text(topic.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground)
                         }
                         Text("${topic.score.toInt()}%", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = topic.color)
                     }
@@ -483,12 +483,12 @@ fun TopicsCard(topics: List<ProfileTopicStat>) {
                         progress = { animated },
                         modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
                         color = topic.color,
-                        trackColor = surfaceContainerLight,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainer,
                         strokeCap = StrokeCap.Round
                     )
                 }
                 if (index < topics.lastIndex) {
-                    HorizontalDivider(color = surfaceContainerLight, thickness = 0.5.dp)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainer, thickness = 0.5.dp)
                 }
             }
         }
@@ -499,8 +499,9 @@ fun TopicsCard(topics: List<ProfileTopicStat>) {
 @Composable
 fun GameRow(game: ProfileRecentGame) {
     val isWin = game.result == "Победа"
-    val accentColor = if (isWin) Color(0xFF388E3C) else Color(0xFFC62828)
-    val bgColor = if (isWin) Color(0xFF4CAF50).copy(alpha = 0.07f) else Color(0xFFE57373).copy(alpha = 0.07f)
+    val ext = LocalBrainRacerExtendedColors.current
+    val accentColor = if (isWin) ext.detailGreen else MaterialTheme.colorScheme.error
+    val bgColor = if (isWin) ext.detailGreen.copy(alpha = 0.07f) else MaterialTheme.colorScheme.error.copy(alpha = 0.07f)
 
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -514,13 +515,13 @@ fun GameRow(game: ProfileRecentGame) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(game.topic, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = onBackgroundLight)
-                Text(game.timeAgo, fontSize = 12.sp, color = onSurfaceVariantLight)
+                Text(game.topic, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground)
+                Text(game.timeAgo, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Icon(Icons.Default.Star, null, Modifier.size(13.dp), tint = Color(0xFFFFA000))
-                    Text(String.format("%.1f", game.score), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = onBackgroundLight)
+                    Icon(Icons.Default.Star, null, Modifier.size(13.dp), tint = LocalBrainRacerExtendedColors.current.difficultyExpert)
+                    Text(String.format("%.1f", game.score), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                 }
                 Surface(shape = RoundedCornerShape(8.dp), color = accentColor.copy(alpha = 0.13f)) {
                     Text(
@@ -542,7 +543,7 @@ fun AchievementsCard(achievements: List<ProfileAchievement>) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceLight),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(1.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -555,11 +556,11 @@ fun AchievementsCard(achievements: List<ProfileAchievement>) {
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(if (it.achieved) primaryLight.copy(alpha = 0.11f) else surfaceContainerLight),
+                            .background(if (it.achieved) MaterialTheme.colorScheme.primary.copy(alpha = 0.11f) else MaterialTheme.colorScheme.surfaceContainer),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(it.icon, null, Modifier.size(18.dp),
-                            tint = if (it.achieved) primaryLight else onSurfaceVariantLight.copy(alpha = 0.3f))
+                            tint = if (it.achieved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
@@ -567,19 +568,19 @@ fun AchievementsCard(achievements: List<ProfileAchievement>) {
                             it.title,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 13.sp,
-                            color = if (it.achieved) onBackgroundLight else onSurfaceVariantLight.copy(alpha = 0.45f)
+                            color = if (it.achieved) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
                         )
-                        Text(it.description, fontSize = 12.sp, color = onSurfaceVariantLight)
+                        Text(it.description, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Icon(
                         if (it.achieved) Icons.Default.CheckCircle else Icons.Default.Lock,
                         null,
                         Modifier.size(18.dp),
-                        tint = if (it.achieved) Color(0xFF4CAF50) else onSurfaceVariantLight.copy(alpha = 0.22f)
+                        tint = if (it.achieved) LocalBrainRacerExtendedColors.current.detailGreen else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.22f)
                     )
                 }
                 if (index < achievements.lastIndex) {
-                    HorizontalDivider(color = surfaceContainerLight, thickness = 0.5.dp)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainer, thickness = 0.5.dp)
                 }
             }
         }
@@ -597,7 +598,7 @@ fun ActionsSection(onSignOut: () -> Unit, onDeleteClick: () -> Unit) {
             onClick = onSignOut,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = onSurfaceVariantLight)
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
         ) {
             Icon(Icons.AutoMirrored.Filled.Logout, null, Modifier.size(17.dp))
             Spacer(Modifier.width(8.dp))
@@ -620,7 +621,7 @@ fun ActionsSection(onSignOut: () -> Unit, onDeleteClick: () -> Unit) {
 @Preview(showBackground = true, device = "spec:parent=pixel_5,orientation=portrait")
 @Composable
 fun ProfileScreenPreviewNew() {
-    MaterialTheme {
+    BrainRacerTheme {
         ProfileScreenNew(onNavigateToAuth = {}, userId = "user123", isOwnProfile = true)
     }
 }
@@ -628,7 +629,7 @@ fun ProfileScreenPreviewNew() {
 @Preview(showBackground = true, device = "spec:parent=pixel_5,orientation=portrait")
 @Composable
 fun OtherProfileScreenPreviewNew() {
-    MaterialTheme {
+    BrainRacerTheme {
         ProfileScreenNew(onNavigateToAuth = {}, userId = "user456", isOwnProfile = false)
     }
 }

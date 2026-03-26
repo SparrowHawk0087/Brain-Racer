@@ -1,10 +1,12 @@
 package com.example.brainracer.ui.screens
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,12 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.example.brainracer.domain.entities.User
 import com.example.brainracer.ui.components.BottomBar
 import com.example.brainracer.ui.components.ChallengeFriendQuizSheetContent
@@ -41,9 +43,12 @@ import com.example.brainracer.ui.viewmodels.FriendsViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FriendsScreen(
+    navController: NavController,
     viewModel: FriendsViewModel = viewModel(),
     onHomeClick: () -> Unit = {},
-    onFriendsClick: () -> Unit = {},
+    onLeaderboardClick: () -> Unit = {},
+    onChallengesClick: () -> Unit = {},
+    onQuizzesClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
     currentRoute: String = "friends"
 ) {
@@ -68,7 +73,7 @@ fun FriendsScreen(
     // так мы избегаем лишних emit-ов в ViewModel при каждом нажатии клавиши.
     var searchQuery by remember { mutableStateOf(uiState.searchQuery) }
 
-    val tabs = listOf("My friends", "Incoming", "Outgoing")
+    val tabs = listOf("Мои друзья", "Входящие", "Исходящие")
 
     // Фильтрация на стороне UI (ViewModel уже возвращает полные списки).
     val filteredFriends = uiState.friends.filter {
@@ -106,8 +111,7 @@ fun FriendsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Friends",
-                        fontFamily = FontFamily.SansSerif,
+                        text = "Друзья",
                         fontWeight = FontWeight.Bold,
                         fontSize = 22.sp
                     )
@@ -121,11 +125,13 @@ fun FriendsScreen(
         },
         bottomBar = {
             BottomBar(
-                showBar = true,
-                currentRoute = currentRoute,
-                onHomeClick = onHomeClick,
-                onFriendsClick = onFriendsClick,
-                onProfileClick = onProfileClick
+                showBar              = true,
+                currentRoute         = currentRoute,
+                onHomeClick          = onHomeClick,
+                onLeaderboardClick   = onLeaderboardClick,
+                onChallengesClick    = onChallengesClick,
+                onQuizzesClick       = onQuizzesClick,
+                onProfileClick       = onProfileClick
             )
         },
         containerColor = MaterialTheme.colorScheme.background
@@ -149,11 +155,11 @@ fun FriendsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("Find users…") },
+                placeholder = { Text("Найти пользователей…") },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
+                        contentDescription = "Поиск",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 },
@@ -169,7 +175,7 @@ fun FriendsScreen(
                         }) {
                             Icon(
                                 imageVector = Icons.Default.Clear,
-                                contentDescription = "Clear",
+                                contentDescription = "Очистить",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -187,7 +193,8 @@ fun FriendsScreen(
             if (uiState.isSearching && uiState.searchResults.isNotEmpty()) {
                 SearchResultsList(
                     results = uiState.searchResults,
-                    onSendRequest = { user -> viewModel.sendFriendRequest(user.id) }
+                    onSendRequest = { user -> viewModel.sendFriendRequest(user.id) },
+                    onOpenProfile = { user -> navController.navigate("profile/${user.id}") }
                 )
             } else {
 
@@ -213,7 +220,7 @@ fun FriendsScreen(
                             selected = selectedTab == index,
                             onClick = { selectedTab = index },
                             text = {
-                                // На вкладке «Incoming» показываем счётчик
+                                // На вкладке «Входящие» показываем счётчик
                                 if (index == 1 && incomingBadge > 0) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(title, fontSize = 13.sp)
@@ -237,7 +244,10 @@ fun FriendsScreen(
                             0 -> FriendsTab(
                                 friends = filteredFriends,
                                 onDelete = { friend -> viewModel.removeFriend(friend.id) },
-                                onChallengeFriend = { challengeTargetFriend = it }
+                                onChallengeFriend = { challengeTargetFriend = it },
+                                onOpenProfile = { friend ->
+                                    navController.navigate("profile/${friend.id}")
+                                }
                             )
                             1 -> IncomingRequestsTab(
                                 requests = filteredIncoming,
@@ -246,12 +256,18 @@ fun FriendsScreen(
                                 },
                                 onDecline = { req ->
                                     viewModel.declineFriendRequest(req.id)
+                                },
+                                onOpenProfile = { senderId ->
+                                    navController.navigate("profile/$senderId")
                                 }
                             )
                             2 -> OutgoingRequestsTab(
                                 requests = filteredOutgoing,
                                 onCancel = { req ->
                                     viewModel.cancelOutgoingRequest(req.id)
+                                },
+                                onOpenProfile = { receiverId ->
+                                    navController.navigate("profile/$receiverId")
                                 }
                             )
                         }
@@ -264,7 +280,28 @@ fun FriendsScreen(
                     color = MaterialTheme.colorScheme.surface
                 ) {
                     Button(
-                        onClick = { /* TODO: поделиться ссылкой */ },
+                        onClick = {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "Brain Racer")
+                                putExtra(
+                                    Intent.EXTRA_TEXT,
+                                    "Присоединяйся ко мне в Brain Racer — викторины и дуэли с друзьями!\n" +
+                                            "Приложение: com.example.brainracer"
+                                )
+                            }
+                            try {
+                                context.startActivity(
+                                    Intent.createChooser(shareIntent, "Пригласить друзей")
+                                )
+                            } catch (_: Exception) {
+                                Toast.makeText(
+                                    context,
+                                    "Не удалось открыть окно отправки",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 12.dp)
@@ -281,7 +318,7 @@ fun FriendsScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Invite friends",
+                            text = "Пригласить друзей",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -295,7 +332,7 @@ fun FriendsScreen(
                     modifier = Modifier.padding(16.dp),
                     action = {
                         TextButton(onClick = { viewModel.loadFriends() }) {
-                            Text("Retry")
+                            Text("Повторить")
                         }
                     }
                 ) {
@@ -313,7 +350,8 @@ fun FriendsScreen(
 @Composable
 private fun SearchResultsList(
     results: List<User>,
-    onSendRequest: (User) -> Unit
+    onSendRequest: (User) -> Unit,
+    onOpenProfile: (User) -> Unit
 ) {
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -335,29 +373,36 @@ private fun SearchResultsList(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Аватар-инициалы из никнейма
-                    AvatarCircle(
-                        initials = user.nickname.take(2).uppercase(),
-                        color = MaterialTheme.colorScheme.secondary,
-                        size = 48
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = user.nickname,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurface
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onOpenProfile(user) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AvatarCircle(
+                            initials = user.nickname.take(2).uppercase(),
+                            color = MaterialTheme.colorScheme.secondary,
+                            size = 48
                         )
-                        Text(
-                            text = user.rank.name,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = user.nickname,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = user.rank.displayName,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                     IconButton(onClick = { onSendRequest(user) }) {
                         Icon(
                             imageVector = Icons.Default.PersonAdd,
-                            contentDescription = "Add friend",
+                            contentDescription = "Добавить в друзья",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(22.dp)
                         )
@@ -376,10 +421,11 @@ private fun SearchResultsList(
 private fun FriendsTab(
     friends: List<User>,
     onDelete: (User) -> Unit,
-    onChallengeFriend: (User) -> Unit
+    onChallengeFriend: (User) -> Unit,
+    onOpenProfile: (User) -> Unit
 ) {
     if (friends.isEmpty()) {
-        EmptyState(message = "No friends yet. Find people using the search above!")
+        EmptyState(message = "Пока нет друзей. Найдите людей через поиск выше.")
         return
     }
     LazyColumn(
@@ -388,9 +434,10 @@ private fun FriendsTab(
     ) {
         items(friends, key = { it.id }) { friend ->
             FriendCard(
-                friend     = friend,
-                onDelete   = { onDelete(friend) },
-                onChallenge = { onChallengeFriend(friend) }
+                friend = friend,
+                onDelete = { onDelete(friend) },
+                onChallenge = { onChallengeFriend(friend) },
+                onOpenProfile = { onOpenProfile(friend) }
             )
         }
     }
@@ -400,7 +447,8 @@ private fun FriendsTab(
 private fun FriendCard(
     friend: User,
     onDelete: () -> Unit,
-    onChallenge: () -> Unit
+    onChallenge: () -> Unit,
+    onOpenProfile: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -416,39 +464,55 @@ private fun FriendCard(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AvatarCircle(
-                initials = friend.nickname.take(2).uppercase(),
-                color = MaterialTheme.colorScheme.tertiary,
-                size = 48
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = friend.nickname,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onOpenProfile),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AvatarCircle(
+                    initials = friend.nickname.take(2).uppercase(),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    size = 48
                 )
-                Text(
-                    text = friend.rank.displayName,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = friend.nickname,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = friend.rank.displayName,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-            IconButton(onClick = onChallenge) {
+            val duelShape = RoundedCornerShape(12.dp)
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(duelShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
+                    .clickable(onClick = onChallenge),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
                     imageVector = Icons.Default.Sports,
-                    contentDescription = "Challenge friend",
+                    contentDescription = "Вызвать на дуэль",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(22.dp)
                 )
             }
+            Spacer(modifier = Modifier.width(4.dp))
             IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Icons.Default.PersonRemove,
-                    contentDescription = "Remove friend",
+                    contentDescription = "Удалить из друзей",
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(22.dp)
                 )
@@ -465,10 +529,11 @@ private fun FriendCard(
 private fun IncomingRequestsTab(
     requests: List<FriendRequestUi>,
     onAccept: (FriendRequestUi) -> Unit,
-    onDecline: (FriendRequestUi) -> Unit
+    onDecline: (FriendRequestUi) -> Unit,
+    onOpenProfile: (String) -> Unit
 ) {
     if (requests.isEmpty()) {
-        EmptyState(message = "No incoming requests")
+        EmptyState(message = "Нет входящих заявок")
         return
     }
     LazyColumn(
@@ -479,7 +544,8 @@ private fun IncomingRequestsTab(
             IncomingRequestCard(
                 request = request,
                 onAccept = { onAccept(request) },
-                onDecline = { onDecline(request) }
+                onDecline = { onDecline(request) },
+                onOpenProfile = { onOpenProfile(request.senderId) }
             )
         }
     }
@@ -489,7 +555,8 @@ private fun IncomingRequestsTab(
 private fun IncomingRequestCard(
     request: FriendRequestUi,
     onAccept: () -> Unit,
-    onDecline: () -> Unit
+    onDecline: () -> Unit,
+    onOpenProfile: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -500,7 +567,12 @@ private fun IncomingRequestCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenProfile),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 AvatarCircle(
                     initials = request.senderName.take(2).uppercase(),
                     color = MaterialTheme.colorScheme.secondary,
@@ -515,7 +587,7 @@ private fun IncomingRequestCard(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Wants to be your friend",
+                        text = "Хочет добавиться в друзья",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -539,7 +611,7 @@ private fun IncomingRequestCard(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Accept", fontSize = 13.sp)
+                    Text("Принять", fontSize = 13.sp)
                 }
                 // Отклонить
                 OutlinedButton(
@@ -557,7 +629,7 @@ private fun IncomingRequestCard(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Decline", fontSize = 13.sp)
+                    Text("Отклонить", fontSize = 13.sp)
                 }
             }
         }
@@ -571,10 +643,11 @@ private fun IncomingRequestCard(
 @Composable
 private fun OutgoingRequestsTab(
     requests: List<OutgoingRequestUi>,
-    onCancel: (OutgoingRequestUi) -> Unit
+    onCancel: (OutgoingRequestUi) -> Unit,
+    onOpenProfile: (String) -> Unit
 ) {
     if (requests.isEmpty()) {
-        EmptyState(message = "No outgoing requests")
+        EmptyState(message = "Нет исходящих заявок")
         return
     }
     LazyColumn(
@@ -584,7 +657,8 @@ private fun OutgoingRequestsTab(
         items(requests, key = { it.id }) { request ->
             OutgoingRequestCard(
                 request = request,
-                onCancel = { onCancel(request) }
+                onCancel = { onCancel(request) },
+                onOpenProfile = { onOpenProfile(request.receiverId) }
             )
         }
     }
@@ -593,7 +667,8 @@ private fun OutgoingRequestsTab(
 @Composable
 private fun OutgoingRequestCard(
     request: OutgoingRequestUi,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    onOpenProfile: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -609,30 +684,37 @@ private fun OutgoingRequestCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AvatarCircle(
-                initials = request.receiverName.take(2).uppercase(),
-                color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                size = 48
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = request.receiverName,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
-                    color = MaterialTheme.colorScheme.onSurface
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onOpenProfile),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AvatarCircle(
+                    initials = request.receiverName.take(2).uppercase(),
+                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                    size = 48
                 )
-                Text(
-                    text = "Request pending…",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = request.receiverName,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Заявка отправлена…",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             // Отозвать запрос
             IconButton(onClick = onCancel) {
                 Icon(
                     imageVector = Icons.Default.Cancel,
-                    contentDescription = "Cancel request",
+                    contentDescription = "Отозвать заявку",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(22.dp)
                 )
