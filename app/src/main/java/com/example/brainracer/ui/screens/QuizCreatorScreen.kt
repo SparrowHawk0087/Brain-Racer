@@ -36,6 +36,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.brainracer.domain.entities.QuizDifficulty
+import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.viewmodels.DraftQuestion
 import com.example.brainracer.ui.viewmodels.QuizCreatorViewModel
 import com.example.brainracer.ui.viewmodels.QuizDraft
@@ -45,23 +46,19 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// ─── Палитра ──────────────────────────────────────────────────────────────
-private val CBg       = Color(0xFF0F0F1A)
-private val CCard     = Color(0xFF1A1A2E)
-private val CBorder   = Color(0xFF2A2A3E)
-private val CPurple   = Color(0xFF667EEA)
-private val CGreen    = Color(0xFF3ECFA3)
-private val CRed      = Color(0xFFEA5C7E)
-private val CAmber    = Color(0xFFFFA726)
-private val CTextPri  = Color(0xFFFFFFFF)
-private val CTextSec  = Color(0xFF8B8AAE)
+@Composable
+private fun difficultyColorsMap(): Map<QuizDifficulty, Color> {
+    val ext = LocalBrainRacerExtendedColors.current
+    return remember(ext) {
+        mapOf(
+            QuizDifficulty.EASY to ext.difficultyEasy,
+            QuizDifficulty.MEDIUM to ext.difficultyMedium,
+            QuizDifficulty.HARD to ext.difficultyHard,
+            QuizDifficulty.EXPERT to ext.difficultyExpert,
+        )
+    }
+}
 
-private val diffColors = mapOf(
-    QuizDifficulty.EASY   to Color(0xFF3ECFA3),
-    QuizDifficulty.MEDIUM to Color(0xFF4facfe),
-    QuizDifficulty.HARD   to Color(0xFFf5576c),
-    QuizDifficulty.EXPERT to Color(0xFFFFD700),
-)
 private val diffLabels = mapOf(
     QuizDifficulty.EASY   to "Лёгкий",
     QuizDifficulty.MEDIUM to "Средний",
@@ -72,15 +69,6 @@ private val diffLabels = mapOf(
 private val allCategories = listOf(
     "Кастомные", "География", "История", "Математика",
     "Фильмы и музыка", "Наука", "Спорт"
-)
-
-private val templateGradients = listOf(
-    listOf(Color(0xFF667EEA), Color(0xFF764BA2)),
-    listOf(Color(0xFF4facfe), Color(0xFF00f2fe)),
-    listOf(Color(0xFF43e97b), Color(0xFF38f9d7)),
-    listOf(Color(0xFFfa709a), Color(0xFFfee140)),
-    listOf(Color(0xFFf093fb), Color(0xFFf5576c)),
-    listOf(Color(0xFFa18cd1), Color(0xFFfbc2eb)),
 )
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -116,10 +104,10 @@ fun QuizCreatorScreen(
     }
 
     Scaffold(
-        containerColor = CBg,
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost   = { SnackbarHost(snackbarHost) },
         topBar = {
-            Surface(color = CBg) {
+            Surface(color = MaterialTheme.colorScheme.background) {
                 Column {
                     Row(
                         modifier = Modifier
@@ -130,13 +118,13 @@ fun QuizCreatorScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = CTextPri)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MaterialTheme.colorScheme.onSurface)
                         }
                         Text(
                             "Конструктор",
                             fontWeight = FontWeight.Bold,
                             fontSize   = 18.sp,
-                            color      = CTextPri
+                            color      = MaterialTheme.colorScheme.onSurface
                         )
                         // Кнопка «Сохранить черновик» только на вкладке конструктора
                         if (pagerState.currentPage == 0) {
@@ -145,9 +133,9 @@ fun QuizCreatorScreen(
                                 enabled  = !uiState.isSaving
                             ) {
                                 if (uiState.isSaving)
-                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = CPurple)
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                                 else
-                                    Text("Сохранить", color = CPurple, fontSize = 14.sp)
+                                    Text("Сохранить", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
                             }
                         } else {
                             Spacer(Modifier.width(72.dp))
@@ -157,25 +145,25 @@ fun QuizCreatorScreen(
                     // Вкладки
                     TabRow(
                         selectedTabIndex = pagerState.currentPage,
-                        containerColor   = CBg,
-                        contentColor     = CPurple,
+                        containerColor   = MaterialTheme.colorScheme.background,
+                        contentColor     = MaterialTheme.colorScheme.primary,
                         indicator        = { positions ->
                             if (pagerState.currentPage < positions.size) {
                                 TabRowDefaults.Indicator(
                                     modifier = Modifier.tabIndicatorOffset(positions[pagerState.currentPage])
                                         .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)),
-                                    color    = CPurple, height = 3.dp
+                                    color    = MaterialTheme.colorScheme.primary, height = 3.dp
                                 )
                             }
                         },
-                        divider = { HorizontalDivider(color = CBorder, thickness = 1.dp) }
+                        divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 1.dp) }
                     ) {
                         tabTitles.forEachIndexed { i, title ->
                             Tab(
                                 selected               = pagerState.currentPage == i,
                                 onClick                = { scope.launch { pagerState.animateScrollToPage(i) } },
-                                selectedContentColor   = CPurple,
-                                unselectedContentColor = CTextSec
+                                selectedContentColor   = MaterialTheme.colorScheme.primary,
+                                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                             ) {
                                 Row(
                                     verticalAlignment     = Alignment.CenterVertically,
@@ -261,8 +249,8 @@ private fun ConstructorTab(
                     .fillMaxWidth()
                     .height(160.dp)
                     .clip(RoundedCornerShape(18.dp))
-                    .background(CCard)
-                    .border(1.dp, CBorder, RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(18.dp))
                     .clickable { coverPicker.launch("image/*") },
                 contentAlignment = Alignment.Center
             ) {
@@ -292,15 +280,15 @@ private fun ConstructorTab(
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         if (uiState.uploadingCover) {
-                            CircularProgressIndicator(color = CPurple, modifier = Modifier.size(32.dp))
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                             Spacer(Modifier.height(8.dp))
-                            Text("Загружаем…", color = CTextSec, fontSize = 13.sp)
+                            Text("Загружаем…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                         } else {
                             Icon(Icons.Default.AddPhotoAlternate, null,
-                                tint = CTextSec, modifier = Modifier.size(36.dp))
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(36.dp))
                             Spacer(Modifier.height(8.dp))
-                            Text("Добавить обложку", color = CTextSec, fontSize = 13.sp)
-                            Text("JPEG / PNG / GIF", color = CTextSec.copy(0.6f), fontSize = 11.sp)
+                            Text("Добавить обложку", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                            Text("JPEG / PNG / GIF", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f), fontSize = 11.sp)
                         }
                     }
                 }
@@ -364,7 +352,7 @@ private fun ConstructorTab(
 
         // ── Разделитель ───────────────────────────────────────────────────
         item {
-            HorizontalDivider(color = CBorder)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             Spacer(Modifier.height(4.dp))
             Row(
                 modifier              = Modifier.fillMaxWidth(),
@@ -375,12 +363,12 @@ private fun ConstructorTab(
                     "Вопросы (${draft.questions.size})",
                     fontWeight = FontWeight.Bold,
                     fontSize   = 16.sp,
-                    color      = CTextPri
+                    color      = MaterialTheme.colorScheme.onSurface
                 )
                 TextButton(onClick = { vm.addQuestion() }) {
-                    Icon(Icons.Default.Add, null, tint = CPurple, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Добавить", color = CPurple, fontSize = 13.sp)
+                    Text("Добавить", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
                 }
             }
         }
@@ -405,8 +393,8 @@ private fun ConstructorTab(
                 modifier = Modifier.fillMaxWidth().height(54.dp),
                 shape    = RoundedCornerShape(16.dp),
                 colors   = ButtonDefaults.buttonColors(
-                    containerColor = CPurple,
-                    disabledContainerColor = CBorder
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    disabledContainerColor = MaterialTheme.colorScheme.outline
                 )
             ) {
                 if (uiState.isPublishing) {
@@ -448,8 +436,8 @@ private fun QuestionCard(
 
     Surface(
         shape  = RoundedCornerShape(18.dp),
-        color  = CCard,
-        border = BorderStroke(1.dp, CBorder),
+        color  = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -465,14 +453,14 @@ private fun QuestionCard(
                     modifier = Modifier.weight(1f).clickable { expanded = !expanded }
                 ) {
                     Box(
-                        modifier = Modifier.size(32.dp).clip(CircleShape).background(CPurple.copy(0.18f)),
+                        modifier = Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(0.18f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("${index + 1}", color = CPurple, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("${index + 1}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                     Text(
                         question.text.ifBlank { "Вопрос ${index + 1}" },
-                        color      = if (question.text.isBlank()) CTextSec else CTextPri,
+                        color      = if (question.text.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                         fontSize   = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines   = 1,
@@ -484,12 +472,12 @@ private fun QuestionCard(
                     IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(32.dp)) {
                         Icon(
                             if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            null, tint = CTextSec, modifier = Modifier.size(18.dp)
+                            null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp)
                         )
                     }
                     if (canDelete) {
                         IconButton(onClick = { vm.removeQuestion(index) }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.DeleteOutline, null, tint = CRed, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -516,8 +504,8 @@ private fun QuestionCard(
                             .fillMaxWidth()
                             .height(if (question.imageUrl != null) 140.dp else 52.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(CBg)
-                            .border(1.dp, CBorder, RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.background)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
                             .clickable { imagePicker.launch("image/*") },
                         contentAlignment = Alignment.Center
                     ) {
@@ -536,20 +524,20 @@ private fun QuestionCard(
                                 Icon(Icons.Default.Edit, null, tint = Color.White, modifier = Modifier.size(20.dp))
                             }
                         } else if (isUploading) {
-                            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = CPurple)
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                         } else {
                             Row(
                                 verticalAlignment     = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Icon(Icons.Default.Image, null, tint = CTextSec, modifier = Modifier.size(16.dp))
-                                Text("Добавить фото / GIF (необязательно)", color = CTextSec, fontSize = 12.sp)
+                                Icon(Icons.Default.Image, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                                Text("Добавить фото / GIF (необязательно)", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                             }
                         }
                     }
 
                     // Варианты ответов
-                    Text("Варианты ответов", color = CTextSec, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Text("Варианты ответов", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                     question.options.forEachIndexed { optIndex, opt ->
                         val isCorrect = question.correctIndex == optIndex
                         Row(
@@ -561,10 +549,10 @@ private fun QuestionCard(
                                 modifier = Modifier
                                     .size(28.dp)
                                     .clip(CircleShape)
-                                    .background(if (isCorrect) CGreen.copy(0.2f) else CCard)
+                                    .background(if (isCorrect) LocalBrainRacerExtendedColors.current.detailGreen.copy(0.2f) else MaterialTheme.colorScheme.surface)
                                     .border(
                                         1.5.dp,
-                                        if (isCorrect) CGreen else CBorder,
+                                        if (isCorrect) LocalBrainRacerExtendedColors.current.detailGreen else MaterialTheme.colorScheme.outline,
                                         CircleShape
                                     )
                                     .clickable { vm.setCorrectAnswer(index, optIndex) },
@@ -572,18 +560,18 @@ private fun QuestionCard(
                             ) {
                                 if (isCorrect)
                                     Icon(Icons.Default.Check, null,
-                                        tint = CGreen, modifier = Modifier.size(14.dp))
+                                        tint = LocalBrainRacerExtendedColors.current.detailGreen, modifier = Modifier.size(14.dp))
                             }
 
                             OutlinedTextField(
                                 value         = opt,
                                 onValueChange = { vm.updateOption(index, optIndex, it) },
                                 modifier      = Modifier.weight(1f),
-                                placeholder   = { Text("Вариант ${optIndex + 1}", color = CTextSec, fontSize = 13.sp) },
+                                placeholder   = { Text("Вариант ${optIndex + 1}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) },
                                 singleLine    = true,
                                 shape         = RoundedCornerShape(10.dp),
                                 colors        = creatorFieldColors(),
-                                textStyle     = LocalTextStyle.current.copy(fontSize = 13.sp, color = CTextPri)
+                                textStyle     = LocalTextStyle.current.copy(fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
                             )
 
                             // Удалить вариант
@@ -592,7 +580,7 @@ private fun QuestionCard(
                                     onClick  = { vm.removeOptionFromQuestion(index, optIndex) },
                                     modifier = Modifier.size(28.dp)
                                 ) {
-                                    Icon(Icons.Default.Close, null, tint = CTextSec, modifier = Modifier.size(14.dp))
+                                    Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
                                 }
                             }
                         }
@@ -604,18 +592,18 @@ private fun QuestionCard(
                             onClick  = { vm.addOptionToQuestion(index) },
                             modifier = Modifier.align(Alignment.Start)
                         ) {
-                            Icon(Icons.Default.Add, null, tint = CPurple, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Добавить вариант", color = CPurple, fontSize = 12.sp)
+                            Text("Добавить вариант", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                         }
                     }
 
-                    HorizontalDivider(color = CBorder.copy(0.5f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(0.5f))
 
                     // Баллы + время в строку
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Баллы", color = CTextSec, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text("Баллы", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             Spacer(Modifier.height(4.dp))
                             PointsSelector(
                                 value    = question.points,
@@ -623,7 +611,7 @@ private fun QuestionCard(
                             )
                         }
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Время (сек)", color = CTextSec, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text("Время (сек)", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             Spacer(Modifier.height(4.dp))
                             TimeSlider(
                                 value    = question.timeLimit,
@@ -659,18 +647,18 @@ private fun DraftsTab(
                 modifier = Modifier.padding(32.dp)
             ) {
                 Box(
-                    Modifier.size(72.dp).clip(CircleShape).background(CCard),
+                    Modifier.size(72.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Folder, null, tint = CTextSec, modifier = Modifier.size(32.dp))
+                    Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
                 }
-                Text("Черновиков пока нет", color = CTextPri, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                Text("Черновиков пока нет", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
                 Text("Сохраните незаконченную викторину,\nчтобы вернуться к ней позже",
-                    color = CTextSec, fontSize = 14.sp, textAlign = TextAlign.Center)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = onNewDraft,
-                    colors  = ButtonDefaults.buttonColors(containerColor = CPurple),
+                    colors  = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     shape   = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
@@ -690,7 +678,7 @@ private fun DraftsTab(
         item {
             Text(
                 "Черновики (${drafts.size})",
-                color      = CTextSec,
+                color      = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize   = 13.sp,
                 modifier   = Modifier.padding(bottom = 4.dp)
             )
@@ -712,8 +700,8 @@ private fun DraftCard(
 
     Surface(
         shape    = RoundedCornerShape(16.dp),
-        color    = CCard,
-        border   = BorderStroke(1.dp, CBorder),
+        color    = MaterialTheme.colorScheme.surface,
+        border   = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -722,16 +710,16 @@ private fun DraftCard(
         ) {
             Box(
                 Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
-                    .background(CPurple.copy(0.18f)),
+                    .background(MaterialTheme.colorScheme.primary.copy(0.18f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.EditNote, null, tint = CPurple, modifier = Modifier.size(24.dp))
+                Icon(Icons.Default.EditNote, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     draft.title.ifBlank { "Без названия" },
-                    color      = if (draft.title.isBlank()) CTextSec else CTextPri,
+                    color      = if (draft.title.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
                     fontSize   = 14.sp,
                     maxLines   = 1,
@@ -739,11 +727,11 @@ private fun DraftCard(
                 )
                 Spacer(Modifier.height(3.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("${draft.questions.size} вопр.", color = CTextSec, fontSize = 12.sp)
-                    Text("·", color = CTextSec, fontSize = 12.sp)
-                    Text(draft.categoryId, color = CPurple, fontSize = 12.sp)
-                    Text("·", color = CTextSec, fontSize = 12.sp)
-                    Text(dateStr, color = CTextSec, fontSize = 12.sp)
+                    Text("${draft.questions.size} вопр.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    Text(draft.categoryId, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                    Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    Text(dateStr, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
             }
             Spacer(Modifier.width(8.dp))
@@ -753,10 +741,10 @@ private fun DraftCard(
                     onClick         = onLoad,
                     contentPadding  = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                 ) {
-                    Text("Открыть", color = CPurple, fontSize = 13.sp)
+                    Text("Открыть", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
                 }
                 IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.DeleteOutline, null, tint = CRed, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
                 }
             }
         }
@@ -777,7 +765,7 @@ private fun TemplatesTab(onApply: (com.example.brainracer.ui.viewmodels.QuizTemp
         item {
             Text(
                 "Начните с готового шаблона — заполните только вопросы",
-                color    = CTextSec,
+                color    = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
@@ -794,14 +782,16 @@ private fun TemplateCard(
     colorIndex: Int,
     onApply: () -> Unit
 ) {
+    val templateGradients = LocalBrainRacerExtendedColors.current.cardGradients
+    val diffColors = difficultyColorsMap()
     val gradient = templateGradients[colorIndex % templateGradients.size]
-    val diffColor = diffColors[template.difficulty] ?: CTextSec
+    val diffColor = diffColors[template.difficulty] ?: MaterialTheme.colorScheme.onSurfaceVariant
     val diffLabel = diffLabels[template.difficulty] ?: ""
 
     Surface(
         shape  = RoundedCornerShape(18.dp),
-        color  = CCard,
-        border = BorderStroke(1.dp, CBorder),
+        color  = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -820,15 +810,15 @@ private fun TemplateCard(
             Spacer(Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(template.title, color = CTextPri, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(template.title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 Spacer(Modifier.height(4.dp))
-                Text(template.description, color = CTextSec, fontSize = 12.sp, maxLines = 2)
+                Text(template.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 2)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    InfoChip("${template.questionCount} вопр.", CTextSec)
-                    InfoChip("${template.timePerQuestion}с", CTextSec)
+                    InfoChip("${template.questionCount} вопр.", MaterialTheme.colorScheme.onSurfaceVariant)
+                    InfoChip("${template.timePerQuestion}с", MaterialTheme.colorScheme.onSurfaceVariant)
                     InfoChip(diffLabel, diffColor)
-                    InfoChip("${template.defaultPoints}★", CAmber)
+                    InfoChip("${template.defaultPoints}★", LocalBrainRacerExtendedColors.current.statusOrange)
                 }
             }
 
@@ -836,7 +826,7 @@ private fun TemplateCard(
 
             Button(
                 onClick = onApply,
-                colors  = ButtonDefaults.buttonColors(containerColor = CPurple),
+                colors  = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape   = RoundedCornerShape(10.dp),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
             ) {
@@ -854,7 +844,7 @@ private fun TemplateCard(
 private fun SectionLabel(text: String) {
     Text(
         text,
-        color      = CTextSec,
+        color      = MaterialTheme.colorScheme.onSurfaceVariant,
         fontSize   = 12.sp,
         fontWeight = FontWeight.Medium,
         modifier   = Modifier.padding(bottom = 6.dp)
@@ -873,13 +863,13 @@ private fun CreatorTextField(
         value         = value,
         onValueChange = { if (it.length <= maxLength) onValueChange(it) },
         modifier      = Modifier.fillMaxWidth(),
-        placeholder   = { Text(placeholder, color = CTextSec, fontSize = 14.sp) },
+        placeholder   = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp) },
         maxLines      = maxLines,
         shape         = RoundedCornerShape(12.dp),
         colors        = creatorFieldColors(),
-        textStyle     = LocalTextStyle.current.copy(fontSize = 14.sp, color = CTextPri),
+        textStyle     = LocalTextStyle.current.copy(fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface),
         suffix        = if (maxLines > 1) {
-            { Text("${value.length}/$maxLength", color = CTextSec, fontSize = 11.sp) }
+            { Text("${value.length}/$maxLength", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp) }
         } else null,
         keyboardOptions = KeyboardOptions(imeAction = if (maxLines == 1) ImeAction.Next else ImeAction.Default)
     )
@@ -887,13 +877,13 @@ private fun CreatorTextField(
 
 @Composable
 private fun creatorFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor      = CPurple,
-    unfocusedBorderColor    = CBorder,
-    focusedContainerColor   = CCard,
-    unfocusedContainerColor = CCard,
-    focusedTextColor        = CTextPri,
-    unfocusedTextColor      = CTextPri,
-    cursorColor             = CPurple
+    focusedBorderColor      = MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor    = MaterialTheme.colorScheme.outline,
+    focusedContainerColor   = MaterialTheme.colorScheme.surface,
+    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+    focusedTextColor        = MaterialTheme.colorScheme.onSurface,
+    unfocusedTextColor      = MaterialTheme.colorScheme.onSurface,
+    cursorColor             = MaterialTheme.colorScheme.primary
 )
 
 @Composable
@@ -903,23 +893,23 @@ private fun CategoryDropdown(selected: String, onSelect: (String) -> Unit) {
         OutlinedButton(
             onClick = { expanded = true },
             shape   = RoundedCornerShape(12.dp),
-            border  = BorderStroke(1.dp, if (expanded) CPurple else CBorder),
-            colors  = ButtonDefaults.outlinedButtonColors(containerColor = CCard),
+            border  = BorderStroke(1.dp, if (expanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
+            colors  = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface),
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp)
         ) {
-            Text(selected, color = CTextPri, fontSize = 13.sp, modifier = Modifier.weight(1f),
+            Text(selected, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, modifier = Modifier.weight(1f),
                 overflow = TextOverflow.Ellipsis, maxLines = 1)
-            Icon(Icons.Default.ArrowDropDown, null, tint = CTextSec, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.ArrowDropDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
         }
         DropdownMenu(
             expanded         = expanded,
             onDismissRequest = { expanded = false },
-            modifier         = Modifier.background(CCard)
+            modifier         = Modifier.background(MaterialTheme.colorScheme.surface)
         ) {
             allCategories.forEach { cat ->
                 DropdownMenuItem(
-                    text    = { Text(cat, color = if (cat == selected) CPurple else CTextPri, fontSize = 14.sp) },
+                    text    = { Text(cat, color = if (cat == selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, fontSize = 14.sp) },
                     onClick = { onSelect(cat); expanded = false }
                 )
             }
@@ -930,28 +920,29 @@ private fun CategoryDropdown(selected: String, onSelect: (String) -> Unit) {
 @Composable
 private fun DifficultyDropdown(selected: QuizDifficulty, onSelect: (QuizDifficulty) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    val color = diffColors[selected] ?: CTextSec
+    val diffColors = difficultyColorsMap()
+    val color = diffColors[selected] ?: MaterialTheme.colorScheme.onSurfaceVariant
     Box {
         OutlinedButton(
             onClick = { expanded = true },
             shape   = RoundedCornerShape(12.dp),
-            border  = BorderStroke(1.dp, if (expanded) color else CBorder),
-            colors  = ButtonDefaults.outlinedButtonColors(containerColor = CCard),
+            border  = BorderStroke(1.dp, if (expanded) color else MaterialTheme.colorScheme.outline),
+            colors  = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface),
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp)
         ) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(color))
             Spacer(Modifier.width(6.dp))
             Text(diffLabels[selected] ?: "", color = color, fontSize = 13.sp, modifier = Modifier.weight(1f))
-            Icon(Icons.Default.ArrowDropDown, null, tint = CTextSec, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.ArrowDropDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
         }
         DropdownMenu(
             expanded         = expanded,
             onDismissRequest = { expanded = false },
-            modifier         = Modifier.background(CCard)
+            modifier         = Modifier.background(MaterialTheme.colorScheme.surface)
         ) {
             QuizDifficulty.entries.forEach { diff ->
-                val dc = diffColors[diff] ?: CTextSec
+                val dc = diffColors[diff] ?: MaterialTheme.colorScheme.onSurfaceVariant
                 DropdownMenuItem(
                     leadingIcon = {
                         Box(Modifier.size(8.dp).clip(CircleShape).background(dc))
@@ -971,14 +962,14 @@ private fun TimeSlider(value: Int, min: Int, max: Int, step: Int, onChange: (Int
             modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("$min с", color = CTextSec, fontSize = 11.sp)
+            Text("$min с", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
             Text(
                 "$value с",
-                color      = CPurple,
+                color      = MaterialTheme.colorScheme.primary,
                 fontSize   = 13.sp,
                 fontWeight = FontWeight.Bold
             )
-            Text("$max с", color = CTextSec, fontSize = 11.sp)
+            Text("$max с", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
         }
         Slider(
             value         = value.toFloat(),
@@ -986,9 +977,9 @@ private fun TimeSlider(value: Int, min: Int, max: Int, step: Int, onChange: (Int
             valueRange    = min.toFloat()..max.toFloat(),
             steps         = (max - min) / step - 1,
             colors        = SliderDefaults.colors(
-                thumbColor        = CPurple,
-                activeTrackColor  = CPurple,
-                inactiveTrackColor = CBorder
+                thumbColor        = MaterialTheme.colorScheme.primary,
+                activeTrackColor  = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.outline
             )
         )
     }
@@ -1002,8 +993,8 @@ private fun PointsSelector(value: Int, onChange: (Int) -> Unit) {
             val isSelected = pts == value
             Surface(
                 shape    = RoundedCornerShape(10.dp),
-                color    = if (isSelected) CPurple.copy(0.2f) else CCard,
-                border   = BorderStroke(1.dp, if (isSelected) CPurple else CBorder),
+                color    = if (isSelected) MaterialTheme.colorScheme.primary.copy(0.2f) else MaterialTheme.colorScheme.surface,
+                border   = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
                 modifier = Modifier.clickable { onChange(pts) }
             ) {
                 Row(
@@ -1011,9 +1002,9 @@ private fun PointsSelector(value: Int, onChange: (Int) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    Text("$pts", color = if (isSelected) CPurple else CTextSec,
+                    Text("$pts", color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Text("★", color = CAmber, fontSize = 11.sp)
+                    Text("★", color = LocalBrainRacerExtendedColors.current.statusOrange, fontSize = 11.sp)
                 }
             }
         }
