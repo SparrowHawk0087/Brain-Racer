@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Quiz
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Sports
 import androidx.compose.material.icons.filled.Star
@@ -43,6 +44,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -62,28 +64,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.brainracer.data.local.QuizOfflineCache
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.QuizDifficulty
+import com.example.brainracer.ui.theme.BrainRacerColorTokens
+import com.example.brainracer.ui.theme.BrainRacerExtendedColors
+import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 
-// ─── Палитра (совпадает с HomeScreen) ──────────────────────────────────────
-private val DbBg       = Color(0xFF12111A)
-private val DbCard     = Color(0xFF1E1D2B)
-private val DbCardAlt  = Color(0xFF25243A)
-private val DbPurple   = Color(0xFF7C6FCD)
-private val DbBlue     = Color(0xFF4F9CF9)
-private val DbGreen    = Color(0xFF3ECFA3)
-private val DbOrange   = Color(0xFFF97B3E)
-private val DbTextPri  = Color(0xFFF0EFFF)
-private val DbTextSec  = Color(0xFF8B8AAE)
-
-private fun difficultyColor(d: QuizDifficulty): Color = when (d) {
-    QuizDifficulty.EASY   -> Color(0xFF3ECFA3)
-    QuizDifficulty.MEDIUM -> Color(0xFF4F9CF9)
-    QuizDifficulty.HARD   -> Color(0xFFF97B3E)
-    QuizDifficulty.EXPERT -> Color(0xFFEA5C7E)
+private fun difficultyColor(d: QuizDifficulty, ext: BrainRacerExtendedColors, error: Color): Color = when (d) {
+    QuizDifficulty.EASY   -> ext.detailGreen
+    QuizDifficulty.MEDIUM -> ext.detailBlue
+    QuizDifficulty.HARD   -> ext.detailOrange
+    QuizDifficulty.EXPERT -> error
 }
 
 private fun difficultyLabel(d: QuizDifficulty): String = when (d) {
@@ -98,7 +93,7 @@ private fun difficultyLabel(d: QuizDifficulty): String = when (d) {
 fun QuizDetailScreen(
     quizId: String,
     navController: NavController,
-    onStartQuiz: (String) -> Unit = {}
+    onNavigateToPlay: (quizId: String, practice: Boolean) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -115,7 +110,10 @@ fun QuizDetailScreen(
             val result = quizRepository.getQuiz(quizId)
             quiz = result.let {
                 when (it) {
-                    is com.example.brainracer.data.utils.Result.Success -> it.data
+                    is com.example.brainracer.data.utils.Result.Success -> {
+                        QuizOfflineCache.save(it.data)
+                        it.data
+                    }
                     else -> null
                 }
             }
@@ -124,7 +122,7 @@ fun QuizDetailScreen(
     }
 
     Scaffold(
-        containerColor = DbBg,
+        containerColor = LocalBrainRacerExtendedColors.current.detailBackground,
         topBar = {
             TopAppBar(
                 title = {},
@@ -134,19 +132,19 @@ fun QuizDetailScreen(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(DbCard),
+                                .background(LocalBrainRacerExtendedColors.current.detailSurface),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Назад",
-                                tint = DbTextPri,
+                                tint = LocalBrainRacerExtendedColors.current.detailTextPrimary,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DbBg),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = LocalBrainRacerExtendedColors.current.detailBackground),
                 modifier = Modifier.windowInsetsPadding(WindowInsets.systemBars)
             )
         }
@@ -154,12 +152,12 @@ fun QuizDetailScreen(
         when {
             isLoading -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = DbPurple)
+                    CircularProgressIndicator(color = LocalBrainRacerExtendedColors.current.detailAccentPurple)
                 }
             }
             quiz == null -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Викторина не найдена", color = DbTextSec)
+                    Text("Викторина не найдена", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             else -> {
@@ -189,7 +187,8 @@ fun QuizDetailScreen(
                     item {
                         QuizActionsSection(
                             quizTitle = q.title,
-                            onStart = { onStartQuiz(quizId) },
+                            onStart = { onNavigateToPlay(quizId, false) },
+                            onPractice = { onNavigateToPlay(quizId, true) },
                             onChallenge = { showFriendDialog = true },
                             onShare = {
                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -215,19 +214,19 @@ fun QuizDetailScreen(
     if (showFriendDialog) {
         AlertDialog(
             onDismissRequest = { showFriendDialog = false },
-            containerColor = DbCard,
+            containerColor = LocalBrainRacerExtendedColors.current.detailSurface,
             shape = RoundedCornerShape(20.dp),
             title = {
                 Text(
                     "Бросить вызов",
-                    color = DbTextPri,
+                    color = LocalBrainRacerExtendedColors.current.detailTextPrimary,
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Text(
                     "Выберите друга, которому хотите бросить вызов в викторине «${quiz?.title}».\n\nФункция доступна на экране «Друзья» → выберите друга → «Вызвать».",
-                    color = DbTextSec,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 14.sp,
                     lineHeight = 21.sp
                 )
@@ -237,12 +236,12 @@ fun QuizDetailScreen(
                     showFriendDialog = false
                     navController.navigate("friends/$currentUserId")
                 }) {
-                    Text("Перейти к друзьям", color = DbPurple, fontWeight = FontWeight.SemiBold)
+                    Text("Перейти к друзьям", color = LocalBrainRacerExtendedColors.current.detailAccentPurple, fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showFriendDialog = false }) {
-                    Text("Отмена", color = DbTextSec)
+                    Text("Отмена", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         )
@@ -256,7 +255,7 @@ fun QuizDetailScreen(
 @Composable
 private fun QuizCoverSection(quiz: Quiz) {
     val gradient = Brush.verticalGradient(
-        listOf(Color(0xFF6C63FF), Color(0xFF3ECFA3))
+        listOf(BrainRacerColorTokens.DetailHeroGradientStart, BrainRacerColorTokens.DetailGreen)
     )
 
     Box(
@@ -328,7 +327,7 @@ private fun QuizInfoSection(quiz: Quiz) {
     ) {
         Text(
             quiz.title,
-            color = DbTextPri,
+            color = LocalBrainRacerExtendedColors.current.detailTextPrimary,
             fontWeight = FontWeight.Bold,
             fontSize = 22.sp,
             lineHeight = 30.sp
@@ -340,22 +339,26 @@ private fun QuizInfoSection(quiz: Quiz) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             InfoBadge(
                 label = difficultyLabel(quiz.difficulty),
-                color = difficultyColor(quiz.difficulty)
+                color = difficultyColor(
+                    quiz.difficulty,
+                    LocalBrainRacerExtendedColors.current,
+                    MaterialTheme.colorScheme.error
+                )
             )
             InfoBadge(
                 label = "${quiz.questions.size} вопросов",
-                color = DbBlue
+                color = LocalBrainRacerExtendedColors.current.detailBlue
             )
             InfoBadge(
                 label = "${quiz.timePerQuestion}с/вопрос",
-                color = DbOrange
+                color = LocalBrainRacerExtendedColors.current.detailOrange
             )
         }
 
         Spacer(Modifier.height(18.dp))
 
         // Разделитель
-        HorizontalDivider(color = DbCardAlt, thickness = 1.dp)
+        HorizontalDivider(color = LocalBrainRacerExtendedColors.current.detailSurfaceAlt, thickness = 1.dp)
 
         Spacer(Modifier.height(16.dp))
 
@@ -402,10 +405,10 @@ private fun InfoBadge(label: String, color: Color) {
 @Composable
 private fun StatItem(icon: androidx.compose.ui.graphics.vector.ImageVector, value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(icon, contentDescription = null, tint = DbPurple, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = null, tint = LocalBrainRacerExtendedColors.current.detailAccentPurple, modifier = Modifier.size(20.dp))
         Spacer(Modifier.height(4.dp))
-        Text(value, color = DbTextPri, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        Text(label, color = DbTextSec, fontSize = 11.sp)
+        Text(value, color = LocalBrainRacerExtendedColors.current.detailTextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
     }
 }
 
@@ -424,19 +427,19 @@ private fun QuizDescriptionSection(description: String) {
     ) {
         Text(
             "Описание",
-            color = DbTextPri,
+            color = LocalBrainRacerExtendedColors.current.detailTextPrimary,
             fontWeight = FontWeight.SemiBold,
             fontSize = 16.sp
         )
         Spacer(Modifier.height(8.dp))
         Surface(
             shape = RoundedCornerShape(16.dp),
-            color = DbCard,
+            color = LocalBrainRacerExtendedColors.current.detailSurface,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
                 description,
-                color = DbTextSec,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 14.sp,
                 lineHeight = 21.sp,
                 modifier = Modifier.padding(16.dp)
@@ -453,6 +456,7 @@ private fun QuizDescriptionSection(description: String) {
 private fun QuizActionsSection(
     quizTitle: String,
     onStart: () -> Unit,
+    onPractice: () -> Unit,
     onChallenge: () -> Unit,
     onShare: () -> Unit
 ) {
@@ -470,7 +474,7 @@ private fun QuizActionsSection(
                 .height(56.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = DbPurple
+                containerColor = LocalBrainRacerExtendedColors.current.detailAccentPurple
             )
         ) {
             Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -482,6 +486,26 @@ private fun QuizActionsSection(
             )
         }
 
+        OutlinedButton(
+            onClick = onPractice,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = LocalBrainRacerExtendedColors.current.detailBlue
+            ),
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, LocalBrainRacerExtendedColors.current.detailBlue)
+        ) {
+            Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "Тренировка (без зачёта)",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp
+            )
+        }
+
         // Бросить вызов другу
         OutlinedButton(
             onClick = onChallenge,
@@ -490,9 +514,9 @@ private fun QuizActionsSection(
                 .height(52.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = DbGreen
+                contentColor = LocalBrainRacerExtendedColors.current.detailGreen
             ),
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, DbGreen)
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, LocalBrainRacerExtendedColors.current.detailGreen)
         ) {
             Icon(Icons.Default.Sports, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
@@ -511,9 +535,9 @@ private fun QuizActionsSection(
                 .height(48.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = DbTextSec
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
             ),
-            border = androidx.compose.foundation.BorderStroke(1.dp, DbCardAlt)
+            border = androidx.compose.foundation.BorderStroke(1.dp, LocalBrainRacerExtendedColors.current.detailSurfaceAlt)
         ) {
             Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
