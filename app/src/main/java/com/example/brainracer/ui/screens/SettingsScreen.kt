@@ -1,153 +1,188 @@
 package com.example.brainracer.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.brainracer.ui.theme.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
+import com.example.brainracer.data.preferences.ProfilePrivacyOption
+import com.example.brainracer.data.preferences.UserPreferencesRepository
+import com.example.brainracer.ui.viewmodels.AuthViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
-    var notificationsEnabled by remember { mutableStateOf(true) }
-    var soundEnabled by remember { mutableStateOf(true) }
-    var darkModeEnabled by remember { mutableStateOf(false) }
+fun SettingsScreen(
+    navController: NavController,
+    authViewModel: AuthViewModel = viewModel()
+) {
+    val context = LocalContext.current
+    val prefsRepo = remember { UserPreferencesRepository(context) }
+    val scope = rememberCoroutineScope()
 
-
-    val backgroundColor = backgroundLight
-    val textColor = onBackgroundLight
-    val surfaceColor = surfaceLight
-    val surfaceVariantColor = surfaceVariantLight
-    val outlineColor = outlineLight
-    val primaryColor = primaryLight
-    val onPrimaryColor = onPrimaryLight
+    val darkEnabled by prefsRepo.darkTheme.collectAsStateWithLifecycle(initialValue = false)
+    val notificationsEnabled by prefsRepo.notificationsEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val privacy by prefsRepo.privacyOption.collectAsStateWithLifecycle(initialValue = ProfilePrivacyOption.EVERYONE)
+    val cs = MaterialTheme.colorScheme
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = backgroundColor,
+        containerColor = cs.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "Настройки",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = textColor
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(cs.background)
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Назад",
+                        tint = cs.onBackground
                     )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = backgroundColor
+                }
+                Text(
+                    "Настройки",
+                    color = cs.onBackground,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
                 )
-            )
+            }
         }
-    ) { paddingValues ->
+    ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
-            contentPadding = PaddingValues(16.dp)
+                .padding(padding)
+                .background(cs.background),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             item {
-                SettingsSectionTitle("Аккаунт", textColor)
-            }
-            item {
-                SettingsItem(Icons.Default.Person, "Личные данные", surfaceColor, textColor, outlineColor, primaryColor)
-                SettingsItem(Icons.Default.Lock, "Безопасность", surfaceColor, textColor, outlineColor, primaryColor)
-                SettingsItem(Icons.Default.Payment, "Подписка", surfaceColor, textColor, outlineColor, primaryColor)
-            }
-
-
-            item {
-                SettingsSectionTitle("Уведомления", textColor)
-            }
-            item {
-                SettingsSwitchItem(
-                    icon = Icons.Default.Notifications,
-                    label = "Push-уведомления",
-                    checked = notificationsEnabled,
-                    onCheckedChange = { notificationsEnabled = it },
-                    surfaceColor = surfaceColor,
-                    textColor = textColor,
-                    primaryColor = primaryColor
-                )
-                SettingsSwitchItem(
-                    icon = Icons.Default.Email,
-                    label = "Email рассылка",
-                    checked = true,
-                    onCheckedChange = {},
-                    surfaceColor = surfaceColor,
-                    textColor = textColor,
-                    primaryColor = primaryColor
-                )
+                Column {
+                    SectionTitle("Оформление и уведомления")
+                    CardBlock {
+                        SettingsSwitchRow(
+                            icon = Icons.Default.DarkMode,
+                            label = "Тёмная тема",
+                            checked = darkEnabled,
+                            onCheckedChange = { v ->
+                                scope.launch { prefsRepo.setDarkTheme(v) }
+                            }
+                        )
+                        HorizontalDivider(color = cs.outline, thickness = 1.dp)
+                        SettingsSwitchRow(
+                            icon = Icons.Default.Notifications,
+                            label = "Уведомления",
+                            checked = notificationsEnabled,
+                            onCheckedChange = { v ->
+                                scope.launch { prefsRepo.setNotificationsEnabled(v) }
+                            }
+                        )
+                    }
+                }
             }
 
-            // Раздел: Приложение
             item {
-                SettingsSectionTitle("Приложение", textColor)
-            }
-            item {
-                SettingsSwitchItem(
-                    icon = Icons.Default.Palette,
-                    label = "Темная тема",
-                    checked = darkModeEnabled,
-                    onCheckedChange = { darkModeEnabled = it },
-                    surfaceColor = surfaceColor,
-                    textColor = textColor,
-                    primaryColor = primaryColor
-                )
-                SettingsSwitchItem(
-                    icon = Icons.Default.VolumeUp,
-                    label = "Звуковые эффекты",
-                    checked = soundEnabled,
-                    onCheckedChange = { soundEnabled = it },
-                    surfaceColor = surfaceColor,
-                    textColor = textColor,
-                    primaryColor = primaryColor
-                )
-                SettingsItem(Icons.Default.Language, "Язык", surfaceColor, textColor, outlineColor, primaryColor)
-                SettingsItem(Icons.Default.Info, "О приложении", surfaceColor, textColor, outlineColor, primaryColor)
+                Column {
+                    SectionTitle("Приватность профиля")
+                    CardBlock {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Visibility,
+                                contentDescription = null,
+                                tint = cs.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(Modifier.width(16.dp))
+                            Text(
+                                "Кто видит ваш профиль",
+                                color = cs.onSurface,
+                                fontSize = 15.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        ProfilePrivacyOption.entries.forEach { option ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        scope.launch { prefsRepo.setPrivacyOption(option) }
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = privacy == option,
+                                    onClick = {
+                                        scope.launch { prefsRepo.setPrivacyOption(option) }
+                                    },
+                                    colors = RadioButtonDefaults.colors(
+                                        selectedColor = cs.primary,
+                                        unselectedColor = cs.onSurfaceVariant
+                                    )
+                                )
+                                Text(
+                                    option.labelRu,
+                                    color = cs.onSurface,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier.padding(start = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
-
             item {
-                Spacer(modifier = Modifier.height(24.dp))
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { /* Выход */ },
-                    shape = RoundedCornerShape(12.dp),
-                    color = errorContainerLight
-                ) {
-                    Row(
+                Column {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            authViewModel.signOut()
+                            navController.navigate("auth") {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.Center
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = cs.error),
+                        border = BorderStroke(1.dp, cs.error.copy(0.65f))
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Logout,
-                            contentDescription = "Logout",
-                            tint = errorLight
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Выйти",
-                            color = errorLight,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = cs.error)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Выйти", fontWeight = FontWeight.SemiBold, color = cs.error)
                     }
                 }
             }
@@ -156,125 +191,56 @@ fun SettingsScreen() {
 }
 
 @Composable
-fun SettingsSectionTitle(title: String, textColor: Color) {
+private fun SectionTitle(text: String) {
     Text(
-        text = title,
-        fontSize = 14.sp,
+        text = text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 13.sp,
         fontWeight = FontWeight.SemiBold,
-        color = onSurfaceVariantLight,
-        modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp)
+        modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
     )
 }
 
 @Composable
-fun SettingsItem(
-    icon: ImageVector,
-    label: String,
-    surfaceColor: Color,
-    textColor: Color,
-    outlineColor: Color,
-    primaryColor: Color
-) {
-    Surface(
+private fun CardBlock(content: @Composable ColumnScope.() -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { },
-        shape = RoundedCornerShape(12.dp),
-        color = surfaceColor,
-        shadowElevation = 1.dp
+            .clip(RoundedCornerShape(16.dp))
+            .background(cs.surface)
+            .border(1.dp, cs.primary.copy(0.25f), RoundedCornerShape(16.dp))
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = primaryColor,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = label,
-                fontSize = 16.sp,
-                color = textColor,
-                modifier = Modifier.weight(1f)
-            )
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = "Navigate",
-                tint = outlineColor,
-                modifier = Modifier.size(20.dp)
-            )
-        }
+        content()
     }
-    Spacer(modifier = Modifier.height(8.dp))
 }
 
 @Composable
-fun SettingsSwitchItem(
+private fun SettingsSwitchRow(
     icon: ImageVector,
     label: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    surfaceColor: Color,
-    textColor: Color,
-    primaryColor: Color
+    onCheckedChange: (Boolean) -> Unit
 ) {
-    Surface(
+    val cs = MaterialTheme.colorScheme
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) },
-        shape = RoundedCornerShape(12.dp),
-        color = surfaceColor,
-        shadowElevation = 1.dp
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = primaryColor,
-                modifier = Modifier.size(24.dp)
+        Icon(icon, contentDescription = null, tint = cs.primary, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(16.dp))
+        Text(label, color = cs.onSurface, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = cs.primary,
+                uncheckedThumbColor = cs.onSurfaceVariant,
+                uncheckedTrackColor = cs.outline
             )
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = label,
-                fontSize = 16.sp,
-                color = textColor,
-                modifier = Modifier.weight(1f)
-            )
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = onPrimaryLight,
-                    checkedTrackColor = primaryLight,
-                    uncheckedThumbColor = surfaceContainerLowestLight,
-                    uncheckedTrackColor = outlineLight
-                )
-            )
-        }
+        )
     }
-    Spacer(modifier = Modifier.height(8.dp))
-}
-
-@Preview(showBackground = true, showSystemUi = true, name = "Settings Light")
-@Composable
-fun SettingsScreenPreview() {
-    MaterialTheme {
-        SettingsScreen()
-    }
-}
-
-@Preview(showBackground = true, showSystemUi = true, name = "Settings Dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
-@Composable
-fun SettingsScreenPreviewDark() {
-    SettingsScreen()
 }
