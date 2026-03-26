@@ -147,6 +147,21 @@ class QuizRepositoryImpl: QuizRepository {
         Result.error(e)
     }
 
+    override suspend fun getRecentResultsForUser(userId: String, limit: Int): Result<List<ChallengeResult>> = try {
+        val res = quizResultsCollection
+            .whereEqualTo("userId", userId)
+            .orderBy("completedAt", Query.Direction.DESCENDING)
+            .limit(limit.toLong())
+            .get()
+            .await()
+        val list = res.documents.mapNotNull { doc ->
+            doc.toObject(ChallengeResult::class.java)?.copy(id = doc.id)
+        }
+        Result.success(list)
+    } catch (e: Exception) {
+        Result.error(e)
+    }
+
     // Запись результатов прохождения квиза с поддержкой вызовов
     override suspend fun recordQuizResult(quizResult: ChallengeResult): Result<Unit> {
         return try {

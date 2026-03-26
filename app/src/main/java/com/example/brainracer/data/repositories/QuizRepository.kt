@@ -21,5 +21,7 @@ interface QuizRepository {
     suspend fun deleteQuiz(quizId: String): Result<Unit>
     suspend fun searchQuizzes(query: String, category: String? = null): Result<List<Quiz>>
     suspend fun recordQuizResult(quizResult: ChallengeResult): Result<Unit>
+    //Требует индекс Firestore: collection `quiz_results` — поля `userId` (Ascending) + `completedAt` (Descending), если подскажет консоль.
+    suspend fun getRecentResultsForUser(userId: String, limit: Int = 40): Result<List<ChallengeResult>>
     suspend fun getPopularQuizzes(limit: Int = 10): Result<List<Quiz>>
 }
