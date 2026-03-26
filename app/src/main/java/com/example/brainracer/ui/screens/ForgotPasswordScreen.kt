@@ -2,20 +2,24 @@ package com.example.brainracer.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,12 +31,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.brainracer.ui.theme.BrainRacerColorTokens
 import com.example.brainracer.ui.theme.BrainRacerTheme
-import com.example.brainracer.ui.theme.ButtonShapeLarge
-import com.example.brainracer.ui.theme.Shapes
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import kotlinx.coroutines.delay
 
@@ -47,10 +53,8 @@ fun ForgotPasswordScreen(
     var email by rememberSaveable { mutableStateOf("") }
     var emailValidationMessage by remember { mutableStateOf("") }
     var isCheckingEmail by remember { mutableStateOf(false) }
-
     val context = LocalContext.current
 
-    // Асинхронная проверка email с debounce
     LaunchedEffect(email) {
         if (email.isNotBlank()) {
             emailValidationMessage = ""
@@ -66,81 +70,95 @@ fun ForgotPasswordScreen(
 
     val isEmailValid = emailValidationMessage == "Success"
 
-    Column(
-        modifier = modifier.fillMaxSize()
-            .background(MaterialTheme.colorScheme.secondary),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(AuthBgBlack)
+            .windowInsetsPadding(WindowInsets.statusBars)
     ) {
+        IconButton(
+            onClick = onNavigateBack,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 8.dp, top = 4.dp)
+                .size(48.dp)
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = AuthTextPrimary
+            )
+        }
+
         Column(
-            modifier = modifier.fillMaxWidth(0.8f),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 28.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = "Forgot Password",
-                color = MaterialTheme.colorScheme.onPrimary,
-                style = MaterialTheme.typography.displayLarge,
-                modifier = Modifier.padding(8.dp),
-            )
-
-            Spacer(modifier = Modifier.padding(8.dp))
-
-            Text(
-                text = "Enter your email to reset your password",
-                color = MaterialTheme.colorScheme.onPrimary,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(8.dp),
-            )
-
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text(
-                    text = "Email",
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    style = MaterialTheme.typography.bodyLarge
-                ) },
-                placeholder = { Text(
-                    text = "Enter your email",
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    style = MaterialTheme.typography.labelSmall
-                ) },
-                singleLine = true,
-                leadingIcon = { Icon(
-                    Icons.Default.Email,
-                    contentDescription = "Email",
-                    tint = MaterialTheme.colorScheme.onPrimary
-                ) },
-                isError = email.isNotBlank() && !isEmailValid && emailValidationMessage.isNotEmpty(),
-                supportingText = {
-                    if (emailValidationMessage.isNotEmpty()) {
-                        Text(
-                            text = emailValidationMessage,
-                            color = MaterialTheme.colorScheme.inverseOnSurface,
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    } else if (isCheckingEmail) {
-                        Text(
-                            text = "Checking email...",
-                            color = MaterialTheme.colorScheme.inverseOnSurface,
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                },
-                shape = Shapes.small,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.onPrimary,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onPrimary,
-                    focusedTextColor = MaterialTheme.colorScheme.onPrimary,
-                    errorTextColor = MaterialTheme.colorScheme.error
-                ),
+                color = AuthTextPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.padding(8.dp))
+            Spacer(Modifier.height(20.dp))
 
-            Button(
+            Text(
+                text = "Enter your email to receive a password reset link",
+                color = AuthPlaceholder,
+                fontSize = 15.sp,
+                lineHeight = 22.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(28.dp))
+
+            AuthStyledTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = "Email",
+                placeholder = "Enter your email",
+                isError = email.isNotBlank() && !isEmailValid && emailValidationMessage.isNotEmpty(),
+                trailingIcon = if (isCheckingEmail) {
+                    {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = AuthGradientEnd
+                        )
+                    }
+                } else null,
+                supportingText = {
+                    when {
+                        emailValidationMessage.isNotEmpty() -> {
+                            Text(
+                                text = emailValidationMessage,
+                                fontSize = 12.sp,
+                                color = if (isEmailValid) AuthPlaceholder else BrainRacerColorTokens.InputValidationError
+                            )
+                        }
+                        isCheckingEmail -> {
+                            Text(
+                                text = "Checking email...",
+                                fontSize = 12.sp,
+                                color = AuthPlaceholder
+                            )
+                        }
+                    }
+                }
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            AuthGradientButton(
+                text = "Send Reset Link",
                 onClick = {
                     if (isEmailValid) {
                         authViewModel.sendPasswordResetEmail(email)
@@ -150,30 +168,8 @@ fun ForgotPasswordScreen(
                     }
                 },
                 enabled = isEmailValid,
-                shape = ButtonShapeLarge,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    "Reset Email",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-            }
-
-            Spacer(modifier = Modifier.padding(8.dp))
-
-            Button(
-                onClick = { onNavigateBack() },
-                shape = ButtonShapeLarge,
-                colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.onTertiaryContainer),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    "Cancel",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-            }
+                loading = false
+            )
         }
     }
 }
