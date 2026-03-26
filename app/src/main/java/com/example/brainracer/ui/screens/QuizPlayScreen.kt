@@ -36,27 +36,20 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.brainracer.data.utils.isNetworkLikelyAvailable
 import com.example.brainracer.domain.entities.LevelSystem
+import com.example.brainracer.ui.theme.BrainRacerColorTokens
+import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
+import com.example.brainracer.ui.utils.QuizNonScoringReason
 import com.example.brainracer.ui.utils.QuizUIState
 import com.example.brainracer.ui.viewmodels.QuizViewModel
 import kotlinx.coroutines.delay
-
-// ─── Палитра ────────────────────────────────────────────────────────────────
-private val QBg      = Color(0xFF0F0F1A)
-private val QCard    = Color(0xFF1A1A2E)
-private val QBorder  = Color(0xFF2A2A3E)
-private val QPurple  = Color(0xFF667EEA)
-private val QGreen   = Color(0xFF3ECFA3)
-private val QRed     = Color(0xFFEA5C7E)
-private val QOrange  = Color(0xFFFFA726)
-private val QGold    = Color(0xFFFFD700)
-private val QTextPri = Color(0xFFFFFFFF)
-private val QTextSec = Color(0xFF8B8AAE)
 
 // Задержка авто-перехода: 1400 мс при ответе, 900 мс при тайм-ауте
 private const val AUTO_ADVANCE_AFTER_ANSWER_MS  = 1400L
@@ -71,11 +64,11 @@ private data class ResultLevel(
 )
 
 private fun resultLevel(pct: Int) = when {
-    pct >= 86 -> ResultLevel("Легенда!",     Icons.Default.EmojiEvents,      QGold,             "Безупречный результат 🏆")
-    pct >= 71 -> ResultLevel("А ты крут!",   Icons.Default.Whatshot,         Color(0xFFFF7043), "Отличная работа, так держать 🔥")
-    pct >= 51 -> ResultLevel("Не плохо",     Icons.Default.ThumbUp,          QGreen,            "Хороший результат, ещё немного 👍")
-    pct >= 31 -> ResultLevel("На миде",      Icons.Default.SentimentNeutral, QOrange,           "Есть куда расти, продолжай 💪")
-    else      -> ResultLevel("Попробуй ещё", Icons.Default.Refresh,          QRed,              "Не сдавайся, попробуй снова 😤")
+    pct >= 86 -> ResultLevel("Легенда!",     Icons.Default.EmojiEvents,      BrainRacerColorTokens.DifficultyExpert, "Безупречный результат 🏆")
+    pct >= 71 -> ResultLevel("А ты крут!",   Icons.Default.Whatshot,         BrainRacerColorTokens.QuizResultEncouragement, "Отличная работа, так держать 🔥")
+    pct >= 51 -> ResultLevel("Не плохо",     Icons.Default.ThumbUp,          BrainRacerColorTokens.DetailGreen, "Хороший результат, ещё немного 👍")
+    pct >= 31 -> ResultLevel("На миде",      Icons.Default.SentimentNeutral, BrainRacerColorTokens.StatusOrange, "Есть куда расти, продолжай 💪")
+    else      -> ResultLevel("Попробуй ещё", Icons.Default.Refresh,          BrainRacerColorTokens.Dark.Error, "Не сдавайся, попробуй снова 😤")
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -89,11 +82,16 @@ fun QuizPlayScreen(
     challengeId: String? = null,
     challengeIntroAlreadyShown: Boolean = false,
     challengeIntroCancelToHome: Boolean = false,
+    practiceMode: Boolean = false,
     quizViewModel: QuizViewModel = viewModel()
 ) {
     val uiState by quizViewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
-    LaunchedEffect(quizId, challengeId) { quizViewModel.loadQuiz(quizId, challengeId) }
+    LaunchedEffect(quizId, challengeId, practiceMode) {
+        val online = isNetworkLikelyAvailable(context.applicationContext)
+        quizViewModel.loadQuiz(quizId, challengeId, practiceMode, online)
+    }
 
     var challengeIntroAcknowledged by rememberSaveable(quizId, challengeId, challengeIntroAlreadyShown) {
         mutableStateOf(challengeIntroAlreadyShown)
@@ -125,9 +123,9 @@ fun QuizPlayScreen(
                 )
             } else {
                 ResultsScreen(
-                    uiState                 = uiState,
-                    onBack                  = { navController.popBackStack() },
-                    onRestart               = { quizViewModel.restartQuiz() },
+                    uiState = uiState,
+                    onBack = { navController.popBackStack() },
+                    onRestart = { quizViewModel.restartQuiz() },
                     onShowReview            = { showReview = true },
                     allowRestart            = uiState.challengeId.isNullOrBlank(),
                     challengeId             = uiState.challengeId,
@@ -160,7 +158,7 @@ private fun ChallengeDuelIntroScreen(
     onCancel: () -> Unit,
     cancelButtonLabel: String = "Отмена"
 ) {
-    Box(Modifier.fillMaxSize().background(QBg)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -172,26 +170,26 @@ private fun ChallengeDuelIntroScreen(
             Icon(
                 Icons.Default.Sports,
                 contentDescription = null,
-                tint     = QPurple,
+                tint     = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(56.dp)
             )
             Text(
                 "Вызов",
                 fontWeight = FontWeight.Bold,
                 fontSize   = 26.sp,
-                color      = QTextPri
+                color      = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 quizTitle,
                 fontSize   = 16.sp,
-                color      = QTextSec,
+                color      = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign  = TextAlign.Center,
                 lineHeight = 22.sp
             )
             Card(
                 modifier  = Modifier.fillMaxWidth(),
                 shape     = RoundedCornerShape(20.dp),
-                colors    = CardDefaults.cardColors(containerColor = QCard),
+                colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(0.dp),
                 border    = CardDefaults.outlinedCardBorder()
             ) {
@@ -203,7 +201,7 @@ private fun ChallengeDuelIntroScreen(
                         "Перед стартом",
                         fontWeight = FontWeight.SemiBold,
                         fontSize   = 15.sp,
-                        color      = QTextPri
+                        color      = MaterialTheme.colorScheme.onSurface
                     )
                     IntroBullet("Одна попытка: повторно пройти эту дуэль нельзя.")
                     IntroBullet("Счёт станет виден обоим после того, как оба завершат викторину.")
@@ -212,7 +210,7 @@ private fun ChallengeDuelIntroScreen(
                         Text(
                             "Вопросов: $totalQuestions",
                             fontSize = 13.sp,
-                            color    = QPurple,
+                            color    = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -222,14 +220,14 @@ private fun ChallengeDuelIntroScreen(
                 onClick  = onStart,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape    = RoundedCornerShape(14.dp),
-                colors   = ButtonDefaults.buttonColors(containerColor = QPurple)
+                colors   = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Начать викторину", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
             }
             TextButton(onClick = onCancel) {
-                Text(cancelButtonLabel, color = QTextSec, fontSize = 14.sp)
+                Text(cancelButtonLabel, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -242,8 +240,8 @@ private fun IntroBullet(text: String) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment     = Alignment.Top
     ) {
-        Text("•", color = QPurple, fontSize = 16.sp, modifier = Modifier.padding(top = 1.dp))
-        Text(text, fontSize = 13.sp, color = QTextSec, lineHeight = 18.sp, modifier = Modifier.weight(1f))
+        Text("•", color = MaterialTheme.colorScheme.primary, fontSize = 16.sp, modifier = Modifier.padding(top = 1.dp))
+        Text(text, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 18.sp, modifier = Modifier.weight(1f))
     }
 }
 
@@ -251,11 +249,11 @@ private fun IntroBullet(text: String) {
 
 @Composable
 private fun LoadingScreen() {
-    Box(Modifier.fillMaxSize().background(QBg), Alignment.Center) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = QPurple)
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(16.dp))
-            Text("Загружаем викторину…", color = QTextSec, fontSize = 14.sp)
+            Text("Загружаем викторину…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         }
     }
 }
@@ -264,16 +262,16 @@ private fun LoadingScreen() {
 
 @Composable
 private fun ErrorScreen(message: String, onBack: () -> Unit) {
-    Box(Modifier.fillMaxSize().background(QBg), Alignment.Center) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(24.dp)
         ) {
-            Text("Ошибка", color = QRed, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("Ошибка", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.height(8.dp))
-            Text(message, color = QTextSec, fontSize = 14.sp, textAlign = TextAlign.Center)
+            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, textAlign = TextAlign.Center)
             Spacer(Modifier.height(24.dp))
-            Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = QPurple)) {
+            Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) {
                 Text("Назад")
             }
         }
@@ -283,6 +281,54 @@ private fun ErrorScreen(message: String, onBack: () -> Unit) {
 // ══════════════════════════════════════════════════════════════════════════════
 //  ЭКРАН ВОПРОСА
 // ══════════════════════════════════════════════════════════════════════════════
+
+@Composable
+private fun QuizSessionBadges(uiState: QuizUIState) {
+    val showOffline = !uiState.sessionNetworkAvailable
+    val showPractice = uiState.sessionPracticeMode && uiState.challengeId.isNullOrBlank()
+    if (!showOffline && !showPractice) return
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (showOffline) {
+            SessionModeBadge(
+                label = "Офлайн",
+                containerColor = LocalBrainRacerExtendedColors.current.statusOrange.copy(alpha = 0.18f),
+                contentColor = LocalBrainRacerExtendedColors.current.statusOrange
+            )
+        }
+        if (showPractice) {
+            SessionModeBadge(
+                label = "Тренировка",
+                containerColor = LocalBrainRacerExtendedColors.current.detailBlue.copy(alpha = 0.18f),
+                contentColor = LocalBrainRacerExtendedColors.current.detailBlue
+            )
+        }
+    }
+}
+
+@Composable
+private fun SessionModeBadge(
+    label: String,
+    containerColor: Color,
+    contentColor: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = contentColor
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -349,28 +395,28 @@ private fun QuestionScreen(
     )
 
     val timerColor = when {
-        timeLeft > timeLimit * 0.5  -> QGreen
-        timeLeft > timeLimit * 0.25 -> QOrange
-        else                        -> QRed
+        timeLeft > timeLimit * 0.5  -> LocalBrainRacerExtendedColors.current.detailGreen
+        timeLeft > timeLimit * 0.25 -> LocalBrainRacerExtendedColors.current.statusOrange
+        else                        -> MaterialTheme.colorScheme.error
     }
 
     Scaffold(
         contentWindowInsets = WindowInsets.systemBars,
-        containerColor      = QBg,
+        containerColor      = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
-                    Text("Счёт: ${uiState.score}", color = QTextPri,
+                    Text("Счёт: ${uiState.score}", color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Box(
-                            modifier = Modifier.size(36.dp).clip(CircleShape).background(QCard),
+                            modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, null,
-                                tint = QTextPri, modifier = Modifier.size(18.dp))
+                                tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
                         }
                     }
                 },
@@ -381,12 +427,12 @@ private fun QuestionScreen(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Icon(Icons.Default.Star, null,
-                            modifier = Modifier.size(16.dp), tint = QGold)
+                            modifier = Modifier.size(16.dp), tint = LocalBrainRacerExtendedColors.current.difficultyExpert)
                         Text("${uiState.correctAnswers}/${uiState.totalQuestions}",
-                            color = QTextPri, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = QBg)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
     ) { padding ->
@@ -399,23 +445,25 @@ private fun QuestionScreen(
         ) {
             Spacer(Modifier.height(4.dp))
 
+            QuizSessionBadges(uiState)
+
             // ── Прогресс вопросов ─────────────────────────────────────────
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(
                         "Вопрос ${uiState.currentQuestionIndex + 1} из ${uiState.totalQuestions}",
-                        fontSize = 13.sp, color = QTextSec
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         "${(questionProgressAnimated * 100).toInt()}%",
-                        fontSize = 13.sp, color = QPurple, fontWeight = FontWeight.SemiBold
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold
                     )
                 }
                 LinearProgressIndicator(
                     progress      = { questionProgressAnimated },
                     modifier      = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(4.dp)),
-                    color         = QPurple,
-                    trackColor    = QCard,
+                    color         = MaterialTheme.colorScheme.primary,
+                    trackColor    = MaterialTheme.colorScheme.surface,
                     strokeCap     = StrokeCap.Round
                 )
             }
@@ -424,7 +472,7 @@ private fun QuestionScreen(
             Card(
                 modifier  = Modifier.fillMaxWidth(),
                 shape     = RoundedCornerShape(14.dp),
-                colors    = CardDefaults.cardColors(containerColor = QCard),
+                colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(0.dp)
             ) {
                 Row(
@@ -443,7 +491,7 @@ private fun QuestionScreen(
                         progress      = { (timeLeft.toFloat() / timeLimit).coerceIn(0f, 1f) },
                         modifier      = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)),
                         color         = timerColor,
-                        trackColor    = QBorder,
+                        trackColor    = MaterialTheme.colorScheme.outline,
                         strokeCap     = StrokeCap.Round
                     )
                     Text(
@@ -477,7 +525,7 @@ private fun QuestionScreen(
                     Card(
                         modifier  = Modifier.fillMaxWidth(),
                         shape     = RoundedCornerShape(20.dp),
-                        colors    = CardDefaults.cardColors(containerColor = QCard),
+                        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         elevation = CardDefaults.cardElevation(0.dp)
                     ) {
                         Box(
@@ -488,7 +536,7 @@ private fun QuestionScreen(
                                 text       = questionText,
                                 fontSize   = 18.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color      = QTextPri,
+                                color      = MaterialTheme.colorScheme.onSurface,
                                 textAlign  = TextAlign.Center,
                                 lineHeight = 26.sp
                             )
@@ -547,23 +595,23 @@ private fun AnswerOption(
     onClick: () -> Unit
 ) {
     val bgColor     = when (state) {
-        AnswerState.SELECTED -> QPurple.copy(alpha = .20f)
-        AnswerState.CORRECT  -> QGreen.copy(alpha = .15f)
-        AnswerState.WRONG    -> QRed.copy(alpha = .15f)
-        else                 -> QCard
+        AnswerState.SELECTED -> MaterialTheme.colorScheme.primary.copy(alpha = .20f)
+        AnswerState.CORRECT  -> LocalBrainRacerExtendedColors.current.detailGreen.copy(alpha = .15f)
+        AnswerState.WRONG    -> MaterialTheme.colorScheme.error.copy(alpha = .15f)
+        else                 -> MaterialTheme.colorScheme.surface
     }
     val borderColor = when (state) {
-        AnswerState.SELECTED -> QPurple
-        AnswerState.CORRECT  -> QGreen
-        AnswerState.WRONG    -> QRed
-        else                 -> QBorder
+        AnswerState.SELECTED -> MaterialTheme.colorScheme.primary
+        AnswerState.CORRECT  -> LocalBrainRacerExtendedColors.current.detailGreen
+        AnswerState.WRONG    -> MaterialTheme.colorScheme.error
+        else                 -> MaterialTheme.colorScheme.outline
     }
     val textColor   = when (state) {
-        AnswerState.SELECTED -> QPurple
-        AnswerState.CORRECT  -> QGreen
-        AnswerState.WRONG    -> QRed
-        AnswerState.DIMMED   -> QTextSec.copy(alpha = .45f)
-        AnswerState.IDLE     -> QTextPri
+        AnswerState.SELECTED -> MaterialTheme.colorScheme.primary
+        AnswerState.CORRECT  -> LocalBrainRacerExtendedColors.current.detailGreen
+        AnswerState.WRONG    -> MaterialTheme.colorScheme.error
+        AnswerState.DIMMED   -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .45f)
+        AnswerState.IDLE     -> MaterialTheme.colorScheme.onSurface
     }
 
     // Иконка справа для правильного / неверного после подтверждения
@@ -623,7 +671,7 @@ private fun ActionZone(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (uiState.selectedAnswerIndex != null) QPurple else QBorder)
+                    .background(if (uiState.selectedAnswerIndex != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
                     .clickable(enabled = uiState.selectedAnswerIndex != null) { onSubmit() }
                     .padding(vertical = 16.dp),
                 contentAlignment = Alignment.Center
@@ -632,7 +680,7 @@ private fun ActionZone(
                     "Ответить",
                     fontSize   = 15.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color      = if (uiState.selectedAnswerIndex != null) Color.White else QTextSec
+                    color      = if (uiState.selectedAnswerIndex != null) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         } else {
@@ -648,19 +696,19 @@ private fun ActionZone(
                     Text(
                         if (isLast) "Переход к результатам…" else "Следующий вопрос…",
                         fontSize = 12.sp,
-                        color    = QTextSec
+                        color    = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         "Нажмите для пропуска",
                         fontSize = 12.sp,
-                        color    = QPurple
+                        color    = MaterialTheme.colorScheme.primary
                     )
                 }
                 LinearProgressIndicator(
                     progress      = { autoAdvanceProgress },
                     modifier      = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                    color         = QPurple,
-                    trackColor    = QBorder,
+                    color         = MaterialTheme.colorScheme.primary,
+                    trackColor    = MaterialTheme.colorScheme.outline,
                     strokeCap     = StrokeCap.Round
                 )
             }
@@ -670,7 +718,7 @@ private fun ActionZone(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(QPurple)
+                    .background(MaterialTheme.colorScheme.primary)
                     .clickable { onNext() }
                     .padding(vertical = 16.dp),
                 contentAlignment = Alignment.Center
@@ -692,8 +740,36 @@ private fun ActionZone(
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  ЭКРАН РЕЗУЛЬТАТОВ (без изменений)
+//  ЭКРАН РЕЗУЛЬТАТОВ
 // ══════════════════════════════════════════════════════════════════════════════
+
+private fun nonScoringResultsMessage(reason: QuizNonScoringReason?): String {
+    val detail = when (reason) {
+        QuizNonScoringReason.PRACTICE -> "Режим тренировки."
+        QuizNonScoringReason.OFFLINE -> "Нет сети или данные взяты только из кэша устройства."
+        QuizNonScoringReason.NOT_SIGNED_IN -> "Войдите в аккаунт, чтобы сохранять прогресс."
+        null -> ""
+    }
+    return "Результат не учитывается в рейтинге и статистике и не сохраняется. $detail".trim()
+}
+
+@Composable
+private fun NonScoringResultsBanner(reason: QuizNonScoringReason?) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)),
+        border = CardDefaults.outlinedCardBorder()
+    ) {
+        Text(
+            nonScoringResultsMessage(reason),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
 
 @Composable
 private fun ResultsScreen(
@@ -727,7 +803,7 @@ private fun ResultsScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(QBg)) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -736,6 +812,10 @@ private fun ResultsScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (uiState.isNonScoringSession) {
+                NonScoringResultsBanner(uiState.nonScoringReason)
+            }
+
             AnimatedVisibility(
                 visible = showLevelUpBanner,
                 enter   = fadeIn(tween(400)) + expandVertically(tween(400))
@@ -757,12 +837,12 @@ private fun ResultsScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(level.label, fontWeight = FontWeight.Bold, fontSize = 28.sp, color = level.color)
                 Spacer(Modifier.height(4.dp))
-                Text(level.subtitle, fontSize = 14.sp, color = QTextSec, textAlign = TextAlign.Center)
+                Text(level.subtitle, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             }
 
             Card(
                 shape     = RoundedCornerShape(24.dp),
-                colors    = CardDefaults.cardColors(containerColor = QCard),
+                colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(0.dp),
                 modifier  = Modifier.fillMaxWidth()
             ) {
@@ -773,39 +853,43 @@ private fun ResultsScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("${uiState.score}", fontWeight = FontWeight.Bold,
-                            fontSize = 52.sp, color = QPurple)
-                        Text("игровых очков", fontSize = 13.sp, color = QTextSec)
+                            fontSize = 52.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("игровых очков", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
 
-                    HorizontalDivider(color = QBorder)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Точность", fontSize = 13.sp, color = QTextSec)
+                            Text("Точность", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("$accuracyPct%", fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold, color = level.color)
                         }
                         LinearProgressIndicator(
                             progress  = { accuracyAnimated },
                             modifier  = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                            color      = level.color, trackColor = QBorder, strokeCap = StrokeCap.Round
+                            color      = level.color, trackColor = MaterialTheme.colorScheme.outline, strokeCap = StrokeCap.Round
                         )
                     }
 
-                    HorizontalDivider(color = QBorder)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        ResultStat("${uiState.correctAnswers}",  "правильно", QGreen)
-                        Box(Modifier.width(1.dp).height(40.dp).background(QBorder))
-                        ResultStat("${uiState.incorrectAnswers}", "неверно",  QRed)
-                        Box(Modifier.width(1.dp).height(40.dp).background(QBorder))
-                        ResultStat("${uiState.totalQuestions}",  "всего",    QTextSec)
+                        ResultStat("${uiState.correctAnswers}",  "правильно", LocalBrainRacerExtendedColors.current.detailGreen)
+                        Box(Modifier.width(1.dp).height(40.dp).background(MaterialTheme.colorScheme.outline))
+                        ResultStat("${uiState.incorrectAnswers}", "неверно",  MaterialTheme.colorScheme.error)
+                        Box(Modifier.width(1.dp).height(40.dp).background(MaterialTheme.colorScheme.outline))
+                        ResultStat("${uiState.totalQuestions}",  "всего",    MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
 
             if (uiState.xpEarned > 0) {
-                XpCard(uiState = uiState, xpProgressAnimated = xpProgressAnimated)
+                XpCard(
+                    uiState = uiState,
+                    xpProgressAnimated = xpProgressAnimated,
+                    isReferenceOnly = uiState.isNonScoringSession
+                )
             }
 
             if (allowRestart) {
@@ -813,7 +897,7 @@ private fun ResultsScreen(
                     onClick  = onRestart,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape    = RoundedCornerShape(14.dp),
-                    colors   = ButtonDefaults.buttonColors(containerColor = QPurple)
+                    colors   = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
@@ -823,7 +907,7 @@ private fun ResultsScreen(
                 Text(
                     "В режиме вызова повторное прохождение недоступно.",
                     fontSize = 13.sp,
-                    color = QTextSec,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -834,7 +918,7 @@ private fun ResultsScreen(
                     onClick  = onOpenChallengeSummary,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape    = RoundedCornerShape(14.dp),
-                    colors   = ButtonDefaults.buttonColors(containerColor = QGreen)
+                    colors   = ButtonDefaults.buttonColors(containerColor = LocalBrainRacerExtendedColors.current.detailGreen)
                 ) {
                     Icon(Icons.Default.EmojiEvents, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
@@ -848,8 +932,8 @@ private fun ResultsScreen(
                     onClick  = onShowReview,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape    = RoundedCornerShape(14.dp),
-                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = QGreen),
-                    border   = androidx.compose.foundation.BorderStroke(1.5.dp, QGreen)
+                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = LocalBrainRacerExtendedColors.current.detailGreen),
+                    border   = androidx.compose.foundation.BorderStroke(1.5.dp, LocalBrainRacerExtendedColors.current.detailGreen)
                 ) {
                     Icon(Icons.Default.Checklist, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
@@ -861,8 +945,8 @@ private fun ResultsScreen(
                 onClick  = onBack,
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape    = RoundedCornerShape(14.dp),
-                colors   = ButtonDefaults.outlinedButtonColors(contentColor = QTextSec),
-                border   = androidx.compose.foundation.BorderStroke(1.dp, QBorder)
+                colors   = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                border   = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Icon(Icons.Default.Home, null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
@@ -881,7 +965,7 @@ private fun LevelUpBanner(newLevel: Int) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape    = RoundedCornerShape(16.dp),
-        colors   = CardDefaults.cardColors(containerColor = QGold.copy(alpha = 0.12f)),
+        colors   = CardDefaults.cardColors(containerColor = LocalBrainRacerExtendedColors.current.difficultyExpert.copy(alpha = 0.12f)),
         border   = CardDefaults.outlinedCardBorder()
     ) {
         Row(
@@ -890,16 +974,16 @@ private fun LevelUpBanner(newLevel: Int) {
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
-                modifier = Modifier.size(44.dp).clip(CircleShape).background(QGold.copy(alpha = 0.20f)),
+                modifier = Modifier.size(44.dp).clip(CircleShape).background(LocalBrainRacerExtendedColors.current.difficultyExpert.copy(alpha = 0.20f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.ArrowUpward, null, tint = QGold, modifier = Modifier.size(24.dp))
+                Icon(Icons.Default.ArrowUpward, null, tint = LocalBrainRacerExtendedColors.current.difficultyExpert, modifier = Modifier.size(24.dp))
             }
             Column {
-                Text("🎉 Новый уровень!", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = QGold)
+                Text("🎉 Новый уровень!", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = LocalBrainRacerExtendedColors.current.difficultyExpert)
                 Text(
                     "Вы достигли уровня $newLevel. Продолжайте в том же духе!",
-                    fontSize = 13.sp, color = QTextSec, lineHeight = 18.sp
+                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 18.sp
                 )
             }
         }
@@ -907,61 +991,78 @@ private fun LevelUpBanner(newLevel: Int) {
 }
 
 @Composable
-private fun XpCard(uiState: QuizUIState, xpProgressAnimated: Float) {
+private fun XpCard(
+    uiState: QuizUIState,
+    xpProgressAnimated: Float,
+    isReferenceOnly: Boolean = false
+) {
     val breakdown    = uiState.xpBreakdown
     val currentLevel = uiState.newLevel
 
     Card(
         shape     = RoundedCornerShape(20.dp),
-        colors    = CardDefaults.cardColors(containerColor = QCard),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(0.dp),
         modifier  = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.AutoAwesome, null, tint = QPurple, modifier = Modifier.size(20.dp))
-                Text("Заработано XP", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = QTextPri)
-                Spacer(Modifier.weight(1f))
-                Surface(shape = RoundedCornerShape(8.dp), color = QPurple.copy(alpha = 0.2f)) {
+                Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (isReferenceOnly) "XP (справочно)" else "Заработано XP",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (isReferenceOnly) {
+                        Text(
+                            "Не сохраняется в профиле",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)) {
                     Text("+${uiState.xpEarned} XP",
                         modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        fontWeight = FontWeight.Bold, fontSize = 14.sp, color = QPurple)
+                        fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                 }
             }
 
             if (breakdown != null) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    XpRow("Базовые", breakdown.baseXp, QTextSec)
+                    XpRow("Базовые", breakdown.baseXp, MaterialTheme.colorScheme.onSurfaceVariant)
                     if (breakdown.speedBonusXp > 0)
-                        XpRow("Бонус скорости ⚡", breakdown.speedBonusXp, QGreen)
+                        XpRow("Бонус скорости ⚡", breakdown.speedBonusXp, LocalBrainRacerExtendedColors.current.detailGreen)
                     if (breakdown.accuracyBonusXp > 0)
-                        XpRow("Бонус точности 🎯", breakdown.accuracyBonusXp, Color(0xFF4facfe))
+                        XpRow("Бонус точности 🎯", breakdown.accuracyBonusXp, BrainRacerColorTokens.QuizXpBonusAccent)
                     if (!breakdown.difficultyLabel.startsWith("×1.0")) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Множитель сложности", fontSize = 13.sp, color = QTextSec)
+                            Text("Множитель сложности", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(breakdown.difficultyLabel, fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium, color = QGold)
+                                fontWeight = FontWeight.Medium, color = LocalBrainRacerExtendedColors.current.difficultyExpert)
                         }
                     }
                 }
-                HorizontalDivider(color = QBorder)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Уровень $currentLevel", fontSize = 13.sp, color = QTextSec)
+                    Text("Уровень $currentLevel", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(if (currentLevel < LevelSystem.MAX_LEVEL) "Уровень ${currentLevel + 1}"
-                    else "Максимум", fontSize = 13.sp, color = QTextSec)
+                    else "Максимум", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 LinearProgressIndicator(
                     progress  = { xpProgressAnimated },
                     modifier  = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                    color      = QPurple, trackColor = QBorder, strokeCap = StrokeCap.Round
+                    color      = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.outline, strokeCap = StrokeCap.Round
                 )
                 Text(
                     "Ур. $currentLevel  ·  ${LevelSystem.rankForLevel(currentLevel).displayName}",
-                    fontSize  = 12.sp, color = QTextSec,
+                    fontSize  = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier  = Modifier.fillMaxWidth(), textAlign = TextAlign.Center
                 )
             }
@@ -972,7 +1073,7 @@ private fun XpCard(uiState: QuizUIState, xpProgressAnimated: Float) {
 @Composable
 private fun XpRow(label: String, value: Int, color: Color) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 13.sp, color = QTextSec)
+        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("+$value XP", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = color)
     }
 }
@@ -981,7 +1082,7 @@ private fun XpRow(label: String, value: Int, color: Color) {
 private fun ResultStat(value: String, label: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = color)
-        Text(label, fontSize = 11.sp, color = QTextSec)
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1002,30 +1103,30 @@ private fun AnswerReviewScreen(
     val incorrectCount = answers.count { !it.isCorrect }
 
     Scaffold(
-        containerColor      = QBg,
+        containerColor      = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets.systemBars,
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text("Разбор ответов", color = QTextPri,
+                        Text("Разбор ответов", color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         Text("${questions.size} вопросов  ·  $correctCount правильно  ·  $incorrectCount неверно",
-                            color = QTextSec, fontSize = 12.sp)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Box(
-                            modifier = Modifier.size(36.dp).clip(CircleShape).background(QCard),
+                            modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, null,
-                                tint = QTextPri, modifier = Modifier.size(18.dp))
+                                tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = QBg)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
     ) { padding ->
@@ -1056,9 +1157,9 @@ private fun ReviewQuestionCard(
     val isCorrect     = answer?.isCorrect == true
     val isTimeout     = answer == null || answer.selectedAnswerIndex == -1
     val accentColor   = when {
-        isTimeout  -> QOrange
-        isCorrect  -> QGreen
-        else       -> QRed
+        isTimeout  -> LocalBrainRacerExtendedColors.current.statusOrange
+        isCorrect  -> LocalBrainRacerExtendedColors.current.detailGreen
+        else       -> MaterialTheme.colorScheme.error
     }
     val statusLabel   = when {
         isTimeout -> "Время вышло"
@@ -1074,7 +1175,7 @@ private fun ReviewQuestionCard(
     Card(
         modifier  = Modifier.fillMaxWidth(),
         shape     = RoundedCornerShape(18.dp),
-        colors    = CardDefaults.cardColors(containerColor = QCard),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(0.dp),
         border    = CardDefaults.outlinedCardBorder()
     ) {
@@ -1089,14 +1190,14 @@ private fun ReviewQuestionCard(
                 // Номер вопроса
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = QPurple.copy(alpha = 0.15f)
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                 ) {
                     Text(
                         "Вопрос ${index + 1}",
                         modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         fontSize   = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color      = QPurple
+                        color      = MaterialTheme.colorScheme.primary
                     )
                 }
                 // Статус
@@ -1109,8 +1210,8 @@ private fun ReviewQuestionCard(
                         color = accentColor)
                     // Время ответа
                     if (answer != null && answer.timeSpent > 0) {
-                        Text("·", fontSize = 12.sp, color = QTextSec)
-                        Text("${answer.timeSpent}с", fontSize = 12.sp, color = QTextSec)
+                        Text("·", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${answer.timeSpent}с", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -1120,7 +1221,7 @@ private fun ReviewQuestionCard(
                 text       = question.questionText,
                 fontSize   = 15.sp,
                 fontWeight = FontWeight.SemiBold,
-                color      = QTextPri,
+                color      = MaterialTheme.colorScheme.onSurface,
                 lineHeight = 22.sp
             )
 
@@ -1133,15 +1234,15 @@ private fun ReviewQuestionCard(
                 val (bg, border, text, icon) = when {
                     // Правильный вариант — всегда зелёный
                     isRightAnswer && isUserChoice ->
-                        Quad(QGreen.copy(.15f), QGreen, QGreen, Icons.Default.CheckCircle)
+                        Quad(LocalBrainRacerExtendedColors.current.detailGreen.copy(.15f), LocalBrainRacerExtendedColors.current.detailGreen, LocalBrainRacerExtendedColors.current.detailGreen, Icons.Default.CheckCircle)
                     isRightAnswer ->
-                        Quad(QGreen.copy(.08f), QGreen.copy(.6f), QGreen, null)
+                        Quad(LocalBrainRacerExtendedColors.current.detailGreen.copy(.08f), LocalBrainRacerExtendedColors.current.detailGreen.copy(.6f), LocalBrainRacerExtendedColors.current.detailGreen, null)
                     // Ответ пользователя, но неверный
                     isUserChoice ->
-                        Quad(QRed.copy(.15f), QRed, QRed, Icons.Default.Cancel)
+                        Quad(MaterialTheme.colorScheme.error.copy(.15f), MaterialTheme.colorScheme.error, MaterialTheme.colorScheme.error, Icons.Default.Cancel)
                     // Остальные варианты — приглушённые
                     else ->
-                        Quad(QCard, QBorder, QTextSec.copy(.4f), null)
+                        Quad(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.onSurfaceVariant.copy(.4f), null)
                 }
 
                 Box(
@@ -1176,17 +1277,17 @@ private fun ReviewQuestionCard(
             // ── Объяснение (если есть) ────────────────────────────────────
             val explanation = question.explanation
             if (!explanation.isNullOrBlank()) {
-                HorizontalDivider(color = QBorder.copy(alpha = .5f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .5f))
                 Row(
                     verticalAlignment     = Alignment.Top,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(Icons.Default.Lightbulb, null,
-                        tint = QGold, modifier = Modifier.size(16.dp).padding(top = 2.dp))
+                        tint = LocalBrainRacerExtendedColors.current.difficultyExpert, modifier = Modifier.size(16.dp).padding(top = 2.dp))
                     Text(
                         text       = explanation,
                         fontSize   = 13.sp,
-                        color      = QTextSec,
+                        color      = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 19.sp
                     )
                 }
