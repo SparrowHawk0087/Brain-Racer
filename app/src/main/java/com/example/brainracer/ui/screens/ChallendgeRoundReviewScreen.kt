@@ -28,21 +28,8 @@ import com.example.brainracer.domain.entities.Challenge
 import com.example.brainracer.domain.entities.ChallengeStatus
 import com.example.brainracer.domain.entities.Question
 import com.example.brainracer.domain.entities.UserAnswer
+import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.google.firebase.auth.FirebaseAuth
-
-// ─── Палитра (та же что в ChallengesScreen) ──────────────────────────────────
-private val RBg      = Color(0xFF0F0F1A)
-private val RCard    = Color(0xFF1A1A2E)
-private val RBorder  = Color(0xFF2A2A3E)
-private val RPurple  = Color(0xFF667EEA)
-private val RGreen   = Color(0xFF3ECFA3)
-private val RRed     = Color(0xFFEA5C7E)
-private val ROrange  = Color(0xFFFFA726)
-private val RGold    = Color(0xFFFFD700)
-private val RTextPri = Color(0xFFFFFFFF)
-private val RTextSec = Color(0xFF8B8AAE)
-
-// ══════════════════════════════════════════════════════════════════════════════
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,33 +61,33 @@ fun ChallengeRoundReviewScreen(
     }
 
     Scaffold(
-        containerColor      = RBg,
+        containerColor      = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets.systemBars,
         topBar = {
             TopAppBar(
                 title = {
-                    Text("Разбор раунда", color = RTextPri,
+                    Text("Разбор раунда", color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Box(Modifier.size(36.dp).clip(CircleShape).background(RCard),
+                        Box(Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
                             contentAlignment = Alignment.Center) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, null,
-                                tint = RTextPri, modifier = Modifier.size(18.dp))
+                                tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = RBg)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
     ) { padding ->
         when {
             isLoading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                CircularProgressIndicator(color = RPurple)
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
             error != null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                Text(error!!, color = RRed, textAlign = TextAlign.Center,
+                Text(error!!, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center,
                     modifier = Modifier.padding(24.dp))
             }
             challenge != null -> {
@@ -173,16 +160,16 @@ private fun ScoreHeader(
     val (resultLabel, resultColor) = when {
         !finished -> when {
             myResult == null && opponentResult == null ->
-                "Вызов принят" to RTextSec
+                "Вызов принят" to MaterialTheme.colorScheme.onSurfaceVariant
             myResult != null && opponentResult == null ->
-                "Ожидаем соперника" to ROrange
+                "Ожидаем соперника" to LocalBrainRacerExtendedColors.current.statusOrange
             myResult == null && opponentResult != null ->
-                "Ваш ход" to RPurple
-            else -> "В процессе" to RTextSec
+                "Ваш ход" to MaterialTheme.colorScheme.primary
+            else -> "В процессе" to MaterialTheme.colorScheme.onSurfaceVariant
         }
-        isDraw -> "Ничья" to ROrange
-        isWin  -> "Победа" to RGreen
-        else   -> "Поражение" to RRed
+        isDraw -> "Ничья" to LocalBrainRacerExtendedColors.current.statusOrange
+        isWin  -> "Победа" to LocalBrainRacerExtendedColors.current.detailGreen
+        else   -> "Поражение" to MaterialTheme.colorScheme.error
     }
 
     val myScoreDisplay     = myResult?.score
@@ -193,7 +180,7 @@ private fun ScoreHeader(
     Card(
         modifier  = Modifier.fillMaxWidth(),
         shape     = RoundedCornerShape(20.dp),
-        colors    = CardDefaults.cardColors(containerColor = RCard),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Column(
@@ -220,7 +207,7 @@ private fun ScoreHeader(
                     isWinner  = isWin,
                     hideScore = hideMyScore
                 )
-                Text(":", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = RTextSec)
+                Text(":", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 val oppWins = finished && !isDraw && !isWin
                 PlayerScoreColumn(
                     name      = opponentName.split(" ").first(),
@@ -242,19 +229,19 @@ private fun PlayerScoreColumn(
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(name, fontSize = 13.sp, color = RTextSec)
+        Text(name, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             if (hideScore) "—" else "${score ?: 0}",
             fontWeight = FontWeight.Bold,
             fontSize   = 32.sp,
             color      = when {
-                hideScore -> RTextSec
-                isWinner  -> RGreen
-                else      -> RTextPri
+                hideScore -> MaterialTheme.colorScheme.onSurfaceVariant
+                isWinner  -> LocalBrainRacerExtendedColors.current.detailGreen
+                else      -> MaterialTheme.colorScheme.onSurface
             }
         )
         if (isWinner) {
-            Icon(Icons.Default.EmojiEvents, null, tint = RGold, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.EmojiEvents, null, tint = LocalBrainRacerExtendedColors.current.difficultyExpert, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -273,7 +260,7 @@ private fun QuestionComparisonCard(
     Card(
         modifier  = Modifier.fillMaxWidth(),
         shape     = RoundedCornerShape(18.dp),
-        colors    = CardDefaults.cardColors(containerColor = RCard),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(0.dp),
         border    = CardDefaults.outlinedCardBorder()
     ) {
@@ -282,12 +269,12 @@ private fun QuestionComparisonCard(
             // Номер + текст вопроса
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.Top) {
-                Surface(shape = RoundedCornerShape(6.dp), color = RPurple.copy(.15f)) {
+                Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primary.copy(.15f)) {
                     Text("${index + 1}", modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        fontSize = 11.sp, fontWeight = FontWeight.Bold, color = RPurple)
+                        fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 }
                 Text(question.questionText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                    color = RTextPri, lineHeight = 20.sp, modifier = Modifier.weight(1f))
+                    color = MaterialTheme.colorScheme.onSurface, lineHeight = 20.sp, modifier = Modifier.weight(1f))
             }
 
             // Варианты ответов
@@ -299,13 +286,13 @@ private fun QuestionComparisonCard(
 
                 // Определяем цвет строки
                 val rowColor = when {
-                    isCorrect -> RGreen
-                    iMyChoice || isOpponentChoice -> RRed
-                    else -> RBorder
+                    isCorrect -> LocalBrainRacerExtendedColors.current.detailGreen
+                    iMyChoice || isOpponentChoice -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.outline
                 }
                 val rowBg = when {
-                    isCorrect -> RGreen.copy(.08f)
-                    iMyChoice || isOpponentChoice -> RRed.copy(.08f)
+                    isCorrect -> LocalBrainRacerExtendedColors.current.detailGreen.copy(.08f)
+                    iMyChoice || isOpponentChoice -> MaterialTheme.colorScheme.error.copy(.08f)
                     else -> Color.Transparent
                 }
 
@@ -324,27 +311,27 @@ private fun QuestionComparisonCard(
                         modifier = Modifier.width(16.dp), textAlign = TextAlign.Center)
 
                     // Текст варианта
-                    Text(optText, fontSize = 13.sp, color = RTextPri,
+                    Text(optText, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f))
 
                     // Иконки: кто выбрал этот вариант
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (iMyChoice) {
-                            AnswerTag(myLabel, if (myAnswer?.isCorrect == true) RGreen else RRed)
+                            AnswerTag(myLabel, if (myAnswer?.isCorrect == true) LocalBrainRacerExtendedColors.current.detailGreen else MaterialTheme.colorScheme.error)
                         }
                         if (isOpponentChoice) {
-                            AnswerTag(opponentLabel, if (opponentAnswer?.isCorrect == true) RGreen else RRed)
+                            AnswerTag(opponentLabel, if (opponentAnswer?.isCorrect == true) LocalBrainRacerExtendedColors.current.detailGreen else MaterialTheme.colorScheme.error)
                         }
                         if (isCorrect) {
                             Icon(Icons.Default.CheckCircle, null,
-                                tint = RGreen, modifier = Modifier.size(15.dp))
+                                tint = LocalBrainRacerExtendedColors.current.detailGreen, modifier = Modifier.size(15.dp))
                         }
                     }
                 }
             }
 
             // Время ответа обоих игроков
-            HorizontalDivider(color = RBorder.copy(.5f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(.5f))
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -358,8 +345,8 @@ private fun QuestionComparisonCard(
                 Row(verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(Icons.Default.Lightbulb, null,
-                        tint = RGold, modifier = Modifier.size(14.dp).padding(top = 1.dp))
-                    Text(question.explanation!!, fontSize = 12.sp, color = RTextSec, lineHeight = 17.sp)
+                        tint = LocalBrainRacerExtendedColors.current.difficultyExpert, modifier = Modifier.size(14.dp).padding(top = 1.dp))
+                    Text(question.explanation!!, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 17.sp)
                 }
             }
         }
@@ -377,12 +364,12 @@ private fun AnswerTag(label: String, color: Color) {
 @Composable
 private fun TimeChip(label: String, timeSpent: Int?, isCorrect: Boolean?) {
     val color = when (isCorrect) {
-        true  -> RGreen
-        false -> RRed
-        null  -> RTextSec
+        true  -> LocalBrainRacerExtendedColors.current.detailGreen
+        false -> MaterialTheme.colorScheme.error
+        null  -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, fontSize = 11.sp, color = RTextSec)
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             if (timeSpent != null && timeSpent >= 0) "${timeSpent}с" else "—",
             fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = color
