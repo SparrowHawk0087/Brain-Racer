@@ -2,322 +2,434 @@ package com.example.brainracer.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.brainracer.data.repositories.ChallengeRepositoryImpl
+import com.example.brainracer.data.repositories.NotificationRepositoryImpl
+import com.example.brainracer.data.repositories.UserChallengeSides
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.data.utils.fold
+import com.example.brainracer.domain.entities.AppNotificationType
+import com.example.brainracer.domain.entities.Challenge
+import com.example.brainracer.domain.entities.ChallengeStatus
+import com.example.brainracer.domain.entities.LevelSystem
+import com.example.brainracer.domain.entities.Quiz
+import com.example.brainracer.domain.entities.QuizDifficulty
+import com.example.brainracer.domain.entities.QuizStats
+import com.example.brainracer.domain.entities.QuestionType
+import com.example.brainracer.ui.utils.HOME_CATEGORY_CUSTOM
 import com.example.brainracer.ui.utils.HomeUiState
 import com.example.brainracer.ui.utils.QuizItem
+import com.example.brainracer.ui.utils.toQuizItem
+import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.tasks.await
 
 class HomeViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    private val quizRepository = QuizRepositoryImpl()
-    private val userRepository = UserRepositoryImpl()
-    private val auth = FirebaseAuth.getInstance()
+    private val quizRepository       = QuizRepositoryImpl()
+    private val userRepository        = UserRepositoryImpl()
+    private val challengeRepository   = ChallengeRepositoryImpl()
+    private val notificationRepository = NotificationRepositoryImpl()
+    private val auth                  = FirebaseAuth.getInstance()
+
+    // Кэш полного списка викторин для фильтрации по категории
+    private var allQuizzes: List<QuizItem> = emptyList()
+    /** Кэш пользовательских викторин для вкладки [HOME_CATEGORY_CUSTOM]. */
+    private var customQuizzesCache: List<QuizItem> = emptyList()
 
     init {
         loadInitialData()
     }
 
+    // ── Начальная загрузка ────────────────────────────────────────────────
+
     private fun loadInitialData() {
         viewModelScope.launch {
-            println("DEBUG: loadInitialData started")
-
-            // 1. Загружаем пользователя
+            // loadUserData и loadQuizzes теперь suspend — вызываем напрямую
             val userId = auth.currentUser?.uid
-            println("DEBUG: Current user ID = $userId")
-
-            userId?.let {
-                loadUserData(it)
-            } ?: run {
-                // Если пользователь не авторизован, показываем "Гость"
+            if (userId != null) {
+                _uiState.update { it.copy(currentUserId = userId) }
+                syncFcmTokenToProfile()
+                loadUserData(userId)
+            } else {
                 _uiState.update { it.copy(userName = "Гость") }
-                println("DEBUG: No user, setting to 'Гость'")
             }
-
-            // 2. Загружаем викторины с задержкой
-            delay(1000)
-            println("DEBUG: Loading quizzes...")
             loadQuizzes()
+            if (userId != null) {
+                launch {
+                    try {
+                        challengeRepository.observeUserChallengeSides(userId).collect { sides ->
+                            applyHomeChallengeSides(sides)
+                        }
+                    } catch (e: Exception) {
+                        _uiState.update {
+                            it.copy(errorMessage = "Вызовы: ${e.message ?: "ошибка сети"}")
+                        }
+                    }
+                }
+                launch {
+                    try {
+                        notificationRepository.observeNotificationsForUser(userId).collect { list ->
+                            // Колокольчик — только «общие» уведомления; вызовы ведут на экран вызовов / вкладку «Вызовы».
+                            val bellUnread = list.count {
+                                !it.read && it.type != AppNotificationType.CHALLENGE
+                            }
+                            _uiState.update { it.copy(unreadNotificationsCount = bellUnread) }
+                        }
+                    } catch (_: Exception) {
+                        _uiState.update { it.copy(unreadNotificationsCount = 0) }
+                    }
+                }
+            }
         }
     }
 
-    private fun loadUserData(userId: String) {
+    /** Сохраняет FCM-токен в профиль для будущих push (Cloud Functions). */
+    fun syncFcmTokenToProfile() {
+        val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-
             try {
-                val userResult = userRepository.getUser(userId)
+                val token = FirebaseMessaging.getInstance().token.await()
+                if (token.isNotBlank()) userRepository.updateFcmToken(uid, token)
+            } catch (_: Exception) { }
+        }
+    }
 
-                userResult.fold(
-                    onSuccess = { user ->
-                        // Получаем имя из nickname или email - гарантируем String (не nullable)
-                        val userName = when {
-                            !user.nickname.isNullOrBlank() -> user.nickname!!
-                            !auth.currentUser?.displayName.isNullOrBlank() -> auth.currentUser?.displayName ?: "Гость"
-                            !user.email.isNullOrBlank() -> {
-                                val nameFromEmail = user.email!!.split("@").firstOrNull()
-                                nameFromEmail ?: "Гость"
-                            }
-                            else -> "Гость"
-                        }
+    // ── Загрузка данных пользователя (suspend) ────────────────────────────
 
-                        _uiState.update {
-                            it.copy(
-                                userName = userName,
-                                userStats = user.stats,
-                                isLoading = false
-                            )
-                        }
-                    },
-                    onFailure = { exception ->
-                        // Если не удалось загрузить из Firestore, используем данные из Firebase Auth
-                        val userName = when {
-                            !auth.currentUser?.displayName.isNullOrBlank() -> auth.currentUser?.displayName ?: "Гость"
-                            !auth.currentUser?.email.isNullOrBlank() -> {
-                                val nameFromEmail = auth.currentUser?.email?.split("@")?.firstOrNull()
-                                nameFromEmail ?: "Гость"
-                            }
-                            else -> "Гость"
-                        }
+    /**
+     * Загружает пользователя из Firestore и вычисляет уровень через LevelSystem.
+     * Suspend-функция — вызывать только из корутина.
+     */
+    private suspend fun loadUserData(userId: String) {
+        _uiState.update { it.copy(isLoading = true) }
 
-                        _uiState.update {
-                            it.copy(
-                                userName = userName,
-                                isLoading = false
-                            )
-                        }
-                    }
-                )
-            } catch (e: Exception) {
-                // Используем данные из Firebase Auth при ошибке
+        when (val result = userRepository.getUser(userId)) {
+            is Result.Success -> {
+                val user = result.data
+
                 val userName = when {
-                    !auth.currentUser?.displayName.isNullOrBlank() -> auth.currentUser?.displayName ?: "Гость"
-                    !auth.currentUser?.email.isNullOrBlank() -> {
-                        val nameFromEmail = auth.currentUser?.email?.split("@")?.firstOrNull()
-                        nameFromEmail ?: "Гость"
-                    }
-                    else -> "Гость"
+                    user.nickname.isNotBlank()                     -> user.nickname
+                    !auth.currentUser?.displayName.isNullOrBlank() -> auth.currentUser!!.displayName!!
+                    user.email.isNotBlank()                        -> user.email.split("@").first()
+                    else                                           -> "Гость"
                 }
 
-                _uiState.update {
-                    it.copy(
-                        userName = userName,
-                        isLoading = false
+                val totalXp  = user.stats.totalPoints
+                val level    = LevelSystem.levelFromXp(totalXp)
+                val progress = LevelSystem.levelProgress(totalXp)
+                val rank     = LevelSystem.rankForLevel(level)
+
+                _uiState.update { state ->
+                    state.copy(
+                        isLoading     = false,
+                        userName      = userName,
+                        userStats     = user.stats,
+                        userLevel     = level,
+                        levelProgress = progress,
+                        rankName      = rank.displayName
                     )
                 }
+            }
+
+            is Result.Error -> {
+                val fallback = auth.currentUser?.displayName
+                    ?: auth.currentUser?.email?.split("@")?.first()
+                    ?: "Гость"
+                _uiState.update { it.copy(isLoading = false, userName = fallback) }
+            }
+        }
+    }
+
+    // ── Загрузка викторин (suspend) ───────────────────────────────────────
+
+    private suspend fun loadQuizzes() {
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+
+        when (val result = quizRepository.getPopularQuizzes(limit = 100)) {
+            is Result.Success -> {
+                val items = result.data.map { it.toQuizItem() }
+                allQuizzes = items
+                loadCustomQuizzesIntoCache()
+                val filtered = quizzesForSelectedCategory(_uiState.value.selectedCategory)
+                if (items.isEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            quizzes = filtered,
+                            errorMessage = "Викторин нет. Нажмите ➕ чтобы добавить"
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(isLoading = false, quizzes = filtered, errorMessage = null)
+                    }
+                }
+            }
+
+            is Result.Error -> {
+                loadCustomQuizzesIntoCache()
+                val filtered = quizzesForSelectedCategory(_uiState.value.selectedCategory)
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Ошибка загрузки: ${result.exception.message}",
+                        quizzes = filtered
+                    )
+                }
+            }
+        }
+    }
+
+    private fun quizzesForSelectedCategory(category: String): List<QuizItem> = when (category) {
+        "Все" -> allQuizzes
+        HOME_CATEGORY_CUSTOM -> customQuizzesCache
+        else -> allQuizzes.filter { it.category == category }
+    }
+
+    private suspend fun loadCustomQuizzesIntoCache() {
+        when (val r = quizRepository.getPublicCustomQuizzes(limit = 50)) {
+            is Result.Success -> {
+                customQuizzesCache = r.data.map { it.toQuizItem() }
+            }
+            is Result.Error -> {
+                customQuizzesCache = emptyList()
+            }
+        }
+    }
+
+    // ── Публичные методы ──────────────────────────────────────────────────
+
+    /**
+     * Вызывать при возвращении на HomeScreen (например после прохождения викторины),
+     * чтобы подтянуть свежую статистику и пересчитать уровень.
+     */
+    fun refreshUserStats() {
+        val userId = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            loadUserData(userId)
+            when (val r = challengeRepository.fetchUserChallengeSides(userId)) {
+                is Result.Success -> applyHomeChallengeSides(r.data)
+                is Result.Error   -> { }
             }
         }
     }
 
     fun refreshUserName() {
-        auth.currentUser?.uid?.let { userId ->
-            loadUserData(userId)
-        }
+        val userId = auth.currentUser?.uid ?: return
+        viewModelScope.launch { loadUserData(userId) }
     }
 
-    /// ЗАГРУЗКА ВИКТОРИН
-    fun loadQuizzes() {
-        println("DEBUG: loadQuizzes() called")
-        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-
+    fun refreshChallenges() {
+        val userId = auth.currentUser?.uid ?: return
         viewModelScope.launch {
-            try {
-                println("DEBUG: Calling quizRepository.getPopularQuizzes()")
-                val result = quizRepository.getPopularQuizzes(limit = 20)
-                println("DEBUG: Got result from getPopularQuizzes")
-
-                result.fold(
-                    onSuccess = { quizzes ->
-                        println("DEBUG: Success! Got ${quizzes.size} quizzes")
-
-                        val quizItems = quizzes.map { quiz ->
-                            QuizItem(
-                                id = quiz.id,
-                                title = quiz.title,
-                                category = quiz.category,
-                                questionCount = quiz.questions.size,
-                                difficulty = quiz.difficulty.name,
-                                description = quiz.description,
-                                rating = quiz.stats.averageRating,
-                                playCount = quiz.stats.timesTaken
-                            )
-                        }
-
-                        println("DEBUG: Created ${quizItems.size} quiz items")
-
-                        if (quizItems.isEmpty()) {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    quizzes = emptyList(),
-                                    errorMessage = "Викторин нет. Нажмите ➕ чтобы добавить"
-                                )
-                            }
-                            println("DEBUG: No quiz items found")
-                        } else {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    quizzes = quizItems,
-                                    selectedCategory = "Все"
-                                )
-                            }
-                            println("DEBUG: Updated UI state with ${quizItems.size} quizzes")
-                        }
-                    },
-                    onFailure = { exception ->
-                        println("DEBUG: Error loading quizzes: ${exception.message}")
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                errorMessage = "Ошибка загрузки: ${exception.message}"
-                            )
-                        }
-                    }
-                )
-            } catch (e: Exception) {
-                println("DEBUG: Exception in loadQuizzes: ${e.message}")
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Ошибка: ${e.localizedMessage}"
-                    )
-                }
+            when (val r = challengeRepository.fetchUserChallengeSides(userId)) {
+                is Result.Success -> applyHomeChallengeSides(r.data)
+                is Result.Error   -> { }
             }
         }
     }
 
-    // МЕТОД ДЛЯ ДОБАВЛЕНИЯ ДЕМО-ВИКТОРИН
-    fun addDemoQuizzes() {
-        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+    // ── Вызовы (данные с merge на клиенте, синхронно со snapshot в репозитории) ─
 
-        viewModelScope.launch {
-            try {
-                // Создаем простые тестовые викторины
-                val currentUserId = auth.currentUser?.uid ?: "demo_user_${System.currentTimeMillis()}"
-
-                val testQuizzes = listOf(
-                    com.example.brainracer.domain.entities.Quiz(
-                        id = "test_quiz_${System.currentTimeMillis()}",
-                        title = "Тест: Основы биологии",
-                        description = "Простая тестовая викторина",
-                        category = "Биология",
-                        difficulty = com.example.brainracer.domain.entities.QuizDifficulty.EASY,
-                        tags = listOf("тест", "биология"),
-                        questions = listOf(
-                            com.example.brainracer.domain.entities.Question(
-                                id = "q1",
-                                questionText = "Сколько хромосом у человека?",
-                                questionType = com.example.brainracer.domain.entities.QuestionType.MULTIPLE_CHOICE,
-                                options = listOf("23", "46", "48", "64"),
-                                correctAnswerIndex = 1,
-                                explanation = "У человека 46 хромосом",
-                                points = 10,
-                                timeLimit = 30
-                            )
-                        ),
-                        stats = com.example.brainracer.domain.entities.QuizStats(
-                            timesTaken = 0,
-                            averageScore = 0.0,
-                            totalAttempts = 0,
-                            completionRate = 0.0,
-                            ratingsCount = 0,
-                            averageRating = 0.0
-                        ),
-                        createdBy = currentUserId,
-                        createdAt = com.google.firebase.Timestamp.now(),
-                        isPublic = true,
-                        timePerQuestion = 30
-                    )
-                )
-
-                var successCount = 0
-                for (quiz in testQuizzes) {
-                    try {
-                        quizRepository.createQuiz(quiz).fold(
-                            onSuccess = {
-                                successCount++
-                            },
-                            onFailure = {
-                                // Игнорируем ошибку
-                            }
-                        )
-                    } catch (e: Exception) {
-                        // Продолжаем несмотря на ошибки
-                    }
-                    delay(500)
-                }
-
-                if (successCount > 0) {
-                    // Ждем и перезагружаем
-                    delay(2000)
-                    loadQuizzes()
-
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            errorMessage = "Демо-викторины добавлены!"
-                        )
-                    }
-                } else {
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            errorMessage = "Не удалось добавить викторины"
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Ошибка: ${e.localizedMessage}"
-                    )
-                }
-            }
+    private fun applyHomeChallengeSides(sides: UserChallengeSides) {
+        val incoming = sides.asChallenged.filter { it.status == ChallengeStatus.PENDING }
+            .sortedWith(
+                compareByDescending<Challenge> { it.createdAt.seconds }
+                    .thenByDescending { it.createdAt.nanoseconds }
+            )
+        val outgoing = sides.asChallenger.filter {
+            it.status == ChallengeStatus.PENDING ||
+                    it.status == ChallengeStatus.ACCEPTED ||
+                    it.status == ChallengeStatus.COMPLETED
         }
-    }
+        val outgoingPending = outgoing.filter { it.status == ChallengeStatus.PENDING }
+        val nowDate = Timestamp.now().toDate()
+        val activeAccepted = (sides.asChallenged + sides.asChallenger)
+            .distinctBy { it.id }
+            .filter {
+                it.status == ChallengeStatus.ACCEPTED &&
+                        it.expiresAt.toDate().after(nowDate)
+            }
+        val completed = (sides.asChallenged + sides.asChallenger)
+            .filter { it.status == ChallengeStatus.COMPLETED }
+            .distinctBy { it.id }
+            .sortedWith(
+                compareByDescending<Challenge> { it.completedAt?.seconds ?: 0L }
+                    .thenByDescending { it.completedAt?.nanoseconds ?: 0 }
+            )
+            .take(20)
 
-    fun loadQuizzesByCategory(category: String) {
-        // Фильтруем уже загруженные викторины
+        val homeActive = (incoming + outgoingPending + activeAccepted)
+            .distinctBy { it.id }
+            .sortedWith(
+                compareByDescending<Challenge> { it.createdAt.seconds }
+                    .thenByDescending { it.createdAt.nanoseconds }
+            )
+
         _uiState.update {
             it.copy(
-                selectedCategory = category,
-                isLoading = true
+                pendingChallenges      = incoming,
+                homeActiveChallenges   = homeActive,
+                homeFinishedChallenges = completed
             )
         }
+    }
 
+    /** Перезагружает список викторин из Firestore. */
+    fun reloadQuizzes() {
         viewModelScope.launch {
-            delay(500) // Имитация загрузки
+            loadQuizzes()
+        }
+    }
 
-            val currentQuizzes = _uiState.value.quizzes
-            val filtered = if (category == "Все") {
-                currentQuizzes
-            } else {
-                currentQuizzes.filter { it.category == category }
+    /** Фильтрация по категории — работает с кэшем; вкладка «Кастомные» подгружает список при необходимости. */
+    fun loadQuizzesByCategory(category: String) {
+        _uiState.update { it.copy(selectedCategory = category, isLoading = true) }
+        viewModelScope.launch {
+            delay(300) // небольшая задержка для ощущения отклика
+            if (category == HOME_CATEGORY_CUSTOM && customQuizzesCache.isEmpty()) {
+                loadCustomQuizzesIntoCache()
             }
-
-            _uiState.update {
-                it.copy(
-                    quizzes = filtered,
-                    isLoading = false
-                )
-            }
+            val filtered = quizzesForSelectedCategory(category)
+            _uiState.update { it.copy(quizzes = filtered, isLoading = false) }
         }
     }
 
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    fun loadChallengePickerData() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(challengePickerLoading = true) }
+            val userId = auth.currentUser?.uid ?: run {
+                _uiState.update { it.copy(challengePickerLoading = false) }
+                return@launch
+            }
+            val friends = when (val me = userRepository.getUser(userId)) {
+                is Result.Success -> me.data.friends.mapNotNull { fid ->
+                    when (val fr = userRepository.getUser(fid)) {
+                        is Result.Success -> fr.data.copy(id = fid)
+                        else -> null
+                    }
+                }
+                else -> emptyList()
+            }
+            val quizzes = when (val r = quizRepository.getPopularQuizzes(limit = 80)) {
+                is Result.Success -> r.data.map { it.toQuizItem() }
+                is Result.Error -> emptyList()
+            }
+            val quizList = quizzes.ifEmpty { allQuizzes }
+            _uiState.update {
+                it.copy(
+                    friendsForChallenge    = friends,
+                    challengePickerQuizzes = quizList,
+                    challengePickerLoading = false
+                )
+            }
+        }
+    }
+
+    fun sendChallengeToFriend(friendId: String, quizId: String, quizTitle: String) {
+        viewModelScope.launch {
+            val challengerId = auth.currentUser?.uid ?: return@launch
+            val challenge = Challenge(
+                quizId           = quizId,
+                quizTitle        = quizTitle,
+                challengerUserId = challengerId,
+                challengedUserId = friendId,
+                status           = ChallengeStatus.PENDING
+            )
+            challengeRepository.createChallenge(challenge).fold(
+                onSuccess = {
+                    _uiState.update {
+                        it.copy(
+                            errorMessage         = null,
+                            challengeSentMessage = "Вызов отправлен"
+                        )
+                    }
+                    viewModelScope.launch {
+                        when (val r = challengeRepository.fetchUserChallengeSides(challengerId)) {
+                            is Result.Success -> applyHomeChallengeSides(r.data)
+                            is Result.Error   -> { }
+                        }
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(errorMessage = e.message) }
+                }
+            )
+        }
+    }
+
+    fun consumeChallengeSentMessage() {
+        _uiState.update { it.copy(challengeSentMessage = null) }
+    }
+
+    // ── Добавление демо-викторин ──────────────────────────────────────────
+
+    fun addDemoQuizzes() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            try {
+                val userId = auth.currentUser?.uid
+                    ?: "demo_user_${System.currentTimeMillis()}"
+
+                val demoQuiz = Quiz(
+                    id          = "test_quiz_${System.currentTimeMillis()}",
+                    title       = "Тест: Основы биологии",
+                    description = "Простая тестовая викторина",
+                    categoryId  = "Биология",
+                    difficulty  = QuizDifficulty.EASY,
+                    questions   = listOf(
+                        com.example.brainracer.domain.entities.Question(
+                            id                 = "q1",
+                            questionText       = "Сколько хромосом у человека?",
+                            questionType       = QuestionType.MULTIPLE_CHOICE,
+                            options            = listOf("23", "46", "48", "64"),
+                            correctAnswerIndex = 1,
+                            explanation        = "У человека 46 хромосом",
+                            points             = 10,
+                            timeLimit          = 30
+                        )
+                    ),
+                    stats       = QuizStats(),
+                    createdBy   = userId,
+                    createdAt   = Timestamp.now(),
+                    timePerQuestion = 30
+                )
+
+                when (quizRepository.createQuiz(demoQuiz)) {
+                    is Result.Success -> {
+                        delay(1000)
+                        loadQuizzes()
+                        _uiState.update {
+                            it.copy(isLoading = false, errorMessage = "Демо-викторины добавлены!")
+                        }
+                    }
+                    is Result.Error -> {
+                        _uiState.update {
+                            it.copy(isLoading = false, errorMessage = "Не удалось добавить викторины")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = "Ошибка: ${e.localizedMessage}")
+                }
+            }
+        }
     }
 }

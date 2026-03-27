@@ -1,0 +1,25 @@
+rules_version = '2';
+// Только Firebase Storage (НЕ Firestore). В консоли: вкладка «Storage» → «Rules», не «Firestore» → «Rules».
+// Если вставить этот блок в редактор правил Firestore, Storage останется со старыми правилами — загрузки и getDownloadUrl() ломаются.
+// Деплой: firebase deploy --only storage (см. firebase.json).
+// allow read: if true на эти пути нужен для getDownloadUrl() после putBytes (иначе часто «object does not exist»).
+// Пути приложения: avatars/{uid}/**, quiz_covers/{uid}/**, quiz_images/{uid}/** — userId в пути == request.auth.uid.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /avatars/{userId}/{file} {
+      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read: if true;
+    }
+    match /quiz_covers/{userId}/{file} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    match /quiz_images/{userId}/{file} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

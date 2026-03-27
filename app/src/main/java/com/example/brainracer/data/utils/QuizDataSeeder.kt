@@ -73,212 +73,10 @@ object QuizDataSeeder {
 
     fun createSampleQuizzes(): List<Quiz> {
         return listOf(
-            createPlantQuiz(),
-            createFoodQuiz(),
             createScienceQuiz(),
             createGeometryQuiz(),
             createHistoryQuiz(),
             createGeographyQuiz()
-        )
-    }
-
-    private fun createPlantQuiz(): Quiz {
-        return Quiz(
-            id = PLANT_QUIZ_ID,
-            title = "Мир растений",
-            description = "Увлекательная викторина о самых необычных и удивительных растениях нашей планеты",
-            category = "Биология",
-            difficulty = QuizDifficulty.MEDIUM,
-            tags = listOf("растения", "биология", "природа", "наука", "ботаника"),
-            questions = listOf(
-                Question(
-                    id = UUID.randomUUID().toString(),
-                    questionText = "Какое растение способно десятилетиями расти под землёй, прежде чем показаться на поверхности?",
-                    questionType = QuestionType.MULTIPLE_CHOICE,
-                    options = listOf(
-                        "Саговник",
-                        "Рябчик",
-                        "Подснежник",
-                        "Орхидея-призрак"
-                    ),
-                    correctAnswerIndex = 3,
-                    explanation = "Орхидея-призрак может жить как подземный сапрофит до 15 лет, прежде чем сформирует цветонос.",
-                    points = 10,
-                    timeLimit = 30
-                ),
-                Question(
-                    id = UUID.randomUUID().toString(),
-                    questionText = "Какое растение способно выжить в пустыне, годами сохраняя влагу в своих листьях?",
-                    questionType = QuestionType.MULTIPLE_CHOICE,
-                    options = listOf(
-                        "Алоэ вера",
-                        "Толстянка",
-                        "Вельвичия",
-                        "Кактус"
-                    ),
-                    correctAnswerIndex = 2,
-                    explanation = "Вельвичия — это растение пустыни Намиб может жить до 2000 лет, получая влагу из туманов.",
-                    points = 10,
-                    timeLimit = 30
-                ),
-                Question(
-                    id = UUID.randomUUID().toString(),
-                    questionText = "Какое растение умеет «охотиться» на насекомых, переваривая их с помощью специальных ферментов?",
-                    questionType = QuestionType.MULTIPLE_CHOICE,
-                    options = listOf(
-                        "Росянка",
-                        "Мимоза стыдливая",
-                        "Комнатная герань",
-                        "Папоротник"
-                    ),
-                    correctAnswerIndex = 0,
-                    explanation = "Росянка — хищное растение, которое ловит насекомых липкими капельками на листьях.",
-                    points = 10,
-                    timeLimit = 30
-                ),
-                Question(
-                    id = UUID.randomUUID().toString(),
-                    questionText = "Какое дерево считается священным во многих культурах и может жить тысячи лет?",
-                    questionType = QuestionType.MULTIPLE_CHOICE,
-                    options = listOf(
-                        "Дуб",
-                        "Секвойя",
-                        "Баобаб",
-                        "Баньян"
-                    ),
-                    correctAnswerIndex = 3,
-                    explanation = "Баньян — священное дерево в Индии, способное образовывать целые рощи благодаря воздушным корням.",
-                    points = 10,
-                    timeLimit = 30
-                ),
-                Question(
-                    id = UUID.randomUUID().toString(),
-                    questionText = "Какое растение известно своим ярким ароматом и используется в парфюмерии и кулинарии?",
-                    questionType = QuestionType.MULTIPLE_CHOICE,
-                    options = listOf(
-                        "Лаванда",
-                        "Жасмин",
-                        "Роза",
-                        "Все перечисленные"
-                    ),
-                    correctAnswerIndex = 3,
-                    explanation = "Лаванда, жасмин и роза широко используются и в парфюмерии, и в кулинарии.",
-                    points = 10,
-                    timeLimit = 30
-                )
-            ),
-            stats = QuizStats(
-                timesTaken = 0,
-                averageScore = 0.0,
-                totalAttempts = 0,
-                completionRate = 0.0,
-                ratingsCount = 0,
-                averageRating = 0.0
-            ),
-            createdBy = "demo",
-            createdAt = Timestamp.now(),
-            isPublic = true,
-            timePerQuestion = 30
-        )
-    }
-
-    private fun createFoodQuiz(): Quiz {
-        return Quiz(
-            id = FOOD_QUIZ_ID,
-            title = "Мир кулинарии",
-            description = "Интересная викторина о продуктах питания, кулинарных традициях и пищевых технологиях",
-            category = "Кулинария",
-            difficulty = QuizDifficulty.EASY,
-            tags = listOf("еда", "кулинария", "продукты", "рецепты"),
-            questions = listOf(
-                Question(
-                    id = UUID.randomUUID().toString(),
-                    questionText = "Сколько граммов в одной столовой ложке муки?",
-                    questionType = QuestionType.MULTIPLE_CHOICE,
-                    options = listOf(
-                        "10 г",
-                        "15 г",
-                        "20 г",
-                        "25 г"
-                    ),
-                    correctAnswerIndex = 1,
-                    explanation = "Примерно 15 граммов муки помещается в столовую ложку.",
-                    points = 10,
-                    timeLimit = 30
-                ),
-                Question(
-                    id = UUID.randomUUID().toString(),
-                    questionText = "Какая страна является родиной пасты?",
-                    questionType = QuestionType.MULTIPLE_CHOICE,
-                    options = listOf(
-                        "Франция",
-                        "Италия",
-                        "Китай",
-                        "Греция"
-                    ),
-                    correctAnswerIndex = 1,
-                    explanation = "Паста родом из Италии.",
-                    points = 10,
-                    timeLimit = 30
-                ),
-                Question(
-                    id = UUID.randomUUID().toString(),
-                    questionText = "Какой овощ содержит больше всего витамина С?",
-                    questionType = QuestionType.MULTIPLE_CHOICE,
-                    options = listOf(
-                        "Картофель",
-                        "Морковь",
-                        "Болгарский перец",
-                        "Капуста"
-                    ),
-                    correctAnswerIndex = 2,
-                    explanation = "Болгарский перец содержит больше витамина С, чем цитрусовые.",
-                    points = 10,
-                    timeLimit = 30
-                ),
-                Question(
-                    id = UUID.randomUUID().toString(),
-                    questionText = "Что такое «суши» на самом деле означает?",
-                    questionType = QuestionType.MULTIPLE_CHOICE,
-                    options = listOf(
-                        "Сырая рыба",
-                        "Кислый рис",
-                        "Морские водоросли",
-                        "Японская еда"
-                    ),
-                    correctAnswerIndex = 1,
-                    explanation = "«Суши» означает «кислый рис».",
-                    points = 10,
-                    timeLimit = 30
-                ),
-                Question(
-                    id = UUID.randomUUID().toString(),
-                    questionText = "Какой самый популярный напиток в мире после воды?",
-                    questionType = QuestionType.MULTIPLE_CHOICE,
-                    options = listOf(
-                        "Кофе",
-                        "Чай",
-                        "Пиво",
-                        "Кола"
-                    ),
-                    correctAnswerIndex = 1,
-                    explanation = "Чай — второй по популярности напиток в мире после воды.",
-                    points = 10,
-                    timeLimit = 30
-                )
-            ),
-            stats = QuizStats(
-                timesTaken = 0,
-                averageScore = 0.0,
-                totalAttempts = 0,
-                completionRate = 0.0,
-                ratingsCount = 0,
-                averageRating = 0.0
-            ),
-            createdBy = "demo",
-            createdAt = Timestamp.now(),
-            isPublic = true,
-            timePerQuestion = 30
         )
     }
 
@@ -287,9 +85,8 @@ object QuizDataSeeder {
             id = SCIENCE_QUIZ_ID,
             title = "Наука: Физика и химия",
             description = "Интересные вопросы о законах физики, химических элементах и научных явлениях",
-            category = "Наука",
+            categoryId = "Наука",
             difficulty = QuizDifficulty.HARD,
-            tags = listOf("физика", "химия", "наука", "элементы", "эксперименты"),
             questions = listOf(
                 Question(
                     id = UUID.randomUUID().toString(),
@@ -377,7 +174,6 @@ object QuizDataSeeder {
             ),
             createdBy = "demo",
             createdAt = Timestamp.now(),
-            isPublic = true,
             timePerQuestion = 35
         )
     }
@@ -387,9 +183,8 @@ object QuizDataSeeder {
             id = GEOMETRY_QUIZ_ID,
             title = "Геометрия вокруг нас",
             description = "Удивительные геометрические формы в природе, архитектуре и повседневных предметах",
-            category = "Математика",
+            categoryId = "Математика",
             difficulty = QuizDifficulty.MEDIUM,
-            tags = listOf("геометрия", "математика", "фигуры", "симметрия", "формы"),
             questions = listOf(
                 Question(
                     id = UUID.randomUUID().toString(),
@@ -478,7 +273,6 @@ object QuizDataSeeder {
             ),
             createdBy = "demo",
             createdAt = Timestamp.now(),
-            isPublic = true,
             timePerQuestion = 35
         )
     }
@@ -488,9 +282,8 @@ object QuizDataSeeder {
             id = HISTORY_QUIZ_ID,
             title = "Исторические факты",
             description = "Увлекательные вопросы об исторических событиях, личностях и цивилизациях",
-            category = "История",
+            categoryId = "История",
             difficulty = QuizDifficulty.MEDIUM,
-            tags = listOf("история", "факты", "цивилизации", "события"),
             questions = listOf(
                 Question(
                     id = UUID.randomUUID().toString(),
@@ -578,7 +371,6 @@ object QuizDataSeeder {
             ),
             createdBy = "demo",
             createdAt = Timestamp.now(),
-            isPublic = true,
             timePerQuestion = 30
         )
     }
@@ -588,9 +380,8 @@ object QuizDataSeeder {
             id = GEOGRAPHY_QUIZ_ID,
             title = "География мира",
             description = "Захватывающая викторина о странах, столицах, реках и горах нашей планеты",
-            category = "География",
+            categoryId = "География",
             difficulty = QuizDifficulty.MEDIUM,
-            tags = listOf("география", "страны", "столицы", "природа"),
             questions = listOf(
                 Question(
                     id = UUID.randomUUID().toString(),
@@ -678,7 +469,6 @@ object QuizDataSeeder {
             ),
             createdBy = "demo",
             createdAt = Timestamp.now(),
-            isPublic = true,
             timePerQuestion = 30
         )
     }
@@ -738,12 +528,12 @@ object QuizDataSeeder {
 
     fun getAllCategories(): List<String> {
         return listOf(
-            "Биология",
-            "Кулинария",
-            "Наука",
-            "Математика",
+            "География",
             "История",
-            "География"
+            "Математика",
+            "Фильмы и музыка",
+            "Наука",
+            "Спорт"
         )
     }
 
@@ -752,16 +542,15 @@ object QuizDataSeeder {
     }
 
     fun getQuizzesByCategory(category: String): List<Quiz> {
-        return createSampleQuizzes().filter { it.category == category }
+        return createSampleQuizzes().filter { it.categoryId == category }
     }
 
     fun searchQuizzes(query: String): List<Quiz> {
         val lowerQuery = query.lowercase()
         return createSampleQuizzes().filter {
             it.title.lowercase().contains(lowerQuery) ||
-                    it.category.lowercase().contains(lowerQuery) ||
-                    it.description.lowercase().contains(lowerQuery) ||
-                    it.tags.any { tag -> tag.lowercase().contains(lowerQuery) }
+                    it.categoryId.lowercase().contains(lowerQuery) ||
+                    it.description.lowercase().contains(lowerQuery)
         }
     }
 

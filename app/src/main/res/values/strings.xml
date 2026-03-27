@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Brain Racer</string>
+    <string name="notification_channel_name">Brain Racer</string>
 </resources>

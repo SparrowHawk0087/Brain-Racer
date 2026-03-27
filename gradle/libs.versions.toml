@@ -1,8 +1,8 @@
+
 [versions]
-agp = "8.13.1"
-firebaseBom = "34.5.0"
-firebaseBomVersion = "34.6.0"
-kotlin = "2.0.21"
+agp = "9.1.0"
+firebaseBom = "34.6.0"
+kotlin = "2.2.10"
 coreKtx = "1.17.0"
 junit = "4.13.2"
 junitVersion = "1.1.5"
@@ -14,12 +14,16 @@ animationCoreLint = "1.9.5"
 navigationCompose = "2.9.6"
 material = "1.13.0"
 navigationSafeArgsGenerator = "2.9.6"
+foundation = "1.10.5"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
+firebase-auth = { module = "com.google.firebase:firebase-auth" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
-firebase-bom-v3460 = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBomVersion" }
+firebase-firestore = { module = "com.google.firebase:firebase-firestore" }
+firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
+firebase-storage = { module = "com.google.firebase:firebase-storage" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
@@ -37,9 +41,9 @@ androidx-compose-animation-core-lint = { group = "androidx.compose.animation", n
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 androidx-navigation-safe-args-generator = { group = "androidx.navigation", name = "navigation-safe-args-generator", version.ref = "navigationSafeArgsGenerator" }
+androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-

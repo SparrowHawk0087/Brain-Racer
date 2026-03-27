@@ -1,35 +1,29 @@
 package com.example.brainracer.ui.screens
 
-import android.content.res.Resources
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,7 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -53,10 +46,21 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.brainracer.R
 import com.example.brainracer.ui.theme.BrainRacerTheme
-import com.example.brainracer.ui.theme.ButtonShapeLogin
-import com.example.brainracer.ui.theme.Shapes
 import com.example.brainracer.ui.viewmodels.AuthViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import org.xbill.DNS.Lookup
+import org.xbill.DNS.SimpleResolver
+import org.xbill.DNS.TextParseException
+import org.xbill.DNS.Type
+import java.net.InetAddress
+import java.net.UnknownHostException
 
+/** Внутренний маркер: email прошёл проверку (не для отображения). */
+internal const val AUTH_EMAIL_VALIDATED = "__auth_email_ok__"
+
+private const val PASSWORD_VALIDATED = "__auth_pwd_ok__"
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
@@ -70,12 +74,35 @@ fun AuthScreen(
     var username by remember { mutableStateOf("") }
     var isLogin by remember { mutableStateOf(true) }
     var isPasswordVisible by rememberSaveable { mutableStateOf(false) }
-    //val user by authViewModel.user.collectAsState()
     val error by authViewModel.error.collectAsState()
     val context = LocalContext.current
+    val colorScheme = MaterialTheme.colorScheme
     var isLoading by remember { mutableStateOf(false) }
 
-    // Обработка ошибок
+    var emailValidationMessage by remember { mutableStateOf("") }
+    var isCheckingEmail by remember { mutableStateOf(false) }
+    val isUsernameValid = isValidUsername(username)
+
+    LaunchedEffect(isLogin) {
+        emailValidationMessage = ""
+        isCheckingEmail = false
+    }
+
+    LaunchedEffect(email) {
+        if (email.isNotBlank()) {
+            emailValidationMessage = ""
+            isCheckingEmail = true
+            delay(500)
+            emailValidationMessage = validateEmailMessageSuspend(email)
+            isCheckingEmail = false
+        } else {
+            emailValidationMessage = ""
+            isCheckingEmail = false
+        }
+    }
+
+    val isEmailValid = emailValidationMessage == AUTH_EMAIL_VALIDATED
+
     LaunchedEffect(error) {
         error?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
@@ -84,148 +111,123 @@ fun AuthScreen(
         }
     }
 
-    Column (
-        modifier = modifier.fillMaxSize()
-            .background(MaterialTheme.colorScheme.secondary),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colorScheme.background)
+            .windowInsetsPadding(WindowInsets.statusBars)
     ) {
+        if (!isLogin) {
+            IconButton(
+                onClick = { isLogin = true },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 8.dp, top = 4.dp)
+                    .size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Назад",
+                    tint = colorScheme.onBackground
+                )
+            }
+        }
+
         Column(
-            modifier = modifier.fillMaxWidth(0.8f),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 28.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (isLogin) {
-                Text(
-                    text = "Welcome back",
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    style = MaterialTheme.typography.displayLarge,
-                    modifier = Modifier.padding(8.dp),
-                )
-            } else {
-                Text(
-                    text = "Create account",
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    style = MaterialTheme.typography.displayMedium,
-                    modifier = Modifier.padding(8.dp),
-                )
-            }
-
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (!isLogin) {
-                OutlinedTextField(
-                    value = username,
-                    onValueChange = { username = it },
-                    label = { Text(
-                        text = "Username",
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        style = MaterialTheme.typography.bodyLarge
-                    ) },
-                    placeholder = { Text(
-                        text = "Enter your username",
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        style = MaterialTheme.typography.labelSmall
-                    ) },
-                    leadingIcon = { Icon(
-                        Icons.Default.AccountCircle,
-                        contentDescription = "Username",
-                        tint = MaterialTheme.colorScheme.onPrimary
-                        ) },
-                    isError = username.isBlank() || username.isEmpty() || username.contains(" "),
-                    supportingText = {
-                        if (username.contains(" ") || username.isEmpty())
-                            Text(
-                                text = "Username cannot be empty or contain spaces",
-                                color = MaterialTheme.colorScheme.inverseOnSurface,
-                                style = MaterialTheme.typography.labelSmall
-                                )
-                    },
-                    singleLine = true,
-                    shape = Shapes.small,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.onPrimary,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onPrimary,
-                        focusedTextColor = MaterialTheme.colorScheme.onPrimary,
-                        errorTextColor = MaterialTheme.colorScheme.error
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text(
-                    text = "Email",
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    style = MaterialTheme.typography.bodyLarge
-                    ) },
-                placeholder = { Text(
-                    text = "Enter your email",
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    style = MaterialTheme.typography.labelSmall
-                ) },
-                singleLine = true,
-                leadingIcon = { Icon(
-                    Icons.Default.Email,
-                    contentDescription = "Email",
-                    tint = MaterialTheme.colorScheme.onPrimary
-                    ) },
-                isError = email.isNotBlank() && !isValidEmail(email),
-                supportingText = { Text(
-                    text = validateEmailMessage(email),
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
-                    style = MaterialTheme.typography.labelSmall
-                    ) },
-                shape = Shapes.small,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.onPrimary,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onPrimary,
-                    focusedTextColor = MaterialTheme.colorScheme.onPrimary,
-                    errorTextColor = MaterialTheme.colorScheme.error
-                ),
+            Text(
+                text = if (isLogin) "С возвращением" else "Регистрация",
+                color = colorScheme.onBackground,
+                fontWeight = FontWeight.Bold,
+                fontSize = if (isLogin) 30.sp else 28.sp,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(Modifier.height(28.dp))
 
-            OutlinedTextField(
+            if (!isLogin) {
+                AuthStyledTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = "Имя пользователя",
+                    placeholder = "Придумайте никнейм",
+                    isError = username.contains(" ") || username.isEmpty(),
+                    supportingText = {
+                        if (username.contains(" ") || username.isEmpty()) {
+                            Text(
+                                "Никнейм не может быть пустым или содержать пробелы",
+                                fontSize = 12.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                )
+                Spacer(Modifier.height(14.dp))
+            }
+
+            AuthStyledTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = "Электронная почта",
+                placeholder = "Введите email",
+                isError = email.isNotBlank() && !isEmailValid && emailValidationMessage.isNotEmpty(),
+                trailingIcon = if (isCheckingEmail) {
+                    {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = colorScheme.primary
+                        )
+                    }
+                } else null,
+                supportingText = {
+                    when {
+                        isCheckingEmail ->
+                            Text(
+                                "Проверка адреса…",
+                                fontSize = 12.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
+                        emailValidationMessage.isNotEmpty() && !isEmailValid ->
+                            Text(
+                                text = emailValidationMessage,
+                                fontSize = 12.sp,
+                                color = colorScheme.error
+                            )
+                        isEmailValid ->
+                            Text(
+                                "Адрес указан корректно",
+                                fontSize = 12.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
+                    }
+                }
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            AuthStyledTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text(
-                    text = "Password",
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    style = MaterialTheme.typography.bodyLarge
-
-                ) },
-                placeholder = { Text(
-                    text = "Enter your password",
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    style = MaterialTheme.typography.labelSmall
-                ) },
+                label = "Пароль",
+                placeholder = "Введите пароль",
                 isError = password.isNotBlank() && !isValidPassword(password),
-                supportingText = { Text(
-                    text = validatePasswordMessage(password),
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
-                    style = MaterialTheme.typography.labelSmall
-                    ) },
                 visualTransformation = if (isPasswordVisible) {
                     VisualTransformation.None
                 } else {
                     PasswordVisualTransformation()
                 },
-                singleLine = true,
-                leadingIcon = { Icon(
-                    Icons.Default.Lock,
-                    contentDescription = "Password",
-                    tint = MaterialTheme.colorScheme.onPrimary
-                    ) },
                 trailingIcon = {
                     IconButton(
                         onClick = { isPasswordVisible = !isPasswordVisible },
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             painter = if (isPasswordVisible) {
@@ -233,38 +235,36 @@ fun AuthScreen(
                             } else {
                                 painterResource(R.drawable.visibility_off)
                             },
-                            contentDescription = if (isPasswordVisible) {
-                                "Hide password"
-                            } else {
-                                "Show password"
-                            },
-                            tint = MaterialTheme.colorScheme.onPrimary
+                            contentDescription = if (isPasswordVisible) "Скрыть пароль" else "Показать пароль",
+                            tint = colorScheme.onSurfaceVariant
                         )
                     }
                 },
-                shape = Shapes.small,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.onPrimary,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onPrimary,
-                    focusedTextColor = MaterialTheme.colorScheme.onPrimary,
-                    errorTextColor = MaterialTheme.colorScheme.error
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-            if (isLogin) {
-                TextButton(onClick = onForgotPassword) {
-                    Text(
-                        "Forgot Password?",
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Left
-                    )
+                supportingText = {
+                    val msg = validatePasswordMessage(password)
+                    if (msg.isNotEmpty() && msg != PASSWORD_VALIDATED) {
+                        Text(text = msg, fontSize = 12.sp, color = colorScheme.error)
+                    }
                 }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
+            )
 
-            Button(
+            if (isLogin) {
+                Text(
+                    text = "Забыли пароль?",
+                    color = colorScheme.primary,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .clickable { onForgotPassword() }
+                )
+            }
+
+            Spacer(Modifier.height(22.dp))
+
+            AuthGradientButton(
+                text = if (isLogin) "Войти" else "Зарегистрироваться",
                 onClick = {
                     if (isLogin) {
                         if (email.isNotBlank() && password.isNotBlank()) {
@@ -278,83 +278,136 @@ fun AuthScreen(
                         }
                     }
                 },
-                enabled = !isLoading,
-                shape = ButtonShapeLogin,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text(
-                        text = if (isLogin) "Login" else "Register",
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        style = MaterialTheme.typography.labelSmall
-                        )
-                }
+                enabled = when {
+                    isLogin -> email.isNotBlank() && password.isNotBlank() && isEmailValid && isValidPassword(password)
+                    else -> isUsernameValid && email.isNotBlank() && password.isNotBlank() && isEmailValid && isValidPassword(password)
+                },
+                loading = isLoading
+            )
+
+            if (isLogin) {
+                Spacer(Modifier.height(14.dp))
+                AuthGoogleButton(
+                    onClick = {
+                        Toast.makeText(
+                            context,
+                            "Вход через Google появится в следующих обновлениях",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                )
             }
 
-            TextButton(onClick = { isLogin = !isLogin }) {
-                Text(
-                    text = if (isLogin) "Don't have an account? Sign up" else "Already have an account? Log in",
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    style = MaterialTheme.typography.labelSmall
-                    )
-            }
+            Spacer(Modifier.height(20.dp))
+
+            Text(
+                text = if (isLogin) "Нет аккаунта? Зарегистрироваться" else "Уже есть аккаунт? Войти",
+                color = colorScheme.onBackground,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isLogin = !isLogin }
+                    .padding(vertical = 8.dp)
+            )
+
         }
     }
 }
 
-// Function to send pre-check email
-fun validateEmailMessage(email: String): String {
+suspend fun isDomainExists(domain: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val resolver = SimpleResolver("8.8.8.8")
+        resolver.setTimeout(5)
+
+        fun checkWithResolver(type: Int): Boolean {
+            val lookup = Lookup(domain, type)
+            lookup.setResolver(resolver)
+            val records = lookup.run()
+            return records != null && records.isNotEmpty()
+        }
+
+        if (checkWithResolver(Type.MX)) {
+            Log.d("DNS_CHECK", "Domain $domain has MX records")
+            return@withContext true
+        }
+        if (checkWithResolver(Type.A)) {
+            Log.d("DNS_CHECK", "Domain $domain has A records")
+            return@withContext true
+        }
+        if (checkWithResolver(Type.AAAA)) {
+            Log.d("DNS_CHECK", "Domain $domain has AAAA records")
+            return@withContext true
+        }
+
+        try {
+            InetAddress.getByName(domain)
+            Log.d("DNS_CHECK", "Domain $domain resolved via InetAddress")
+            return@withContext true
+        } catch (e: UnknownHostException) {
+            Log.d("DNS_CHECK", "Domain $domain not found via InetAddress")
+            return@withContext false
+        }
+    } catch (e: TextParseException) {
+        Log.e("DNS_CHECK", "TextParseException for domain $domain", e)
+        false
+    } catch (e: Exception) {
+        Log.e("DNS_CHECK", "Unexpected error checking domain $domain", e)
+        true
+    }
+}
+
+suspend fun validateEmailMessageSuspend(email: String): String {
     if (email.isEmpty()) return ""
 
-    if (!isValidEmail(email)) {
+    if (!isValidEmailSyntax(email)) {
         return when {
-            !email.contains("@") -> "Email must contain @ symbol"
-            !email.contains(".") -> "Email must contain a domain (e.g., .com)"
-            email.startsWith("@") -> "Email cannot start with @"
-            email.endsWith("@") -> "Email cannot end with @"
-            email.endsWith(".") -> "Email cannot end with a dot"
-            else -> "Invalid email format"
+            !email.contains("@") -> "В адресе должен быть символ @"
+            !email.contains(".") -> "Укажите домен (например, .ru или .com)"
+            email.startsWith("@") -> "Адрес не может начинаться с @"
+            email.endsWith("@") -> "Адрес не может заканчиваться на @"
+            email.endsWith(".") -> "Адрес не может заканчиваться точкой"
+            else -> "Некорректный формат email"
         }
     }
-    return "Success"
+
+    val domain = email.substringAfter('@')
+    return if (isDomainExists(domain)) {
+        AUTH_EMAIL_VALIDATED
+    } else {
+        "Домен почты не найден или не принимает письма"
+    }
 }
 
-// Function to validate email format
-fun isValidEmail(email: String): Boolean {
+fun isValidEmailSyntax(email: String): Boolean {
     val emailPattern = Regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")
     return emailPattern.matches(email)
 }
 
-
-// Function to send pre-check password
 fun validatePasswordMessage(password: String): String {
     if (password.isEmpty()) return ""
 
     return when {
-        password.length < 6 -> "Password must be at least 6 characters"
-        password.contains(" ") -> "Password cannot contain spaces"
-        !password.any { it.isDigit() } -> "Password must contain at least one digit"
-        !password.any { it.isLetter() } -> "Password must contain at least one letter"
-        else -> "Success"
+        password.length < 6 -> "Пароль не короче 6 символов"
+        password.contains(" ") -> "Пароль не должен содержать пробелы"
+        !password.any { it.isDigit() } -> "Добавьте хотя бы одну цифру"
+        !password.any { it.isLetter() } -> "Добавьте хотя бы одну букву"
+        else -> PASSWORD_VALIDATED
     }
 }
 
-// Function to validate password format
 fun isValidPassword(password: String): Boolean {
-    return validatePasswordMessage(password) == "Success"
+    return validatePasswordMessage(password) == PASSWORD_VALIDATED
+}
+
+fun isValidUsername(username: String): Boolean {
+    return username.isNotBlank() && !username.contains(" ")
 }
 
 @Preview
 @Composable
 fun AuthScreenPreview() {
-    BrainRacerTheme(
-            darkTheme = false
-    ) {
+    BrainRacerTheme(darkTheme = false) {
         AuthScreen()
     }
 }
@@ -362,9 +415,7 @@ fun AuthScreenPreview() {
 @Preview
 @Composable
 fun AuthScreenPreviewDark() {
-    BrainRacerTheme(
-        darkTheme = true
-    ) {
+    BrainRacerTheme(darkTheme = true) {
         AuthScreen()
     }
 }
