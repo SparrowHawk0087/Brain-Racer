@@ -1,6 +1,8 @@
 package com.example.brainracer.ui.components
 
 import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,12 +25,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Sports
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -47,12 +49,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +75,7 @@ import com.example.brainracer.data.local.QuizOfflineCache
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.data.utils.Result
+import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
 import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.QuizDifficulty
 import com.example.brainracer.ui.theme.BrainRacerColorTokens
@@ -94,7 +103,7 @@ private fun difficultyLabel(d: QuizDifficulty): String = when (d) {
 fun QuizDetailScreen(
     quizId: String,
     navController: NavController,
-    onNavigateToPlay: (quizId: String) -> Unit = { }
+    onNavigateToPlay: (quizId: String, practiceReplay: Boolean) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -104,9 +113,11 @@ fun QuizDetailScreen(
 
     var quiz by remember { mutableStateOf<Quiz?>(null) }
     var isLoading by remember { mutableStateOf(true) }
-    var showFriendDialog by remember { mutableStateOf(false) }
     var soloAlreadyCompleted by remember { mutableStateOf(false) }
     var soloCheckDone by remember { mutableStateOf(false) }
+    var mySavedPlayCount by remember { mutableIntStateOf(0) }
+    var showDeleteQuizDialog by remember { mutableStateOf(false) }
+    var isDeletingQuiz by remember { mutableStateOf(false) }
 
     // Загружаем квиз
     LaunchedEffect(quizId) {
@@ -125,10 +136,14 @@ fun QuizDetailScreen(
         }
     }
 
+    val latestQuizId by rememberUpdatedState(quizId)
+    val latestUserId by rememberUpdatedState(currentUserId)
+
     LaunchedEffect(quizId, currentUserId) {
         if (currentUserId.isBlank()) {
             soloAlreadyCompleted = false
             soloCheckDone = true
+            mySavedPlayCount = 0
             return@LaunchedEffect
         }
         when (val u = userRepository.getUser(currentUserId)) {
@@ -141,6 +156,97 @@ fun QuizDetailScreen(
                 soloCheckDone = true
             }
         }
+        when (val c = quizRepository.getUserQuizPlayCount(currentUserId, quizId)) {
+            is Result.Success -> mySavedPlayCount = c.data
+            is Result.Error -> mySavedPlayCount = 0
+        }
+    }
+
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    DisposableEffect(backStackEntry) {
+        val lifecycle = backStackEntry?.lifecycle ?: return@DisposableEffect onDispose { }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
+            coroutineScope.launch {
+                val uid = latestUserId
+                val qid = latestQuizId
+                if (uid.isBlank()) {
+                    mySavedPlayCount = 0
+                    return@launch
+                }
+                when (val c = quizRepository.getUserQuizPlayCount(uid, qid)) {
+                    is Result.Success -> mySavedPlayCount = c.data
+                    is Result.Error -> Unit
+                }
+                when (val u = userRepository.getUser(uid)) {
+                    is Result.Success -> soloAlreadyCompleted = qid in u.data.stats.soloCompletedQuizIds
+                    else -> Unit
+                }
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+
+    val isQuizOwner = currentUserId.isNotBlank() && quiz?.createdBy == currentUserId
+
+    if (showDeleteQuizDialog && quiz != null) {
+        val qDel = quiz!!
+        AlertDialog(
+            onDismissRequest = { if (!isDeletingQuiz) showDeleteQuizDialog = false },
+            title = { Text("Удалить викторину?") },
+            text = {
+                Text(
+                    "«${qDel.title}» будет удалена безвозвратно.",
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            isDeletingQuiz = true
+                            when (val r = quizRepository.deleteQuiz(qDel.id)) {
+                                is Result.Success -> {
+                                    QuizOfflineCache.remove(qDel.id)
+                                    ProfileAfterQuizRefresh.notify(currentUserId)
+                                    Toast.makeText(context, "Викторина удалена", Toast.LENGTH_SHORT).show()
+                                    showDeleteQuizDialog = false
+                                    navController.popBackStack()
+                                }
+                                is Result.Error -> {
+                                    Toast.makeText(
+                                        context,
+                                        r.exception.message ?: "Не удалось удалить",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                            isDeletingQuiz = false
+                        }
+                    },
+                    enabled = !isDeletingQuiz,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    if (isDeletingQuiz) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Text("Удалить")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteQuizDialog = false },
+                    enabled = !isDeletingQuiz
+                ) { Text("Отмена") }
+            }
+        )
     }
 
     Scaffold(
@@ -208,11 +314,28 @@ fun QuizDetailScreen(
                     // ── Кнопки действий ──────────────────────────────────────
                     item {
                         QuizActionsSection(
-                            quizTitle = q.title,
-                            totalTimesTaken = q.stats.timesTaken,
+                            mySavedPlayCount = mySavedPlayCount,
+                            signedIn = currentUserId.isNotBlank(),
                             soloAlreadyCompleted = soloCheckDone && soloAlreadyCompleted,
-                            onStart = { onNavigateToPlay(quizId) },
-                            onChallenge = { showFriendDialog = true },
+                            isOwner = isQuizOwner,
+                            onRequestDelete = { showDeleteQuizDialog = true },
+                            onStart = {
+                                val replay = soloCheckDone && soloAlreadyCompleted
+                                onNavigateToPlay(quizId, replay)
+                            },
+                            onChallenge = {
+                                if (currentUserId.isBlank()) {
+                                    Toast.makeText(
+                                        context,
+                                        "Войдите в аккаунт, чтобы бросать вызовы",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    navController.navigate(
+                                        "friends/$currentUserId?preselectQuizId=${Uri.encode(quizId)}"
+                                    )
+                                }
+                            },
                             onShare = {
                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
@@ -233,42 +356,6 @@ fun QuizDetailScreen(
         }
     }
 
-    // ── Диалог выбора друга для вызова ───────────────────────────────────────
-    if (showFriendDialog) {
-        AlertDialog(
-            onDismissRequest = { showFriendDialog = false },
-            containerColor = LocalBrainRacerExtendedColors.current.detailSurface,
-            shape = RoundedCornerShape(20.dp),
-            title = {
-                Text(
-                    "Бросить вызов",
-                    color = LocalBrainRacerExtendedColors.current.detailTextPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(
-                    "Выберите друга, которому хотите бросить вызов в викторине «${quiz?.title}».\n\nФункция доступна на экране «Друзья» → выберите друга → «Вызвать».",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    lineHeight = 21.sp
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showFriendDialog = false
-                    navController.navigate("friends/$currentUserId")
-                }) {
-                    Text("Перейти к друзьям", color = LocalBrainRacerExtendedColors.current.detailAccentPurple, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showFriendDialog = false }) {
-                    Text("Отмена", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        )
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -356,6 +443,16 @@ private fun QuizInfoSection(quiz: Quiz) {
             lineHeight = 30.sp
         )
 
+        if (quiz.id.startsWith("quiz_custom_") && quiz.creatorNickname.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Автор: ${quiz.creatorNickname}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
         Spacer(Modifier.height(14.dp))
 
         // Бейджи
@@ -385,7 +482,6 @@ private fun QuizInfoSection(quiz: Quiz) {
 
         Spacer(Modifier.height(16.dp))
 
-        // Мини-стата в строку
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -393,12 +489,7 @@ private fun QuizInfoSection(quiz: Quiz) {
             StatItem(
                 icon = Icons.Default.People,
                 value = quiz.stats.timesTaken.toString(),
-                label = "сыграно"
-            )
-            StatItem(
-                icon = Icons.Default.Star,
-                value = "%.1f".format(quiz.stats.averageRating),
-                label = "рейтинг"
+                label = "всего"
             )
             StatItem(
                 icon = Icons.Default.Timer,
@@ -477,9 +568,11 @@ private fun QuizDescriptionSection(description: String) {
 
 @Composable
 private fun QuizActionsSection(
-    quizTitle: String,
-    totalTimesTaken: Int,
+    mySavedPlayCount: Int,
+    signedIn: Boolean,
     soloAlreadyCompleted: Boolean,
+    isOwner: Boolean,
+    onRequestDelete: () -> Unit,
     onStart: () -> Unit,
     onChallenge: () -> Unit,
     onShare: () -> Unit
@@ -492,7 +585,7 @@ private fun QuizActionsSection(
     ) {
         if (soloAlreadyCompleted) {
             Text(
-                "Вы уже прошли эту викторину в соло. Опыт за повторное прохождение не начисляется. Можно сыграть в вызове с другом.",
+                "Вы уже прошли эту викторину в соло. «Пройти снова» — для тренировки: опыт и статистика не начисляются. Вызов другу — как обычно.",
                 fontSize = 13.sp,
                 lineHeight = 19.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -500,7 +593,8 @@ private fun QuizActionsSection(
             )
         }
         Text(
-            "Сыграно раз: $totalTimesTaken",
+            if (signedIn) "Сыграно вами раз: $mySavedPlayCount"
+            else "Сыграно вами раз: войдите в аккаунт",
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -509,20 +603,18 @@ private fun QuizActionsSection(
         // Начать викторину
         Button(
             onClick = onStart,
-            enabled = !soloAlreadyCompleted,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = LocalBrainRacerExtendedColors.current.detailAccentPurple,
-                disabledContainerColor = LocalBrainRacerExtendedColors.current.detailSurfaceAlt
+                containerColor = LocalBrainRacerExtendedColors.current.detailAccentPurple
             )
         ) {
             Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                if (soloAlreadyCompleted) "Уже пройдена" else "Начать викторину",
+                if (soloAlreadyCompleted) "Пройти снова" else "Начать викторину",
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 16.sp
             )
@@ -567,6 +659,24 @@ private fun QuizActionsSection(
                 "Поделиться",
                 fontSize = 14.sp
             )
+        }
+
+        if (isOwner) {
+            OutlinedButton(
+                onClick = onRequestDelete,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+            ) {
+                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Удалить викторину", fontSize = 14.sp)
+            }
         }
     }
 }

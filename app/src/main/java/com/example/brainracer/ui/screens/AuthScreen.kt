@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,7 +45,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.brainracer.R
-import com.example.brainracer.ui.theme.BrainRacerColorTokens
 import com.example.brainracer.ui.theme.BrainRacerTheme
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +56,11 @@ import org.xbill.DNS.TextParseException
 import org.xbill.DNS.Type
 import java.net.InetAddress
 import java.net.UnknownHostException
+
+/** Внутренний маркер: email прошёл проверку (не для отображения). */
+internal const val AUTH_EMAIL_VALIDATED = "__auth_email_ok__"
+
+private const val PASSWORD_VALIDATED = "__auth_pwd_ok__"
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
@@ -71,6 +76,7 @@ fun AuthScreen(
     var isPasswordVisible by rememberSaveable { mutableStateOf(false) }
     val error by authViewModel.error.collectAsState()
     val context = LocalContext.current
+    val colorScheme = MaterialTheme.colorScheme
     var isLoading by remember { mutableStateOf(false) }
 
     var emailValidationMessage by remember { mutableStateOf("") }
@@ -95,7 +101,7 @@ fun AuthScreen(
         }
     }
 
-    val isEmailValid = emailValidationMessage == "Success"
+    val isEmailValid = emailValidationMessage == AUTH_EMAIL_VALIDATED
 
     LaunchedEffect(error) {
         error?.let {
@@ -108,7 +114,7 @@ fun AuthScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(AuthBgBlack)
+            .background(colorScheme.background)
             .windowInsetsPadding(WindowInsets.statusBars)
     ) {
         if (!isLogin) {
@@ -121,8 +127,8 @@ fun AuthScreen(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = AuthTextPrimary
+                    contentDescription = "Назад",
+                    tint = colorScheme.onBackground
                 )
             }
         }
@@ -136,8 +142,8 @@ fun AuthScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = if (isLogin) "Welcome back" else "Create Account",
-                color = AuthTextPrimary,
+                text = if (isLogin) "С возвращением" else "Регистрация",
+                color = colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
                 fontSize = if (isLogin) 30.sp else 28.sp,
                 textAlign = TextAlign.Center,
@@ -150,15 +156,15 @@ fun AuthScreen(
                 AuthStyledTextField(
                     value = username,
                     onValueChange = { username = it },
-                    label = "Username",
-                    placeholder = "Enter your username",
+                    label = "Имя пользователя",
+                    placeholder = "Придумайте никнейм",
                     isError = username.contains(" ") || username.isEmpty(),
                     supportingText = {
                         if (username.contains(" ") || username.isEmpty()) {
                             Text(
-                                "Username cannot be empty or contain spaces",
+                                "Никнейм не может быть пустым или содержать пробелы",
                                 fontSize = 12.sp,
-                                color = AuthPlaceholder
+                                color = colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -169,25 +175,38 @@ fun AuthScreen(
             AuthStyledTextField(
                 value = email,
                 onValueChange = { email = it },
-                label = "Email",
-                placeholder = "Enter your email",
+                label = "Электронная почта",
+                placeholder = "Введите email",
                 isError = email.isNotBlank() && !isEmailValid && emailValidationMessage.isNotEmpty(),
                 trailingIcon = if (isCheckingEmail) {
                     {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp,
-                            color = AuthGradientEnd
+                            color = colorScheme.primary
                         )
                     }
                 } else null,
                 supportingText = {
-                    if (emailValidationMessage.isNotEmpty()) {
-                        Text(
-                            text = emailValidationMessage,
-                            fontSize = 12.sp,
-                            color = if (isEmailValid) AuthPlaceholder else BrainRacerColorTokens.InputValidationError
-                        )
+                    when {
+                        isCheckingEmail ->
+                            Text(
+                                "Проверка адреса…",
+                                fontSize = 12.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
+                        emailValidationMessage.isNotEmpty() && !isEmailValid ->
+                            Text(
+                                text = emailValidationMessage,
+                                fontSize = 12.sp,
+                                color = colorScheme.error
+                            )
+                        isEmailValid ->
+                            Text(
+                                "Адрес указан корректно",
+                                fontSize = 12.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
                     }
                 }
             )
@@ -197,8 +216,8 @@ fun AuthScreen(
             AuthStyledTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = "Password",
-                placeholder = "Enter your password",
+                label = "Пароль",
+                placeholder = "Введите пароль",
                 isError = password.isNotBlank() && !isValidPassword(password),
                 visualTransformation = if (isPasswordVisible) {
                     VisualTransformation.None
@@ -216,23 +235,23 @@ fun AuthScreen(
                             } else {
                                 painterResource(R.drawable.visibility_off)
                             },
-                            contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
-                            tint = AuthPlaceholder
+                            contentDescription = if (isPasswordVisible) "Скрыть пароль" else "Показать пароль",
+                            tint = colorScheme.onSurfaceVariant
                         )
                     }
                 },
                 supportingText = {
                     val msg = validatePasswordMessage(password)
-                    if (msg.isNotEmpty() && msg != "Success") {
-                        Text(text = msg, fontSize = 12.sp, color = BrainRacerColorTokens.InputValidationError)
+                    if (msg.isNotEmpty() && msg != PASSWORD_VALIDATED) {
+                        Text(text = msg, fontSize = 12.sp, color = colorScheme.error)
                     }
                 }
             )
 
             if (isLogin) {
                 Text(
-                    text = "Forgot Password?",
-                    color = AuthLinkForgot,
+                    text = "Забыли пароль?",
+                    color = colorScheme.primary,
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
@@ -245,7 +264,7 @@ fun AuthScreen(
             Spacer(Modifier.height(22.dp))
 
             AuthGradientButton(
-                text = if (isLogin) "Login" else "Register",
+                text = if (isLogin) "Войти" else "Зарегистрироваться",
                 onClick = {
                     if (isLogin) {
                         if (email.isNotBlank() && password.isNotBlank()) {
@@ -272,7 +291,7 @@ fun AuthScreen(
                     onClick = {
                         Toast.makeText(
                             context,
-                            "Google sign-in will be available in a future update",
+                            "Вход через Google появится в следующих обновлениях",
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -282,8 +301,8 @@ fun AuthScreen(
             Spacer(Modifier.height(20.dp))
 
             Text(
-                text = if (isLogin) "Don't have an account? Sign up" else "Already have an account? Log in",
-                color = AuthTextPrimary,
+                text = if (isLogin) "Нет аккаунта? Зарегистрироваться" else "Уже есть аккаунт? Войти",
+                color = colorScheme.onBackground,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
@@ -343,20 +362,20 @@ suspend fun validateEmailMessageSuspend(email: String): String {
 
     if (!isValidEmailSyntax(email)) {
         return when {
-            !email.contains("@") -> "Email must contain @ symbol"
-            !email.contains(".") -> "Email must contain a domain (e.g., .com)"
-            email.startsWith("@") -> "Email cannot start with @"
-            email.endsWith("@") -> "Email cannot end with @"
-            email.endsWith(".") -> "Email cannot end with a dot"
-            else -> "Invalid email format"
+            !email.contains("@") -> "В адресе должен быть символ @"
+            !email.contains(".") -> "Укажите домен (например, .ru или .com)"
+            email.startsWith("@") -> "Адрес не может начинаться с @"
+            email.endsWith("@") -> "Адрес не может заканчиваться на @"
+            email.endsWith(".") -> "Адрес не может заканчиваться точкой"
+            else -> "Некорректный формат email"
         }
     }
 
     val domain = email.substringAfter('@')
     return if (isDomainExists(domain)) {
-        "Success"
+        AUTH_EMAIL_VALIDATED
     } else {
-        "Email domain does not exist or cannot receive mail"
+        "Домен почты не найден или не принимает письма"
     }
 }
 
@@ -369,16 +388,16 @@ fun validatePasswordMessage(password: String): String {
     if (password.isEmpty()) return ""
 
     return when {
-        password.length < 6 -> "Password must be at least 6 characters"
-        password.contains(" ") -> "Password cannot contain spaces"
-        !password.any { it.isDigit() } -> "Password must contain at least one digit"
-        !password.any { it.isLetter() } -> "Password must contain at least one letter"
-        else -> "Success"
+        password.length < 6 -> "Пароль не короче 6 символов"
+        password.contains(" ") -> "Пароль не должен содержать пробелы"
+        !password.any { it.isDigit() } -> "Добавьте хотя бы одну цифру"
+        !password.any { it.isLetter() } -> "Добавьте хотя бы одну букву"
+        else -> PASSWORD_VALIDATED
     }
 }
 
 fun isValidPassword(password: String): Boolean {
-    return validatePasswordMessage(password) == "Success"
+    return validatePasswordMessage(password) == PASSWORD_VALIDATED
 }
 
 fun isValidUsername(username: String): Boolean {

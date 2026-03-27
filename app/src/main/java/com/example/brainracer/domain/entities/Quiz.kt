@@ -13,6 +13,8 @@ data class Quiz(
     val questions: List<Question> = emptyList(),
     val stats: QuizStats = QuizStats(),
     val createdBy: String = "",
+    /** Никнейм автора (для кастомных викторин, пишется при публикации). */
+    val creatorNickname: String = "",
     val createdAt: Timestamp = Timestamp.now(),
     val timePerQuestion: Int = 30,
     var totalTime: Int = 0,

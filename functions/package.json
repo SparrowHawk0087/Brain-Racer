@@ -2,6 +2,9 @@
   "name": "brain-racer-functions",
   "description": "FCM push when a Firestore notifications document is created",
   "main": "index.js",
+  "scripts": {
+    "clear-quiz-stats": "node tools/clearQuizStats.js"
+  },
   "engines": {
     "node": "20"
   },

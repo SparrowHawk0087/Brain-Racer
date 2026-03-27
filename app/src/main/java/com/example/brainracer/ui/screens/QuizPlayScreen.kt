@@ -82,14 +82,15 @@ fun QuizPlayScreen(
     challengeId: String? = null,
     challengeIntroAlreadyShown: Boolean = false,
     challengeIntroCancelToHome: Boolean = false,
+    forceNonScoring: Boolean = false,
     quizViewModel: QuizViewModel = viewModel()
 ) {
     val uiState by quizViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    LaunchedEffect(quizId, challengeId) {
+    LaunchedEffect(quizId, challengeId, forceNonScoring) {
         val online = isNetworkLikelyAvailable(context.applicationContext)
-        quizViewModel.loadQuiz(quizId, challengeId, online)
+        quizViewModel.loadQuiz(quizId, challengeId, online, forceNonScoring)
     }
 
     var challengeIntroAcknowledged by rememberSaveable(quizId, challengeId, challengeIntroAlreadyShown) {
@@ -134,15 +135,17 @@ fun QuizPlayScreen(
                 )
             }
         }
-        uiState.question.isNotEmpty() ->
+        uiState.question.isNotEmpty() -> {
+            BackHandler { }
             QuestionScreen(
                 uiState    = uiState,
-                onBack     = { navController.popBackStack() },
+                onBack     = null,
                 onSelect   = { quizViewModel.selectAnswer(it) },
                 onSubmit   = { quizViewModel.submitAnswer() },
                 onNext     = { quizViewModel.nextQuestion() },
                 onTimeout  = { quizViewModel.timeoutQuestion() }
             )
+        }
         else -> LoadingScreen()
     }
 }
@@ -323,7 +326,7 @@ private fun SessionModeBadge(
 @Composable
 private fun QuestionScreen(
     uiState: QuizUIState,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onSelect: (Int) -> Unit,
     onSubmit: () -> Unit,
     onNext: () -> Unit,
@@ -399,13 +402,15 @@ private fun QuestionScreen(
                         fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Box(
-                            modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null,
-                                tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Box(
+                                modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, null,
+                                    tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
+                            }
                         }
                     }
                 },
@@ -733,12 +738,16 @@ private fun ActionZone(
 // ══════════════════════════════════════════════════════════════════════════════
 
 private fun nonScoringResultsMessage(reason: QuizNonScoringReason?): String {
-    val detail = when (reason) {
-        QuizNonScoringReason.OFFLINE -> "Нет сети или данные взяты только из кэша устройства."
-        QuizNonScoringReason.NOT_SIGNED_IN -> "Войдите в аккаунт, чтобы сохранять прогресс."
-        null -> ""
+    return when (reason) {
+        QuizNonScoringReason.PRACTICE_REPLAY ->
+            "Повторное прохождение: опыт и статистика не начисляются, результат в облако не сохраняется."
+        QuizNonScoringReason.OFFLINE ->
+            "Результат не учитывается в рейтинге и статистике и не сохраняется. Нет сети или данные взяты только из кэша устройства."
+        QuizNonScoringReason.NOT_SIGNED_IN ->
+            "Результат не учитывается в рейтинге и статистике и не сохраняется. Войдите в аккаунт, чтобы сохранять прогресс."
+        null ->
+            "Результат не учитывается в рейтинге и статистике и не сохраняется."
     }
-    return "Результат не учитывается в рейтинге и статистике и не сохраняется. $detail".trim()
 }
 
 @Composable

@@ -1,9 +1,12 @@
 package com.example.brainracer.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FlashOn
@@ -14,6 +17,7 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.MaterialTheme
 
-internal fun bottomBarSelectedKey(route: String): String = when {
+fun bottomBarSelectedKey(route: String): String = when {
     route.startsWith("home/")        -> "home"
     route.startsWith("leaderboard/") -> "leaderboard"
     route.startsWith("challenges/")  -> "challenges"
@@ -42,6 +46,8 @@ internal fun bottomBarSelectedKey(route: String): String = when {
 fun BottomBar(
     showBar: Boolean = true,
     currentRoute: String = "",
+    /** Только реальные входящие вызовы (PENDING), не «висящие» записи в notifications. */
+    showChallengesIncomingBadge: Boolean = false,
     onHomeClick: () -> Unit = {},
     onLeaderboardClick: () -> Unit = {},
     onChallengesClick: () -> Unit = {},
@@ -100,7 +106,9 @@ fun BottomBar(
                 activeColor = scheme.primary,
                 inactiveColor = ext.tabInactive,
                 onClick = onChallengesClick,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                showUnreadDot  = showChallengesIncomingBadge,
+                unreadDotColor = ext.difficultyHard
             )
             BottomBarItem(
                 label = "викторины",
@@ -132,9 +140,15 @@ private fun BottomBarItem(
     activeColor: Color,
     inactiveColor: Color,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showUnreadDot: Boolean = false,
+    unreadDotColor: Color = MaterialTheme.colorScheme.error
 ) {
-    val tint = if (selected) activeColor else inactiveColor
+    val tint by animateColorAsState(
+        targetValue = if (selected) activeColor else inactiveColor,
+        animationSpec = tween(durationMillis = 220),
+        label = "bottomBarTint"
+    )
     val interactionSource = remember { MutableInteractionSource() }
     Column(
         modifier = modifier
@@ -148,12 +162,23 @@ private fun BottomBarItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = tint,
-            modifier = Modifier.size(22.dp)
-        )
+        Box {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = tint,
+                modifier = Modifier.size(22.dp)
+            )
+            if (showUnreadDot) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .size(8.dp)
+                        .offset(x = 2.dp, y = (-2).dp)
+                        .background(unreadDotColor, CircleShape)
+                )
+            }
+        }
         Spacer(Modifier.height(2.dp))
         Text(
             text = label,

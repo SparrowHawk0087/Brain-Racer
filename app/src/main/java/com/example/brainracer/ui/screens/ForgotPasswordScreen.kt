@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,7 +38,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.brainracer.ui.theme.BrainRacerColorTokens
 import com.example.brainracer.ui.theme.BrainRacerTheme
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import kotlinx.coroutines.delay
@@ -54,6 +54,7 @@ fun ForgotPasswordScreen(
     var emailValidationMessage by remember { mutableStateOf("") }
     var isCheckingEmail by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val colorScheme = MaterialTheme.colorScheme
 
     LaunchedEffect(email) {
         if (email.isNotBlank()) {
@@ -68,12 +69,12 @@ fun ForgotPasswordScreen(
         }
     }
 
-    val isEmailValid = emailValidationMessage == "Success"
+    val isEmailValid = emailValidationMessage == AUTH_EMAIL_VALIDATED
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(AuthBgBlack)
+            .background(colorScheme.background)
             .windowInsetsPadding(WindowInsets.statusBars)
     ) {
         IconButton(
@@ -85,8 +86,8 @@ fun ForgotPasswordScreen(
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint = AuthTextPrimary
+                contentDescription = "Назад",
+                tint = colorScheme.onBackground
             )
         }
 
@@ -99,8 +100,8 @@ fun ForgotPasswordScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Forgot Password",
-                color = AuthTextPrimary,
+                text = "Восстановление пароля",
+                color = colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
                 fontSize = 22.sp,
                 textAlign = TextAlign.Center,
@@ -110,8 +111,8 @@ fun ForgotPasswordScreen(
             Spacer(Modifier.height(20.dp))
 
             Text(
-                text = "Enter your email to receive a password reset link",
-                color = AuthPlaceholder,
+                text = "Укажите email — мы отправим ссылку для сброса пароля",
+                color = colorScheme.onSurfaceVariant,
                 fontSize = 15.sp,
                 lineHeight = 22.sp,
                 textAlign = TextAlign.Center,
@@ -123,34 +124,38 @@ fun ForgotPasswordScreen(
             AuthStyledTextField(
                 value = email,
                 onValueChange = { email = it },
-                label = "Email",
-                placeholder = "Enter your email",
+                label = "Электронная почта",
+                placeholder = "Введите email",
                 isError = email.isNotBlank() && !isEmailValid && emailValidationMessage.isNotEmpty(),
                 trailingIcon = if (isCheckingEmail) {
                     {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp,
-                            color = AuthGradientEnd
+                            color = colorScheme.primary
                         )
                     }
                 } else null,
                 supportingText = {
                     when {
-                        emailValidationMessage.isNotEmpty() -> {
+                        isCheckingEmail ->
+                            Text(
+                                text = "Проверка адреса…",
+                                fontSize = 12.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
+                        emailValidationMessage.isNotEmpty() && !isEmailValid ->
                             Text(
                                 text = emailValidationMessage,
                                 fontSize = 12.sp,
-                                color = if (isEmailValid) AuthPlaceholder else BrainRacerColorTokens.InputValidationError
+                                color = colorScheme.error
                             )
-                        }
-                        isCheckingEmail -> {
+                        isEmailValid ->
                             Text(
-                                text = "Checking email...",
+                                text = "Адрес указан корректно",
                                 fontSize = 12.sp,
-                                color = AuthPlaceholder
+                                color = colorScheme.onSurfaceVariant
                             )
-                        }
                     }
                 }
             )
@@ -158,13 +163,13 @@ fun ForgotPasswordScreen(
             Spacer(Modifier.height(24.dp))
 
             AuthGradientButton(
-                text = "Send Reset Link",
+                text = "Отправить ссылку",
                 onClick = {
                     if (isEmailValid) {
                         authViewModel.sendPasswordResetEmail(email)
                         onPasswordResetSent()
                     } else {
-                        Toast.makeText(context, "Enter a valid email", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Введите корректный email", Toast.LENGTH_SHORT).show()
                     }
                 },
                 enabled = isEmailValid,

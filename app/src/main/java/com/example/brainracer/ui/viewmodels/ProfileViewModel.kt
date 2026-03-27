@@ -12,9 +12,11 @@ import com.example.brainracer.domain.entities.LevelSystem
 import com.example.brainracer.domain.entities.User as DomainUser
 import com.example.brainracer.ui.utils.PassedQuizUi
 import com.example.brainracer.ui.utils.ProfileAchievements
+import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
 import com.example.brainracer.ui.utils.ProfileGoalBadges
 import com.example.brainracer.ui.utils.ProfileUIState
 import com.example.brainracer.ui.utils.QuizItem
+import com.example.brainracer.ui.utils.toQuizItem
 import com.example.brainracer.ui.utils.TopicStatUi
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
@@ -66,7 +68,7 @@ class ProfileViewModel : ViewModel() {
                     return@withLock
                 }
 
-                _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+                _uiState.update { it.copy(isLoading = true, errorMessage = null, deletingQuizId = null) }
                 try {
                     when (val ur = userRepository.getUser(userId)) {
                         is Result.Success -> loadProfileData(ur.data)
@@ -109,32 +111,23 @@ class ProfileViewModel : ViewModel() {
             else -> "Игрок"
         }
 
-        val (createdQuizItems, resultsData) = coroutineScope {
+        val (createdQuizItems, resultsData, quizHistoryErr) = coroutineScope {
             val createdDeferred = async { quizRepository.getQuizzesByUser(user.id) }
             val resultsDeferred = async { quizRepository.getRecentResultsForUser(user.id, 50) }
             val createdRes = createdDeferred.await()
             val resultsRes = resultsDeferred.await()
 
             val items = when (createdRes) {
-                is Result.Success -> createdRes.data.map { quiz ->
-                    QuizItem(
-                        id = quiz.id,
-                        title = quiz.title,
-                        category = quiz.categoryId,
-                        questionCount = quiz.questions.size,
-                        difficulty = quiz.difficulty.name,
-                        description = quiz.description,
-                        rating = quiz.stats.averageRating,
-                        playCount = quiz.stats.timesTaken
-                    )
-                }
+                is Result.Success -> createdRes.data.map { it.toQuizItem() }
                 is Result.Error -> emptyList()
             }
-            val rows = when (resultsRes) {
-                is Result.Success -> resultsRes.data
-                is Result.Error -> emptyList()
+            val (rows, histErr) = when (resultsRes) {
+                is Result.Success -> resultsRes.data to null
+                is Result.Error ->
+                    emptyList<com.example.brainracer.domain.entities.ChallengeResult>() to
+                        "История прохождений не загрузилась: ${resultsRes.exception.message}"
             }
-            items to rows
+            Triple(items, rows, histErr)
         }
 
         val ids = resultsData.map { it.quizId }.distinct()
@@ -192,6 +185,7 @@ class ProfileViewModel : ViewModel() {
             it.copy(
                 isLoading = false,
                 errorMessage = null,
+                quizHistoryLoadError = quizHistoryErr,
                 userId = user.id,
                 username = displayName,
                 email = user.email,
@@ -338,5 +332,71 @@ class ProfileViewModel : ViewModel() {
 
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    fun clearQuizHistoryError() {
+        _uiState.update { it.copy(quizHistoryLoadError = null) }
+    }
+
+    /**
+     * Удаляет викторину из Firestore и из списка `createdQuizzes` у пользователя.
+     * [profileUserId] должен совпадать с текущим uid (свой профиль).
+     */
+    fun deleteCreatedQuiz(
+        quizId: String,
+        profileUserId: String,
+        onFinished: (success: Boolean, errorMessage: String?) -> Unit = { _, _ -> }
+    ) {
+        val uid = auth.currentUser?.uid
+        if (uid.isNullOrBlank() || uid != profileUserId) {
+            onFinished(false, "Войдите в аккаунт")
+            return
+        }
+        if (quizId.isBlank()) {
+            onFinished(false, "Некорректная викторина")
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(deletingQuizId = quizId) }
+            when (val loaded = quizRepository.getQuiz(quizId)) {
+                is Result.Success -> {
+                    val creator = loaded.data.createdBy
+                    if (creator.isNotBlank() && creator != uid) {
+                        _uiState.update { it.copy(deletingQuizId = null) }
+                        onFinished(false, "Это не ваша викторина")
+                        return@launch
+                    }
+                }
+                is Result.Error -> {
+                    // Сеть / парсинг: пробуем удалить — Firestore rules отсекут чужое
+                }
+            }
+            when (val del = quizRepository.deleteQuiz(quizId)) {
+                is Result.Success -> {
+                    removeCreatedQuizFromState(quizId)
+                    ProfileAfterQuizRefresh.notify(uid)
+                    onFinished(true, null)
+                }
+                is Result.Error -> {
+                    _uiState.update { it.copy(deletingQuizId = null) }
+                    onFinished(false, del.exception.message)
+                }
+            }
+        }
+    }
+
+    private fun removeCreatedQuizFromState(quizId: String) {
+        _uiState.update { s ->
+            val newList = s.createdQuizzes.filter { it.id != quizId }
+            val achievements = s.userStats?.let { stats ->
+                ProfileAchievements.compute(stats, s.topicStats, newList.size)
+            } ?: s.achievements
+            s.copy(
+                createdQuizzes = newList,
+                achievements = achievements,
+                achievementsCount = achievements.count { a -> a.unlocked },
+                deletingQuizId = null
+            )
+        }
     }
 }

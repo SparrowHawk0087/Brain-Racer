@@ -17,7 +17,11 @@ data class FriendsUiState(
     val selectedTab: Int = 0,
     val isSearching: Boolean = false,
     val challengePickerQuizzes: List<QuizItem> = emptyList(),
-    val challengePickerLoading: Boolean = false
+    val challengePickerLoading: Boolean = false,
+    /** Режим с превью викторины: вызов по этому quizId одним нажатием на друга */
+    val preselectChallengeQuizId: String? = null,
+    val preselectChallengeQuizTitle: String? = null,
+    val preselectChallengeQuizLoading: Boolean = false
 )
 
 @Stable

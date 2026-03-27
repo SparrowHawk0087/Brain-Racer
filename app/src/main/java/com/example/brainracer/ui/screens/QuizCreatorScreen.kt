@@ -814,7 +814,11 @@ private fun TemplateCard(
                 Spacer(Modifier.height(4.dp))
                 Text(template.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 2)
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(
+                    modifier            = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement   = Arrangement.spacedBy(6.dp)
+                ) {
                     InfoChip("${template.questionCount} вопр.", MaterialTheme.colorScheme.onSurfaceVariant)
                     InfoChip("${template.timePerQuestion}с", MaterialTheme.colorScheme.onSurfaceVariant)
                     InfoChip(diffLabel, diffColor)
@@ -1014,7 +1018,15 @@ private fun PointsSelector(value: Int, onChange: (Int) -> Unit) {
 @Composable
 private fun InfoChip(text: String, color: Color) {
     Surface(shape = RoundedCornerShape(6.dp), color = color.copy(0.12f)) {
-        Text(text, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-            fontSize = 11.sp, color = color, fontWeight = FontWeight.Medium)
+        Text(
+            text,
+            modifier     = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+            fontSize     = 11.sp,
+            color        = color,
+            fontWeight   = FontWeight.Medium,
+            maxLines     = 1,
+            softWrap     = false,
+            lineHeight   = 13.sp
+        )
     }
 }

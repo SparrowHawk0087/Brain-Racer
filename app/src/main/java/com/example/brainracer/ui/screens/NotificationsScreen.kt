@@ -69,7 +69,9 @@ fun NotificationsScreen(
         }
     }
     val hasUnreadGeneral = remember(generalList) { generalList.any { !it.read } }
-    val hasUnreadChallenges = remember(challengesList) { challengesList.any { !it.read } }
+    val hasUnreadChallenges = remember(challengesList, uiState.challengesTabBadgeReady) {
+        uiState.challengesTabBadgeReady && challengesList.any { !it.read }
+    }
     val listShown = if (tabIndex == 0) generalList else challengesList
 
     Scaffold(

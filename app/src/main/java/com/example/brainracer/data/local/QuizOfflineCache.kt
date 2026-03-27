@@ -60,6 +60,13 @@ object QuizOfflineCache {
         }
     }
 
+    fun remove(quizId: String) {
+        val dir = cacheDir() ?: return
+        try {
+            File(dir, "$quizId.json").takeIf { it.isFile }?.delete()
+        } catch (_: Exception) { }
+    }
+
     /**
      * Удаляет файлы кэша старше [ttlMillis] (по метке в JSON или по [File.lastModified] для старого формата).
      */

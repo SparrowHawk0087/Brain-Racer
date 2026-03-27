@@ -37,6 +37,7 @@ import com.example.brainracer.ui.components.BottomBar
 import com.example.brainracer.ui.components.ChallengeFriendQuizSheetContent
 import com.example.brainracer.ui.utils.HOME_CATEGORY_CUSTOM
 import com.example.brainracer.ui.utils.QuizItem
+import com.example.brainracer.ui.utils.customAuthorCaption
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import com.example.brainracer.ui.viewmodels.HomeViewModel
@@ -163,19 +164,22 @@ fun HomeScreen(
         },
         bottomBar = {
             BottomBar(
-                showBar              = true,
-                currentRoute         = currentRoute,
-                onHomeClick          = onHomeClick,
-                onLeaderboardClick   = onLeaderboardClick,
-                onChallengesClick    = onChallengesClick,
-                onQuizzesClick       = onQuizzesClick,
-                onProfileClick       = onProfileClick
+                showBar                      = true,
+                currentRoute                 = currentRoute,
+                showChallengesIncomingBadge  = uiState.pendingChallenges.isNotEmpty(),
+                onHomeClick                  = onHomeClick,
+                onLeaderboardClick           = onLeaderboardClick,
+                onChallengesClick            = onChallengesClick,
+                onQuizzesClick               = onQuizzesClick,
+                onProfileClick               = onProfileClick
             )
         },
         floatingActionButton = {
             Button(
                 onClick = { navController.navigate("quiz_creator") },
-                modifier = Modifier.heightIn(min = 48.dp),
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .padding(end = 4.dp, bottom = 4.dp),
                 shape = RoundedCornerShape(percent = 50),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -201,8 +205,8 @@ fun HomeScreen(
     ) { padding ->
         LazyColumn(
             modifier            = Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.background),
-            contentPadding      = PaddingValues(top = 20.dp, bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            contentPadding      = PaddingValues(top = 20.dp, bottom = 152.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item { UserStatRow(uiState.userStats, uiState.userLevel, uiState.levelProgress) }
             item { WelcomeRow(uiState.userName.ifBlank { "Гость" }) }
@@ -540,8 +544,15 @@ private fun HotQuizzesSection(quizzes: List<QuizItem>, onQuizClick: (String) -> 
                         }
                         Column {
                             Text(quiz.category, color = Color.White.copy(0.8f), fontSize = 11.sp)
-                            Text(quiz.title, color = Color.White, fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                quiz.title,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                lineHeight = 15.sp,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis
+                            )
                             Text("${quiz.questionCount} вопросов", color = Color.White.copy(0.72f),
                                 fontSize = 11.sp)
                         }
@@ -623,14 +634,16 @@ private fun QuizRowCard(quiz: QuizItem, colorIndex: Int, onClick: () -> Unit) {
     val cardGradients = LocalBrainRacerExtendedColors.current.cardGradients
     val gradient = cardGradients[colorIndex % cardGradients.size]
     Box(
-        modifier = Modifier.fillMaxWidth().height(86.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 88.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
             .clickable { onClick() }
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().padding(13.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -642,14 +655,31 @@ private fun QuizRowCard(quiz: QuizItem, colorIndex: Int, onClick: () -> Unit) {
             }
             Spacer(Modifier.width(13.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(quiz.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    quiz.title,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Text(quiz.category, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                     Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("${quiz.questionCount} вопр.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                quiz.customAuthorCaption()?.let { cap ->
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        cap,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
             Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
@@ -688,35 +718,44 @@ private fun RecentChallengesSection(
     val tabLabels = listOf("Активные", "Завершённые")
     val listShown = if (tabIndex == 0) activeChallenges else finishedChallenges
 
-    Column {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "⚔️ Последние вызовы",
+            modifier = Modifier.padding(horizontal = 20.dp),
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.height(8.dp))
         Row(
-            modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier              = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.End,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            Text("⚔️ Последние вызовы", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment     = Alignment.CenterVertically
+            TextButton(
+                onClick = onNewChallenge,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
-                TextButton(onClick = onNewChallenge) {
-                    Icon(
-                        Icons.Default.Sports,
-                        contentDescription = null,
-                        tint       = MaterialTheme.colorScheme.primary,
-                        modifier   = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text("Вызов", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
-                }
-                TextButton(onClick = onViewAll) {
-                    Text("Все вызовы", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
-                }
+                Icon(
+                    Icons.Default.Sports,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text("Вызов", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+            }
+            TextButton(
+                onClick = onViewAll,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text("Все вызовы", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
             }
         }
         Spacer(Modifier.height(4.dp))
 
         TabRow(
+            modifier         = Modifier.padding(horizontal = 20.dp),
             selectedTabIndex = tabIndex,
             containerColor   = MaterialTheme.colorScheme.background,
             contentColor     = MaterialTheme.colorScheme.primary,
@@ -735,7 +774,7 @@ private fun RecentChallengesSection(
                 Tab(
                     selected = tabIndex == i,
                     onClick  = { tabIndex = i },
-                    text     = { Text(title, fontSize = 13.sp) },
+                    text     = { Text(title, fontSize = 13.sp, maxLines = 1) },
                     selectedContentColor   = MaterialTheme.colorScheme.primary,
                     unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -862,11 +901,23 @@ private fun HomeChallengeRow(
                         color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("vs $opponentName", fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(ch.quizTitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        "vs $opponentName",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        ch.quizTitle,
+                        fontSize = 12.sp,
+                        lineHeight = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
             Column(

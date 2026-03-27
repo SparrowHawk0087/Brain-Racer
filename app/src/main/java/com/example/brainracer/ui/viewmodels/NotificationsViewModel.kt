@@ -20,6 +20,11 @@ data class NotificationsUiState(
     val items: List<AppNotification> = emptyList(),
     /** Вызовы с этими id не показываем (отклонён, отменён, завершён, истёк) — дублирует очистку в Firestore. */
     val hiddenChallengeIds: Set<String> = emptySet(),
+    /**
+     * После первого снимка Firestore [hiddenChallengeIds] ещё не заполнен — красная точка на вкладке «Вызовы»
+     * не должна загораться до окончания [syncHiddenChallengeIds] (иначе мигание при отсутствии актуальных вызовов).
+     */
+    val challengesTabBadgeReady: Boolean = false,
     val isLoading: Boolean = true,
     val errorMessage: String? = null
 )
@@ -34,41 +39,60 @@ class NotificationsViewModel : ViewModel() {
     private val auth = FirebaseAuth.getInstance()
 
     private var enrichJob: Job? = null
+    private var hiddenSyncGeneration: Int = 0
 
     init {
         val uid = auth.currentUser?.uid
         if (uid.isNullOrBlank()) {
             _uiState.update {
-                it.copy(isLoading = false, errorMessage = "Войдите в аккаунт")
+                it.copy(
+                    isLoading = false,
+                    errorMessage = "Войдите в аккаунт",
+                    challengesTabBadgeReady = true
+                )
             }
         } else {
             viewModelScope.launch {
                 try {
                     repository.observeNotificationsForUser(uid).collect { list ->
+                        hiddenSyncGeneration++
+                        val gen = hiddenSyncGeneration
                         _uiState.update {
-                            it.copy(items = list, isLoading = false, errorMessage = null)
+                            it.copy(
+                                items = list,
+                                isLoading = false,
+                                errorMessage = null,
+                                challengesTabBadgeReady = false
+                            )
                         }
                         enrichJob?.cancel()
                         enrichJob = viewModelScope.launch {
-                            syncHiddenChallengeIds(list)
+                            syncHiddenChallengeIds(list, gen)
                         }
                     }
                 } catch (e: Exception) {
                     _uiState.update {
-                        it.copy(isLoading = false, errorMessage = e.message ?: "Ошибка загрузки")
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = e.message ?: "Ошибка загрузки",
+                            challengesTabBadgeReady = true
+                        )
                     }
                 }
             }
         }
     }
 
-    private suspend fun syncHiddenChallengeIds(list: List<AppNotification>) {
+    private suspend fun syncHiddenChallengeIds(list: List<AppNotification>, generation: Int) {
         val challengeIds = list
             .filter { it.type == AppNotificationType.CHALLENGE }
             .mapNotNull { it.challengeId }
             .distinct()
         if (challengeIds.isEmpty()) {
-            _uiState.update { it.copy(hiddenChallengeIds = emptySet()) }
+            if (generation != hiddenSyncGeneration) return
+            _uiState.update {
+                it.copy(hiddenChallengeIds = emptySet(), challengesTabBadgeReady = true)
+            }
             return
         }
         val hidden = mutableSetOf<String>()
@@ -83,10 +107,16 @@ class NotificationsViewModel : ViewModel() {
                         else -> { }
                     }
                 }
-                is Result.Error -> { }
+                is Result.Error -> {
+                    // Документ вызова удалён или нет доступа — считаем уведомление неактуальным.
+                    hidden.add(cid)
+                }
             }
         }
-        _uiState.update { it.copy(hiddenChallengeIds = hidden) }
+        if (generation != hiddenSyncGeneration) return
+        _uiState.update {
+            it.copy(hiddenChallengeIds = hidden, challengesTabBadgeReady = true)
+        }
     }
 
     fun markAsRead(notificationId: String) {

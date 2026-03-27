@@ -39,7 +39,10 @@ class NotificationRepositoryImpl : NotificationRepository {
                     return@addSnapshotListener
                 }
                 val list = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(AppNotification::class.java)?.copy(id = doc.id)
+                    val o = doc.toObject(AppNotification::class.java) ?: return@mapNotNull null
+                    // Нет поля read в старых документах → Kotlin даёт false и весь список «непрочитанный».
+                    val readResolved = doc.getBoolean("read") ?: true
+                    o.copy(id = doc.id, read = readResolved)
                 }?.sortedWith(
                     compareByDescending<AppNotification> { it.createdAt.seconds }
                         .thenByDescending { it.createdAt.nanoseconds }

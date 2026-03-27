@@ -1,6 +1,9 @@
 rules_version = '2';
-// Скопируйте в Firebase Console → Storage → Rules или подключите через firebase.json ("storage": { "rules": "storage.rules" }).
-// Пути приложения: avatars/{uid}, quiz_covers/{uid}, quiz_images/{uid} (см. ProfileViewModel, QuizCreatorViewModel).
+// Только Firebase Storage (НЕ Firestore). В консоли: вкладка «Storage» → «Rules», не «Firestore» → «Rules».
+// Если вставить этот блок в редактор правил Firestore, Storage останется со старыми правилами — загрузки и getDownloadUrl() ломаются.
+// Деплой: firebase deploy --only storage (см. firebase.json).
+// allow read: if true на эти пути нужен для getDownloadUrl() после putBytes (иначе часто «object does not exist»).
+// Пути приложения: avatars/{uid}/**, quiz_covers/{uid}/**, quiz_images/{uid}/** — userId в пути == request.auth.uid.
 service firebase.storage {
   match /b/{bucket}/o {
     match /avatars/{userId}/{file} {

@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.brainracer.domain.entities.User
 import com.example.brainracer.ui.utils.QuizItem
+import com.example.brainracer.ui.utils.customAuthorCaption
 
 /**
  * Контент bottom sheet: выбор друга (если не зафиксирован) и викторины для вызова.
@@ -173,6 +174,15 @@ private fun QuizPickRow(quiz: QuizItem, onClick: () -> Unit) {
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                quiz.customAuthorCaption()?.let { cap ->
+                    Text(
+                        cap,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
