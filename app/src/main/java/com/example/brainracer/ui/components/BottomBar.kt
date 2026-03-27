@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FlashOn
@@ -45,6 +46,8 @@ fun bottomBarSelectedKey(route: String): String = when {
 fun BottomBar(
     showBar: Boolean = true,
     currentRoute: String = "",
+    /** Только реальные входящие вызовы (PENDING), не «висящие» записи в notifications. */
+    showChallengesIncomingBadge: Boolean = false,
     onHomeClick: () -> Unit = {},
     onLeaderboardClick: () -> Unit = {},
     onChallengesClick: () -> Unit = {},
@@ -103,7 +106,9 @@ fun BottomBar(
                 activeColor = scheme.primary,
                 inactiveColor = ext.tabInactive,
                 onClick = onChallengesClick,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                showUnreadDot  = showChallengesIncomingBadge,
+                unreadDotColor = ext.difficultyHard
             )
             BottomBarItem(
                 label = "викторины",
@@ -135,7 +140,9 @@ private fun BottomBarItem(
     activeColor: Color,
     inactiveColor: Color,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showUnreadDot: Boolean = false,
+    unreadDotColor: Color = MaterialTheme.colorScheme.error
 ) {
     val tint by animateColorAsState(
         targetValue = if (selected) activeColor else inactiveColor,
@@ -155,12 +162,23 @@ private fun BottomBarItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = tint,
-            modifier = Modifier.size(22.dp)
-        )
+        Box {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = tint,
+                modifier = Modifier.size(22.dp)
+            )
+            if (showUnreadDot) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .size(8.dp)
+                        .offset(x = 2.dp, y = (-2).dp)
+                        .background(unreadDotColor, CircleShape)
+                )
+            }
+        }
         Spacer(Modifier.height(2.dp))
         Text(
             text = label,

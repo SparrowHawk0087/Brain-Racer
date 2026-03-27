@@ -138,13 +138,14 @@ fun ChallengesScreen(
         },
         bottomBar = {
             BottomBar(
-                showBar              = true,
-                currentRoute         = currentRoute,
-                onHomeClick          = onHomeClick,
-                onLeaderboardClick   = onLeaderboardClick,
-                onChallengesClick    = onChallengesClick,
-                onQuizzesClick       = onQuizzesClick,
-                onProfileClick       = onProfileClick
+                showBar                     = true,
+                currentRoute                = currentRoute,
+                showChallengesIncomingBadge = incomingCount > 0,
+                onHomeClick                 = onHomeClick,
+                onLeaderboardClick          = onLeaderboardClick,
+                onChallengesClick           = onChallengesClick,
+                onQuizzesClick              = onQuizzesClick,
+                onProfileClick              = onProfileClick
             )
         }
     ) { padding ->

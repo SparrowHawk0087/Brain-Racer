@@ -264,7 +264,11 @@ fun FriendsScreen(
                 }
 
                 // ── Контент вкладок ────────────────────────────────────────
-                Box(modifier = Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
                     if (uiState.isLoading) {
                         CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                     } else {

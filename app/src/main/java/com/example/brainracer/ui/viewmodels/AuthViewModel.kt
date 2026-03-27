@@ -8,7 +8,11 @@ import com.example.brainracer.domain.entities.User
 import com.example.brainracer.data.utils.Result
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.UserProfileChangeRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +34,7 @@ class AuthViewModel : ViewModel() {
                 _user.value = auth.currentUser
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing in", e)
-                _error.value = e.message
+                _error.value = userFacingAuthMessage(e)
             }
         }
     }
@@ -63,7 +67,8 @@ class AuthViewModel : ViewModel() {
                     if (result is Result.Success) {
                         _user.value = auth.currentUser
                     } else if (result is Result.Error) {
-                        _error.value = "Failed to create user profile: ${result.exception.message}"
+                        _error.value =
+                            "Не удалось создать профиль: ${result.exception.message ?: "ошибка сервера"}"
                         try {
                             firebaseUser.delete().await()
                         } catch (deleteEx: Exception) {
@@ -75,9 +80,9 @@ class AuthViewModel : ViewModel() {
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing up", e)
                 _error.value = when (e) {
-                    is FirebaseAuthUserCollisionException -> "Email already in use"
-                    is IllegalArgumentException -> "Invalid email or password"
-                    else -> e.message ?: "Unknown error"
+                    is FirebaseAuthUserCollisionException -> "Этот email уже зарегистрирован"
+                    is IllegalArgumentException -> "Некорректный email или пароль"
+                    else -> userFacingAuthMessage(e)
                 }
             }
         }
@@ -115,6 +120,25 @@ class AuthViewModel : ViewModel() {
 
     fun clearError() {
         _error.value = null
+    }
+
+    private fun userFacingAuthMessage(e: Exception): String = when (e) {
+        is FirebaseAuthInvalidCredentialsException -> "Неверный email или пароль"
+        is FirebaseAuthInvalidUserException -> "Аккаунт с таким email не найден"
+        is FirebaseAuthWeakPasswordException -> "Пароль слишком слабый"
+        is FirebaseAuthUserCollisionException -> "Этот email уже зарегистрирован"
+        is IllegalArgumentException -> "Некорректные данные"
+        is FirebaseAuthException -> when (e.errorCode) {
+            "ERROR_USER_DISABLED" -> "Этот аккаунт отключён"
+            "ERROR_TOO_MANY_REQUESTS" -> "Слишком много попыток. Попробуйте позже"
+            "ERROR_NETWORK_REQUEST_FAILED" -> "Проверьте подключение к интернету"
+            "ERROR_INVALID_EMAIL" -> "Некорректный email"
+            "ERROR_WRONG_PASSWORD" -> "Неверный пароль"
+            "ERROR_USER_NOT_FOUND" -> "Аккаунт с таким email не найден"
+            else -> e.message?.takeIf { it.isNotBlank() }
+                ?: "Ошибка авторизации (${e.errorCode})"
+        }
+        else -> e.message?.takeIf { it.isNotBlank() } ?: "Произошла ошибка"
     }
 
     fun reloadUser() {

@@ -309,6 +309,13 @@ class QuizViewModel : ViewModel() {
                     duelXpDeferred = isChallenge
                 )
             }
+            if (userId != null) {
+                quizRepository.recordUserQuizSessionFinished(
+                    userId,
+                    quiz.id,
+                    savedResultToQuizResults = false
+                )
+            }
             return
         }
 
@@ -359,7 +366,7 @@ class QuizViewModel : ViewModel() {
                         showResults = true,
                         isQuizCompleted = true,
                         accuracy = accuracy,
-                        xpEarned = if (isChallenge) 0 else soloAwarded,
+                        xpEarned = soloAwarded,
                         xpBreakdown = breakdown,
                         leveledUp = showLevelUp,
                         newLevel = LevelSystem.levelFromXp(xpAfterDisplay),
@@ -368,9 +375,14 @@ class QuizViewModel : ViewModel() {
                         reviewAnswers = userAnswers.toList(),
                         isNonScoringSession = false,
                         nonScoringReason = null,
-                        duelXpDeferred = isChallenge
+                        duelXpDeferred = isChallenge && soloAwarded == 0
                     )
                 }
+                quizRepository.recordUserQuizSessionFinished(
+                    userId,
+                    quiz.id,
+                    savedResultToQuizResults = true
+                )
                 ProfileAfterQuizRefresh.notify(userId)
             }
         }

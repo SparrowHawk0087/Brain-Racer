@@ -109,7 +109,7 @@ class ProfileViewModel : ViewModel() {
             else -> "Игрок"
         }
 
-        val (createdQuizItems, resultsData) = coroutineScope {
+        val (createdQuizItems, resultsData, quizHistoryErr) = coroutineScope {
             val createdDeferred = async { quizRepository.getQuizzesByUser(user.id) }
             val resultsDeferred = async { quizRepository.getRecentResultsForUser(user.id, 50) }
             val createdRes = createdDeferred.await()
@@ -130,11 +130,13 @@ class ProfileViewModel : ViewModel() {
                 }
                 is Result.Error -> emptyList()
             }
-            val rows = when (resultsRes) {
-                is Result.Success -> resultsRes.data
-                is Result.Error -> emptyList()
+            val (rows, histErr) = when (resultsRes) {
+                is Result.Success -> resultsRes.data to null
+                is Result.Error ->
+                    emptyList<com.example.brainracer.domain.entities.ChallengeResult>() to
+                        "История прохождений не загрузилась: ${resultsRes.exception.message}"
             }
-            items to rows
+            Triple(items, rows, histErr)
         }
 
         val ids = resultsData.map { it.quizId }.distinct()
@@ -192,6 +194,7 @@ class ProfileViewModel : ViewModel() {
             it.copy(
                 isLoading = false,
                 errorMessage = null,
+                quizHistoryLoadError = quizHistoryErr,
                 userId = user.id,
                 username = displayName,
                 email = user.email,
@@ -338,5 +341,9 @@ class ProfileViewModel : ViewModel() {
 
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    fun clearQuizHistoryError() {
+        _uiState.update { it.copy(quizHistoryLoadError = null) }
     }
 }

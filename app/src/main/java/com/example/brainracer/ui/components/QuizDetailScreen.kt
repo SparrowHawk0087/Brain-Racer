@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Sports
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -47,12 +46,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -106,6 +111,7 @@ fun QuizDetailScreen(
     var isLoading by remember { mutableStateOf(true) }
     var soloAlreadyCompleted by remember { mutableStateOf(false) }
     var soloCheckDone by remember { mutableStateOf(false) }
+    var mySavedPlayCount by remember { mutableIntStateOf(0) }
 
     // Загружаем квиз
     LaunchedEffect(quizId) {
@@ -124,10 +130,14 @@ fun QuizDetailScreen(
         }
     }
 
+    val latestQuizId by rememberUpdatedState(quizId)
+    val latestUserId by rememberUpdatedState(currentUserId)
+
     LaunchedEffect(quizId, currentUserId) {
         if (currentUserId.isBlank()) {
             soloAlreadyCompleted = false
             soloCheckDone = true
+            mySavedPlayCount = 0
             return@LaunchedEffect
         }
         when (val u = userRepository.getUser(currentUserId)) {
@@ -140,6 +150,36 @@ fun QuizDetailScreen(
                 soloCheckDone = true
             }
         }
+        when (val c = quizRepository.getUserQuizPlayCount(currentUserId, quizId)) {
+            is Result.Success -> mySavedPlayCount = c.data
+            is Result.Error -> mySavedPlayCount = 0
+        }
+    }
+
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    DisposableEffect(backStackEntry) {
+        val lifecycle = backStackEntry?.lifecycle ?: return@DisposableEffect onDispose { }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
+            coroutineScope.launch {
+                val uid = latestUserId
+                val qid = latestQuizId
+                if (uid.isBlank()) {
+                    mySavedPlayCount = 0
+                    return@launch
+                }
+                when (val c = quizRepository.getUserQuizPlayCount(uid, qid)) {
+                    is Result.Success -> mySavedPlayCount = c.data
+                    is Result.Error -> Unit
+                }
+                when (val u = userRepository.getUser(uid)) {
+                    is Result.Success -> soloAlreadyCompleted = qid in u.data.stats.soloCompletedQuizIds
+                    else -> Unit
+                }
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
     }
 
     Scaffold(
@@ -207,8 +247,8 @@ fun QuizDetailScreen(
                     // ── Кнопки действий ──────────────────────────────────────
                     item {
                         QuizActionsSection(
-                            quizTitle = q.title,
-                            totalTimesTaken = q.stats.timesTaken,
+                            mySavedPlayCount = mySavedPlayCount,
+                            signedIn = currentUserId.isNotBlank(),
                             soloAlreadyCompleted = soloCheckDone && soloAlreadyCompleted,
                             onStart = {
                                 val replay = soloCheckDone && soloAlreadyCompleted
@@ -363,7 +403,6 @@ private fun QuizInfoSection(quiz: Quiz) {
 
         Spacer(Modifier.height(16.dp))
 
-        // Мини-стата в строку
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -371,12 +410,7 @@ private fun QuizInfoSection(quiz: Quiz) {
             StatItem(
                 icon = Icons.Default.People,
                 value = quiz.stats.timesTaken.toString(),
-                label = "сыграно"
-            )
-            StatItem(
-                icon = Icons.Default.Star,
-                value = "%.1f".format(quiz.stats.averageRating),
-                label = "рейтинг"
+                label = "всего"
             )
             StatItem(
                 icon = Icons.Default.Timer,
@@ -455,8 +489,8 @@ private fun QuizDescriptionSection(description: String) {
 
 @Composable
 private fun QuizActionsSection(
-    quizTitle: String,
-    totalTimesTaken: Int,
+    mySavedPlayCount: Int,
+    signedIn: Boolean,
     soloAlreadyCompleted: Boolean,
     onStart: () -> Unit,
     onChallenge: () -> Unit,
@@ -478,7 +512,8 @@ private fun QuizActionsSection(
             )
         }
         Text(
-            "Сыграно раз: $totalTimesTaken",
+            if (signedIn) "Сыграно вами раз: $mySavedPlayCount"
+            else "Сыграно вами раз: войдите в аккаунт",
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

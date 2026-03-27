@@ -9,6 +9,7 @@ import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.data.utils.fold
+import com.example.brainracer.domain.entities.AppNotificationType
 import com.example.brainracer.domain.entities.Challenge
 import com.example.brainracer.domain.entities.ChallengeStatus
 import com.example.brainracer.domain.entities.LevelSystem
@@ -79,8 +80,11 @@ class HomeViewModel : ViewModel() {
                 launch {
                     try {
                         notificationRepository.observeNotificationsForUser(userId).collect { list ->
-                            val unread = list.count { !it.read }
-                            _uiState.update { it.copy(unreadNotificationsCount = unread) }
+                            // Колокольчик — только «общие» уведомления; вызовы ведут на экран вызовов / вкладку «Вызовы».
+                            val bellUnread = list.count {
+                                !it.read && it.type != AppNotificationType.CHALLENGE
+                            }
+                            _uiState.update { it.copy(unreadNotificationsCount = bellUnread) }
                         }
                     } catch (_: Exception) {
                         _uiState.update { it.copy(unreadNotificationsCount = 0) }

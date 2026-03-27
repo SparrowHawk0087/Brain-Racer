@@ -1,10 +1,14 @@
 package com.example.brainracer.data.repositories
 
+import com.example.brainracer.domain.entities.ChallengeWinnerXpOutcome
 import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.data.utils.getOrNull
+import android.util.Log
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -24,13 +28,26 @@ class QuizRepositoryImpl: QuizRepository {
     private val quizzesCollection = firestore.collection("quizzes")
     private val usersCollection = firestore.collection("users")
     private val quizResultsCollection = firestore.collection("quiz_results")
+    private val quizStatsCollection = firestore.collection("quiz_stats")
+
+    private suspend fun mergeQuizPlayStats(quiz: Quiz): Quiz {
+        return try {
+            val snap = quizStatsCollection.document(quiz.id).get().await()
+            if (!snap.exists()) return quiz
+            val tt = (snap.get("times_taken") as? Number)?.toInt() ?: return quiz
+            val avg = (snap.get("average_score") as? Number)?.toDouble() ?: quiz.stats.averageScore
+            quiz.copy(stats = quiz.stats.copy(timesTaken = tt, averageScore = avg))
+        } catch (_: Exception) {
+            quiz
+        }
+    }
 
     //Получение квиза по id
     override suspend fun getQuiz(quizId: String): Result<Quiz> = try {
         val document = quizzesCollection.document(quizId).get().await()
         if (document.exists()) {
             val quiz = document.toObject(Quiz::class.java)
-            Result.success(quiz ?: throw Exception("Quiz data is null"))
+            Result.success(mergeQuizPlayStats(quiz ?: throw Exception("Quiz data is null")))
         } else {
             Result.error(Exception("Quiz not found"))
         }
@@ -230,28 +247,177 @@ class QuizRepositoryImpl: QuizRepository {
         Result.error(e)
     }
 
-    override suspend fun getRecentResultsForUser(userId: String, limit: Int): Result<List<ChallengeResult>> = try {
-        val res = quizResultsCollection
-            .whereEqualTo("userId", userId)
-            .orderBy("completedAt", Query.Direction.DESCENDING)
-            .limit(limit.toLong())
-            .get()
-            .await()
-        val list = res.documents.mapNotNull { doc ->
-            doc.toObject(ChallengeResult::class.java)?.copy(id = doc.id)
+    /**
+     * Десериализация результата: при «битых» вложенных [ChallengeResult.answers] toObject() может вернуть null —
+     * тогда собираем документ вручную (для профиля достаточно метаданных и точности).
+     */
+    private fun parseChallengeResultDoc(doc: DocumentSnapshot): ChallengeResult? {
+        if (!doc.exists()) return null
+        val fromPojo = try {
+            doc.toObject(ChallengeResult::class.java)
+        } catch (e: RuntimeException) {
+            Log.w("QuizRepository", "toObject ChallengeResult id=${doc.id}", e)
+            null
         }
-        Result.success(list)
+        if (fromPojo != null && fromPojo.quizId.isNotBlank() && fromPojo.userId.isNotBlank()) {
+            return fromPojo.copy(id = doc.id)
+        }
+        val quizId = doc.getString("quizId") ?: return null
+        val uid = doc.getString("userId") ?: return null
+        fun numInt(key: String): Int = when (val v = doc.get(key)) {
+            is Number -> v.toInt()
+            else -> 0
+        }
+        return ChallengeResult(
+            id = doc.id,
+            quizId = quizId,
+            userId = uid,
+            userNickname = doc.getString("userNickname").orEmpty(),
+            score = numInt("score"),
+            totalQuestions = numInt("totalQuestions"),
+            correctAnswers = numInt("correctAnswers"),
+            incorrectAnswers = numInt("incorrectAnswers"),
+            timeSpent = numInt("timeSpent"),
+            averageTimePerQuestion = (doc.getDouble("averageTimePerQuestion") ?: 0.0),
+            answers = emptyList(),
+            pointsEarned = numInt("pointsEarned"),
+            completedAt = doc.getTimestamp("completedAt") ?: Timestamp.now(),
+            challengeId = doc.getString("challengeId")
+        )
+    }
+
+    override suspend fun getRecentResultsForUser(userId: String, limit: Int): Result<List<ChallengeResult>> {
+        if (userId.isBlank()) return Result.success(emptyList())
+        val safeLimit = limit.coerceIn(1, 100)
+        val fallbackFetchCap = (safeLimit * 8).coerceIn(80, 500)
+
+        suspend fun finalize(docs: List<DocumentSnapshot>): List<ChallengeResult> =
+            docs.mapNotNull { parseChallengeResultDoc(it) }
+                .sortedByDescending { it.completedAt.toDate().time }
+                .take(safeLimit)
+
+        return try {
+            try {
+                val res = quizResultsCollection
+                    .whereEqualTo("userId", userId)
+                    .orderBy("completedAt", Query.Direction.DESCENDING)
+                    .limit(safeLimit.toLong())
+                    .get()
+                    .await()
+                Result.success(finalize(res.documents))
+            } catch (e: FirebaseFirestoreException) {
+                if (e.code == FirebaseFirestoreException.Code.FAILED_PRECONDITION) {
+                    Log.w(
+                        "QuizRepository",
+                        "quiz_results: нет составного индекса userId+completedAt — запасной запрос без orderBy",
+                        e
+                    )
+                    val res = quizResultsCollection
+                        .whereEqualTo("userId", userId)
+                        .limit(fallbackFetchCap.toLong())
+                        .get()
+                        .await()
+                    Result.success(finalize(res.documents))
+                } else {
+                    Result.error(e)
+                }
+            }
+        } catch (e: Exception) {
+            Result.error(e)
+        }
+    }
+
+    override suspend fun countSavedResultsForUserAndQuiz(userId: String, quizId: String): Result<Int> = try {
+        if (userId.isBlank() || quizId.isBlank()) {
+            Result.success(0)
+        } else {
+            val snap = quizResultsCollection
+                .whereEqualTo("userId", userId)
+                .whereEqualTo("quizId", quizId)
+                .get()
+                .await()
+            Result.success(snap.documents.size)
+        }
+    } catch (e: Exception) {
+        Result.error(e)
+    }
+
+    override suspend fun getUserQuizPlayCount(userId: String, quizId: String): Result<Int> = try {
+        if (userId.isBlank() || quizId.isBlank()) {
+            Result.success(0)
+        } else {
+            val ref = usersCollection.document(userId).collection("quiz_play_counts").document(quizId)
+            val snap = ref.get().await()
+            if (snap.exists()) {
+                val n = (snap.get("count") as? Number)?.toInt() ?: 0
+                Result.success(n)
+            } else {
+                countSavedResultsForUserAndQuiz(userId, quizId)
+            }
+        }
+    } catch (e: Exception) {
+        Result.error(e)
+    }
+
+    override suspend fun recordUserQuizSessionFinished(
+        userId: String,
+        quizId: String,
+        savedResultToQuizResults: Boolean
+    ): Result<Unit> = try {
+        if (userId.isBlank() || quizId.isBlank()) {
+            Result.success(Unit)
+        } else {
+        val ref = usersCollection.document(userId).collection("quiz_play_counts").document(quizId)
+        val snap = ref.get().await()
+        val resultsCount = when (val c = countSavedResultsForUserAndQuiz(userId, quizId)) {
+            is Result.Success -> c.data
+            else -> 0
+        }
+        if (!snap.exists()) {
+            val initial = if (savedResultToQuizResults) resultsCount else resultsCount + 1
+            ref.set(
+                mapOf("count" to initial.coerceAtLeast(1).toLong()),
+                SetOptions.merge()
+            ).await()
+        } else {
+            ref.update("count", FieldValue.increment(1)).await()
+        }
+        Result.success(Unit)
+        }
     } catch (e: Exception) {
         Result.error(e)
     }
 
     // Запись результатов прохождения квиза с поддержкой вызовов
+    /** Обновляет pointsEarned у записи победителя, если он завершил дуэль раньше соперника (в архиве было 0). */
+    private suspend fun patchWinnerChallengeQuizResultPoints(
+        winnerUserId: String,
+        challengeId: String,
+        pointsEarned: Int
+    ) {
+        val snap = quizResultsCollection
+            .whereEqualTo("userId", winnerUserId)
+            .whereEqualTo("challengeId", challengeId)
+            .get()
+            .await()
+        for (doc in snap.documents) {
+            try {
+                quizResultsCollection.document(doc.id).update("pointsEarned", pointsEarned).await()
+            } catch (e: FirebaseFirestoreException) {
+                if (e.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                    Log.e("QuizRepository", "patch winner quiz_result points: ${e.code} ${e.message}")
+                }
+            }
+        }
+    }
+
     override suspend fun recordQuizResult(
         quizResult: ChallengeResult,
         profileSessionXpForSolo: Int?
     ): Result<Int> {
         return try {
             val userRepo = UserRepositoryImpl()
+            var duelXpOutcome: ChallengeWinnerXpOutcome? = null
 
             // 1) Дуэль: сначала вызов — иначе при PERMISSION_DENIED на quiz_results/users квиз не засчитается.
             if (!quizResult.challengeId.isNullOrBlank()) {
@@ -280,8 +446,6 @@ class QuizRepositoryImpl: QuizRepository {
                     }
                 }
             } else {
-                returnXp = 0
-                storedPoints = 0
                 when (val part = userRepo.applyChallengeQuizParticipation(quizResult.userId, quizResult)) {
                     is Result.Error -> {
                         val code = (part.exception as? FirebaseFirestoreException)?.code
@@ -292,6 +456,28 @@ class QuizRepositoryImpl: QuizRepository {
                     }
                     is Result.Success -> Unit
                 }
+
+                // Начисление XP победителю — до записи в quiz_results, чтобы в архиве и в профиле был фактический XP.
+                when (val grant = userRepo.tryGrantChallengeWinnerXp(quizResult.challengeId!!)) {
+                    is Result.Error -> {
+                        val code = (grant.exception as? FirebaseFirestoreException)?.code
+                            ?: (grant.exception.cause as? FirebaseFirestoreException)?.code
+                        if (code != FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                            return Result.error(grant.exception)
+                        }
+                    }
+                    is Result.Success -> {
+                        duelXpOutcome = grant.data
+                        val o = grant.data
+                        if (o != null && o.xpAdded > 0) {
+                            ProfileAfterQuizRefresh.notify(o.winnerId)
+                        }
+                    }
+                }
+
+                val myDuelXp = duelXpOutcome?.takeIf { it.winnerId == quizResult.userId }?.xpAdded ?: 0
+                returnXp = myDuelXp
+                storedPoints = myDuelXp
             }
 
             val resWithId = quizResult.copy(
@@ -306,42 +492,52 @@ class QuizRepositoryImpl: QuizRepository {
                 if (e.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw e
             }
 
-            // 3) XP победителю дуэли (один раз, после завершения вызова)
-            if (!quizResult.challengeId.isNullOrBlank()) {
-                when (val grant = userRepo.tryGrantChallengeWinnerXp(quizResult.challengeId!!)) {
-                    is Result.Error -> {
-                        val code = (grant.exception as? FirebaseFirestoreException)?.code
-                            ?: (grant.exception.cause as? FirebaseFirestoreException)?.code
-                        if (code != FirebaseFirestoreException.Code.PERMISSION_DENIED) {
-                            return Result.error(grant.exception)
-                        }
-                    }
-                    is Result.Success -> {
-                        val o = grant.data
-                        if (o != null && o.xpAdded > 0) {
-                            ProfileAfterQuizRefresh.notify(o.winnerId)
-                        }
-                    }
-                }
+            // Победитель уже сыграл первым: у его записи было 0 — дописываем pointsEarned со второго устройства.
+            val grant = duelXpOutcome
+            val cid = quizResult.challengeId
+            if (grant != null && grant.xpAdded > 0 && grant.winnerId != quizResult.userId && !cid.isNullOrBlank()) {
+                patchWinnerChallengeQuizResultPoints(
+                    winnerUserId = grant.winnerId,
+                    challengeId = cid,
+                    pointsEarned = grant.xpAdded
+                )
             }
 
-            // 4) Счётчики на документе квиза
+            // 3) Счётчики прохождений — коллекция quiz_stats (доступна любому auth; документ квиза правит только создатель)
             val quizRef = quizzesCollection.document(quizResult.quizId)
+            val statRef = quizStatsCollection.document(quizResult.quizId)
             try {
-                firestore.runTransaction { transaction ->
-                    val quizDoc = transaction.get(quizRef)
-                    val currentStats = quizDoc.get("stats") as? Map<String, Any> ?: mapOf()
-                    val newTimesTaken = (currentStats["times_taken"] as? Long ?: 0) + 1
-                    val currentAverage = currentStats["average_score"] as? Double ?: 0.0
+                firestore.runTransaction { tx ->
+                    val quizSnap = tx.get(quizRef)
+                    if (!quizSnap.exists()) return@runTransaction
+
+                    val embedded = quizSnap.get("stats") as? Map<String, Any> ?: mapOf()
+                    val prevEmbedded = (embedded["times_taken"] as? Number)?.toLong() ?: 0L
+                    val avgEmbedded = (embedded["average_score"] as? Number)?.toDouble() ?: 0.0
+
+                    val statSnap = tx.get(statRef)
+                    val (prevTaken, currentAverage) = if (statSnap.exists()) {
+                        val pt = (statSnap.get("times_taken") as? Number)?.toLong() ?: 0L
+                        val ca = (statSnap.get("average_score") as? Number)?.toDouble() ?: 0.0
+                        pt to ca
+                    } else {
+                        prevEmbedded to avgEmbedded
+                    }
+
+                    val newTimesTaken = prevTaken + 1
                     val newAverageScore =
-                        (currentAverage * (newTimesTaken - 1) + quizResult.accuracy) / newTimesTaken
-                    val updates = mapOf(
-                        "stats.times_taken" to newTimesTaken,
-                        "stats.average_score" to newAverageScore
+                        (currentAverage * prevTaken + quizResult.accuracy) / newTimesTaken
+
+                    tx.set(
+                        statRef,
+                        mapOf(
+                            "times_taken" to newTimesTaken,
+                            "average_score" to newAverageScore
+                        )
                     )
-                    transaction.update(quizRef, updates)
                 }.await()
             } catch (e: FirebaseFirestoreException) {
+                Log.e("QuizRepository", "quiz_stats write failed: ${e.code} ${e.message}")
                 if (e.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw e
             }
 

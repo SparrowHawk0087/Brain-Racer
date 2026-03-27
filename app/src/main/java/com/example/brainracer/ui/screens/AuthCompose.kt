@@ -178,7 +178,7 @@ fun AuthGoogleButton(
             }
             Spacer(Modifier.width(10.dp))
             Text(
-                text = "Sign in with Google",
+                text = "Войти через Google",
                 color = cs.onSurface,
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp

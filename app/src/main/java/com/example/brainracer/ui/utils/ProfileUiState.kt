@@ -65,6 +65,8 @@ data class ProfileUIState(
     val isUploadingAvatar: Boolean = false,
     val isSavingProfile: Boolean = false,
     val errorMessage: String? = null,
+    /** Ошибка запроса quiz_results (индекс, сеть); не блокирует остальной профиль. */
+    val quizHistoryLoadError: String? = null,
     val userId: String = "",
     val username: String = "",
     val email: String = "",

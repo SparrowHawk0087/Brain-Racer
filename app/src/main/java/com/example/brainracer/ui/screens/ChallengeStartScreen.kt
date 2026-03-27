@@ -20,7 +20,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Sports
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -303,21 +302,8 @@ private fun ChallengeStartContent(
                 MetaRow("Сложность", quiz.difficulty.labelRu())
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                 MetaRow(
-                    label = "Рейтинг",
-                    value = ratingLine(quiz),
-                    valueIcon = {
-                        Icon(
-                            Icons.Default.Star,
-                            null,
-                            tint = LocalBrainRacerExtendedColors.current.difficultyExpert,
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                    }
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-                MetaRow(
                     label = "Время прохождения",
-                    value = formatDurationSeconds(quiz.totalTime),
+                    value = formatDurationSeconds(quiz.estimatedDurationSeconds()),
                     valueIcon = {
                         Icon(
                             Icons.Default.Schedule,
@@ -573,6 +559,17 @@ private fun QuizDifficulty.labelRu(): String = when (this) {
     QuizDifficulty.EXPERT -> "Эксперт"
 }
 
+/**
+ * В Firestore часто лежит totalTime = 0; после десериализации он перезаписывает значение из init.
+ * Для UI берём осмысленную оценку по вопросам и лимиту на вопрос.
+ */
+private fun Quiz.estimatedDurationSeconds(): Int {
+    if (totalTime > 0) return totalTime
+    val q = questionCount
+    val t = timePerQuestion.coerceAtLeast(1)
+    return (q * t).coerceAtLeast(0)
+}
+
 private fun formatDurationSeconds(totalSec: Int): String {
     if (totalSec <= 0) return "—"
     val m = totalSec / 60
@@ -581,14 +578,5 @@ private fun formatDurationSeconds(totalSec: Int): String {
         String.format(Locale.getDefault(), "%d мин %d с", m, s)
     } else {
         String.format(Locale.getDefault(), "%d с", s)
-    }
-}
-
-private fun ratingLine(quiz: Quiz): String {
-    val c = quiz.stats.ratingsCount
-    return if (c > 0) {
-        String.format(Locale.getDefault(), "%.1f (%d оценок)", quiz.stats.averageRating, c)
-    } else {
-        "Пока нет оценок"
     }
 }

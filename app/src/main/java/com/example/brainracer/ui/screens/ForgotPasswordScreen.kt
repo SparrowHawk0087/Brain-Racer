@@ -69,7 +69,7 @@ fun ForgotPasswordScreen(
         }
     }
 
-    val isEmailValid = emailValidationMessage == "Success"
+    val isEmailValid = emailValidationMessage == AUTH_EMAIL_VALIDATED
 
     Box(
         modifier = modifier
@@ -86,7 +86,7 @@ fun ForgotPasswordScreen(
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
+                contentDescription = "Назад",
                 tint = colorScheme.onBackground
             )
         }
@@ -100,7 +100,7 @@ fun ForgotPasswordScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Forgot Password",
+                text = "Восстановление пароля",
                 color = colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
                 fontSize = 22.sp,
@@ -111,7 +111,7 @@ fun ForgotPasswordScreen(
             Spacer(Modifier.height(20.dp))
 
             Text(
-                text = "Enter your email to receive a password reset link",
+                text = "Укажите email — мы отправим ссылку для сброса пароля",
                 color = colorScheme.onSurfaceVariant,
                 fontSize = 15.sp,
                 lineHeight = 22.sp,
@@ -124,8 +124,8 @@ fun ForgotPasswordScreen(
             AuthStyledTextField(
                 value = email,
                 onValueChange = { email = it },
-                label = "Email",
-                placeholder = "Enter your email",
+                label = "Электронная почта",
+                placeholder = "Введите email",
                 isError = email.isNotBlank() && !isEmailValid && emailValidationMessage.isNotEmpty(),
                 trailingIcon = if (isCheckingEmail) {
                     {
@@ -138,20 +138,24 @@ fun ForgotPasswordScreen(
                 } else null,
                 supportingText = {
                     when {
-                        emailValidationMessage.isNotEmpty() -> {
+                        isCheckingEmail ->
                             Text(
-                                text = emailValidationMessage,
-                                fontSize = 12.sp,
-                                color = if (isEmailValid) colorScheme.onSurfaceVariant else colorScheme.error
-                            )
-                        }
-                        isCheckingEmail -> {
-                            Text(
-                                text = "Checking email...",
+                                text = "Проверка адреса…",
                                 fontSize = 12.sp,
                                 color = colorScheme.onSurfaceVariant
                             )
-                        }
+                        emailValidationMessage.isNotEmpty() && !isEmailValid ->
+                            Text(
+                                text = emailValidationMessage,
+                                fontSize = 12.sp,
+                                color = colorScheme.error
+                            )
+                        isEmailValid ->
+                            Text(
+                                text = "Адрес указан корректно",
+                                fontSize = 12.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
                     }
                 }
             )
@@ -159,13 +163,13 @@ fun ForgotPasswordScreen(
             Spacer(Modifier.height(24.dp))
 
             AuthGradientButton(
-                text = "Send Reset Link",
+                text = "Отправить ссылку",
                 onClick = {
                     if (isEmailValid) {
                         authViewModel.sendPasswordResetEmail(email)
                         onPasswordResetSent()
                     } else {
-                        Toast.makeText(context, "Enter a valid email", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Введите корректный email", Toast.LENGTH_SHORT).show()
                     }
                 },
                 enabled = isEmailValid,

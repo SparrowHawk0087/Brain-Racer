@@ -88,6 +88,8 @@ fun ProfileScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     var showDeleteDialog by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableIntStateOf(0) }
+    var createdHistoryExpanded by remember { mutableStateOf(true) }
+    var passedHistoryExpanded by remember { mutableStateOf(true) }
     var showChallengeSheet by remember { mutableStateOf(false) }
     val challengeSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val tabs = listOf("Созданное", "Пройденное", "Достижения")
@@ -130,6 +132,13 @@ fun ProfileScreen(
         uiState.errorMessage?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
             profileViewModel.clearError()
+        }
+    }
+
+    LaunchedEffect(uiState.quizHistoryLoadError) {
+        uiState.quizHistoryLoadError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            profileViewModel.clearQuizHistoryError()
         }
     }
 
@@ -436,16 +445,27 @@ fun ProfileScreen(
                                 EmptyTabHint("Вы ещё не создали викторин")
                             }
                         } else {
-                            itemsIndexed(
-                                items = uiState.createdQuizzes,
-                                key = { _, q -> q.id }
-                            ) { index, quiz ->
-                                CreatedQuizRow(
-                                    quiz = quiz,
-                                    colorIndex = index,
-                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
-                                    onClick = { navController.navigate("quiz_detail/${quiz.id}") }
+                            item {
+                                val n = uiState.createdQuizzes.size
+                                ProfileCollapsibleHistoryHeader(
+                                    title = "Созданные викторины",
+                                    subtitle = "$n ${createdQuizCountWord(n)}",
+                                    expanded = createdHistoryExpanded,
+                                    onToggle = { createdHistoryExpanded = !createdHistoryExpanded }
                                 )
+                            }
+                            if (createdHistoryExpanded) {
+                                itemsIndexed(
+                                    items = uiState.createdQuizzes,
+                                    key = { _, q -> q.id }
+                                ) { index, quiz ->
+                                    CreatedQuizRow(
+                                        quiz = quiz,
+                                        colorIndex = index,
+                                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                                        onClick = { navController.navigate("quiz_detail/${quiz.id}") }
+                                    )
+                                }
                             }
                         }
                     }
@@ -455,15 +475,26 @@ fun ProfileScreen(
                                 EmptyTabHint("Пока нет завершённых прохождений")
                             }
                         } else {
-                            items(
-                                items = uiState.passedAttempts,
-                                key = { "${it.quizId}_${it.completedAtEpochMs}" }
-                            ) { attempt ->
-                                PassedQuizRow(
-                                    attempt = attempt,
-                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
-                                    onClick = { navController.navigate("quiz_detail/${attempt.quizId}") }
+                            item {
+                                val n = uiState.passedAttempts.size
+                                ProfileCollapsibleHistoryHeader(
+                                    title = "История прохождений",
+                                    subtitle = "$n ${passAttemptCountWord(n)}",
+                                    expanded = passedHistoryExpanded,
+                                    onToggle = { passedHistoryExpanded = !passedHistoryExpanded }
                                 )
+                            }
+                            if (passedHistoryExpanded) {
+                                items(
+                                    items = uiState.passedAttempts,
+                                    key = { "${it.quizId}_${it.completedAtEpochMs}" }
+                                ) { attempt ->
+                                    PassedQuizRow(
+                                        attempt = attempt,
+                                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                                        onClick = { navController.navigate("quiz_detail/${attempt.quizId}") }
+                                    )
+                                }
                             }
                         }
                     }
@@ -882,6 +913,70 @@ private fun EmptyTabHint(message: String) {
             .fillMaxWidth()
             .padding(horizontal = 32.dp, vertical = 32.dp)
     )
+}
+
+@Composable
+private fun ProfileCollapsibleHistoryHeader(
+    title: String,
+    subtitle: String,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f), shape)
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(
+                title,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                subtitle,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Icon(
+            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+            contentDescription = if (expanded) "Свернуть список" else "Развернуть список",
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(28.dp)
+        )
+    }
+}
+
+private fun createdQuizCountWord(n: Int): String {
+    val mod10 = n % 10
+    val mod100 = n % 100
+    return when {
+        mod100 in 11..14 -> "викторин"
+        mod10 == 1 -> "викторина"
+        mod10 in 2..4 -> "викторины"
+        else -> "викторин"
+    }
+}
+
+private fun passAttemptCountWord(n: Int): String {
+    val mod10 = n % 10
+    val mod100 = n % 100
+    return when {
+        mod100 in 11..14 -> "прохождений"
+        mod10 == 1 -> "прохождение"
+        mod10 in 2..4 -> "прохождения"
+        else -> "прохождений"
+    }
 }
 
 @Composable
