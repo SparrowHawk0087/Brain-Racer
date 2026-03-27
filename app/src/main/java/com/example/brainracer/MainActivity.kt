@@ -11,22 +11,19 @@ import com.example.brainracer.data.preferences.UserPreferencesRepository
 import com.example.brainracer.ui.theme.BrainRacerTheme
 import com.example.brainracer.ui.utils.NavGraph
 import com.google.firebase.FirebaseApp
-import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : ComponentActivity() {
-    private lateinit var auth: FirebaseAuth
 
     override fun onCreate(savedInstanceState: Bundle?) {
         FirebaseApp.initializeApp(this)
         QuizOfflineCache.init(this)
         super.onCreate(savedInstanceState)
-        auth = FirebaseAuth.getInstance() // инициализируем
 
         setContent {
             val prefsRepo = remember { UserPreferencesRepository(applicationContext) }
             val darkTheme by prefsRepo.darkTheme.collectAsStateWithLifecycle(initialValue = false)
             BrainRacerTheme(darkTheme = darkTheme) {
-                NavGraph(auth = auth)
+                NavGraph()
             }
         }
     }

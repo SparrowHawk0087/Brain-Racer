@@ -59,7 +59,11 @@ data class Challenge(
     val winnerId: String? = null,
 
     @PropertyName("isDraw")
-    val isDraw: Boolean = false
+    val isDraw: Boolean = false,
+
+    /** true после однократного начисления XP победителю (анти-дубликат). */
+    @PropertyName("winnerXpGranted")
+    val winnerXpGranted: Boolean = false
 ) {
     // Переименовано: getWinnerId() → resolveWinnerId().
     // Старое имя getWinnerId() совпадало с JVM-геттером свойства winnerId,

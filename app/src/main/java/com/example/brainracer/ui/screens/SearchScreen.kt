@@ -33,12 +33,13 @@ import androidx.navigation.NavController
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.domain.entities.QuizDifficulty
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
+import com.example.brainracer.ui.utils.HOME_CATEGORY_CUSTOM
 import com.example.brainracer.ui.utils.QuizItem
 import kotlinx.coroutines.delay
 
 private val allCategories = listOf(
     "Все", "География", "История", "Математика",
-    "Фильмы и музыка", "Наука", "Спорт"
+    "Фильмы и музыка", "Наука", "Спорт", HOME_CATEGORY_CUSTOM
 )
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -47,7 +48,8 @@ private val allCategories = listOf(
 @Composable
 fun SearchScreen(
     navController: NavController,
-    initialCategory: String = "Все"   // передаётся при переходе «Смотреть все»
+    initialCategory: String = "Все",   // передаётся при переходе «Смотреть все»
+    initialCustomOnly: Boolean = false // только викторины id quiz_custom_*
 ) {
     val repo          = remember { QuizRepositoryImpl() }
     val scope         = rememberCoroutineScope()
@@ -74,36 +76,65 @@ fun SearchScreen(
         )
     }
 
-    // Фокус на поле ввода при открытии
+    fun mapQuizRows(data: List<com.example.brainracer.domain.entities.Quiz>): List<QuizItem> =
+        data.map { quiz ->
+            QuizItem(
+                id            = quiz.id,
+                title         = quiz.title,
+                category      = quiz.categoryId,
+                questionCount = quiz.questions.size,
+                difficulty    = quiz.difficulty.name,
+                description   = quiz.description,
+                rating        = quiz.stats.averageRating,
+                playCount     = quiz.stats.timesTaken
+            )
+        }
+
+    /**
+     * Режим только кастомных: вкладка «Кастомные» или вход с `customOnly=true` пока выбрано «Все».
+     * Смена категории (напр. «География») выключает принудительный кастомный режим с deep link.
+     */
+    fun customCatalogActive(): Boolean = when {
+        selectedCategory == HOME_CATEGORY_CUSTOM -> true
+        initialCustomOnly && selectedCategory == "Все" -> true
+        else -> false
+    }
+
+    /** Категория предмета для Firestore; «Кастомные» — не поле categoryId у квиза. */
+    fun subjectCategoryArg(): String? = when (selectedCategory) {
+        "Все", HOME_CATEGORY_CUSTOM -> null
+        else -> selectedCategory
+    }
+
+    // Фокус на поле ввода при открытии; стартовая загрузка по режиму
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
-        // Сразу загружаем, если передана конкретная категория
-        if (initialCategory != "Все") {
-            isLoading = true
-            hasSearched = true
-            try {
-                val raw = repo.getQuizzesByCategory(initialCategory, 50)
-                val list = (raw as? com.example.brainracer.data.utils.Result.Success)
-                    ?.data?.map { quiz ->
-                        QuizItem(
-                            id            = quiz.id,
-                            title         = quiz.title,
-                            category      = quiz.categoryId,
-                            questionCount = quiz.questions.size,
-                            difficulty    = quiz.difficulty.name,
-                            description   = quiz.description,
-                            rating        = quiz.stats.averageRating,
-                            playCount     = quiz.stats.timesTaken
-                        )
-                    } ?: emptyList()
-                results = list
-            } catch (_: Exception) {}
-            isLoading = false
+        when {
+            initialCustomOnly || initialCategory == HOME_CATEGORY_CUSTOM -> {
+                isLoading = true
+                hasSearched = true
+                try {
+                    val raw = repo.getPublicCustomQuizzes(120)
+                    results = (raw as? com.example.brainracer.data.utils.Result.Success)?.data
+                        ?.let { mapQuizRows(it) } ?: emptyList()
+                } catch (_: Exception) {}
+                isLoading = false
+            }
+            initialCategory != "Все" -> {
+                isLoading = true
+                hasSearched = true
+                try {
+                    val raw = repo.getQuizzesByCategory(initialCategory, 50)
+                    results = (raw as? com.example.brainracer.data.utils.Result.Success)
+                        ?.data?.let { mapQuizRows(it) } ?: emptyList()
+                } catch (_: Exception) {}
+                isLoading = false
+            }
         }
     }
 
     // Debounce-поиск при вводе текста
-    LaunchedEffect(query, selectedCategory, selectedDifficulty) {
+    LaunchedEffect(query, selectedCategory, selectedDifficulty, initialCustomOnly) {
         if (query.isBlank() && selectedCategory == "Все" && selectedDifficulty == null) {
             if (!hasSearched) return@LaunchedEffect
         }
@@ -111,28 +142,39 @@ fun SearchScreen(
         isLoading = true
         hasSearched = true
         try {
-            val categoryArg = if (selectedCategory == "Все") null else selectedCategory
-            val raw = if (query.isBlank()) {
-                if (categoryArg != null)
-                    repo.getQuizzesByCategory(categoryArg, 50)
-                else
-                    repo.getPopularQuizzes(50)
-            } else {
-                repo.searchQuizzes(query, categoryArg)
-            }
+            val subjectCat = subjectCategoryArg()
+            val customMode = customCatalogActive()
+            val raw: com.example.brainracer.data.utils.Result<List<com.example.brainracer.domain.entities.Quiz>> =
+                when {
+                    customMode && query.isBlank() ->
+                        repo.getPublicCustomQuizzes(120)
+                    customMode && query.isNotBlank() -> {
+                        val needle = query.trim().lowercase()
+                        when (val r = repo.getPublicCustomQuizzes(200)) {
+                            is com.example.brainracer.data.utils.Result.Success -> {
+                                val filtered = r.data.filter { q ->
+                                    q.title.lowercase().contains(needle) ||
+                                        q.description.lowercase().contains(needle)
+                                }
+                                com.example.brainracer.data.utils.Result.success(filtered)
+                            }
+                            is com.example.brainracer.data.utils.Result.Error -> r
+                        }
+                    }
+                    query.isBlank() -> {
+                        if (subjectCat != null)
+                            repo.getQuizzesByCategory(subjectCat, 50)
+                        else
+                            repo.getPopularQuizzes(50)
+                    }
+                    else -> repo.searchQuizzes(query, subjectCat)
+                }
             var list = (raw as? com.example.brainracer.data.utils.Result.Success)
-                ?.data?.map { quiz ->
-                    QuizItem(
-                        id            = quiz.id,
-                        title         = quiz.title,
-                        category      = quiz.categoryId,
-                        questionCount = quiz.questions.size,
-                        difficulty    = quiz.difficulty.name,
-                        description   = quiz.description,
-                        rating        = quiz.stats.averageRating,
-                        playCount     = quiz.stats.timesTaken
-                    )
-                } ?: emptyList()
+                ?.data?.let { mapQuizRows(it) } ?: emptyList()
+
+            if (customMode) {
+                list = list.filter { it.id.startsWith("quiz_custom_") }
+            }
 
             // Фильтр по сложности на клиенте
             selectedDifficulty?.let { diff ->
@@ -164,7 +206,13 @@ fun SearchScreen(
                         OutlinedTextField(
                             value         = query,
                             onValueChange = { query = it },
-                            placeholder   = { Text("Найти викторину…", color = cs.onSurfaceVariant, fontSize = 14.sp) },
+                            placeholder   = {
+                                Text(
+                                    if (customCatalogActive()) "Поиск среди кастомных…" else "Найти викторину…",
+                                    color = cs.onSurfaceVariant,
+                                    fontSize = 14.sp
+                                )
+                            },
                             leadingIcon   = {
                                 Icon(Icons.Default.Search, null, tint = cs.onSurfaceVariant, modifier = Modifier.size(18.dp))
                             },

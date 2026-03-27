@@ -2,6 +2,7 @@ package com.example.brainracer.data.repositories
 
 import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.ChallengeResult
+import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.data.utils.getOrNull
 import com.google.firebase.firestore.FieldPath
@@ -213,6 +214,22 @@ class QuizRepositoryImpl: QuizRepository {
         Result.error(e)
     }
 
+    override suspend fun getPublicCustomQuizzes(limit: Int): Result<List<Quiz>> = try {
+        val res = quizzesCollection
+            .orderBy(FieldPath.documentId())
+            .startAt("quiz_custom_")
+            .endAt("quiz_custom_\uf8ff")
+            .limit(limit.toLong())
+            .get()
+            .await()
+        val quizzes = res.documents.mapNotNull { it.toObject(Quiz::class.java) }
+            .filter { it.isPublic }
+            .sortedByDescending { it.createdAt.toDate().time }
+        Result.success(quizzes)
+    } catch (e: Exception) {
+        Result.error(e)
+    }
+
     override suspend fun getRecentResultsForUser(userId: String, limit: Int): Result<List<ChallengeResult>> = try {
         val res = quizResultsCollection
             .whereEqualTo("userId", userId)
@@ -229,9 +246,12 @@ class QuizRepositoryImpl: QuizRepository {
     }
 
     // Запись результатов прохождения квиза с поддержкой вызовов
-    override suspend fun recordQuizResult(quizResult: ChallengeResult): Result<Unit> {
+    override suspend fun recordQuizResult(
+        quizResult: ChallengeResult,
+        profileSessionXpForSolo: Int?
+    ): Result<Int> {
         return try {
-            val resWithId = quizResult.copy(id = quizResultsCollection.document().id)
+            val userRepo = UserRepositoryImpl()
 
             // 1) Дуэль: сначала вызов — иначе при PERMISSION_DENIED на quiz_results/users квиз не засчитается.
             if (!quizResult.challengeId.isNullOrBlank()) {
@@ -248,6 +268,37 @@ class QuizRepositoryImpl: QuizRepository {
                 }
             }
 
+            val returnXp: Int
+            val storedPoints: Int
+            if (quizResult.challengeId.isNullOrBlank()) {
+                val profileXp = profileSessionXpForSolo ?: quizResult.pointsEarned
+                when (val solo = userRepo.applySoloQuizCompletion(quizResult.userId, quizResult, profileXp)) {
+                    is Result.Error -> return Result.error(solo.exception)
+                    is Result.Success -> {
+                        returnXp = solo.data
+                        storedPoints = solo.data
+                    }
+                }
+            } else {
+                returnXp = 0
+                storedPoints = 0
+                when (val part = userRepo.applyChallengeQuizParticipation(quizResult.userId, quizResult)) {
+                    is Result.Error -> {
+                        val code = (part.exception as? FirebaseFirestoreException)?.code
+                            ?: (part.exception.cause as? FirebaseFirestoreException)?.code
+                        if (code != FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                            return Result.error(part.exception)
+                        }
+                    }
+                    is Result.Success -> Unit
+                }
+            }
+
+            val resWithId = quizResult.copy(
+                id = quizResultsCollection.document().id,
+                pointsEarned = storedPoints
+            )
+
             // 2) Архив прохождения (в правилах обязателен match /quiz_results/{id} allow create)
             try {
                 quizResultsCollection.document(resWithId.id).set(resWithId).await()
@@ -255,14 +306,21 @@ class QuizRepositoryImpl: QuizRepository {
                 if (e.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw e
             }
 
-            // 3) Профиль игрока
-            when (val ur = UserRepositoryImpl().updateUserStats(quizResult.userId, quizResult)) {
-                is Result.Success -> Unit
-                is Result.Error   -> {
-                    val code = (ur.exception as? FirebaseFirestoreException)?.code
-                        ?: (ur.exception.cause as? FirebaseFirestoreException)?.code
-                    if (code != FirebaseFirestoreException.Code.PERMISSION_DENIED) {
-                        return Result.error(ur.exception)
+            // 3) XP победителю дуэли (один раз, после завершения вызова)
+            if (!quizResult.challengeId.isNullOrBlank()) {
+                when (val grant = userRepo.tryGrantChallengeWinnerXp(quizResult.challengeId!!)) {
+                    is Result.Error -> {
+                        val code = (grant.exception as? FirebaseFirestoreException)?.code
+                            ?: (grant.exception.cause as? FirebaseFirestoreException)?.code
+                        if (code != FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                            return Result.error(grant.exception)
+                        }
+                    }
+                    is Result.Success -> {
+                        val o = grant.data
+                        if (o != null && o.xpAdded > 0) {
+                            ProfileAfterQuizRefresh.notify(o.winnerId)
+                        }
                     }
                 }
             }
@@ -287,7 +345,7 @@ class QuizRepositoryImpl: QuizRepository {
                 if (e.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw e
             }
 
-            Result.success(Unit)
+            Result.success(returnXp)
         } catch (e: Exception) {
             Result.error(e)
         }

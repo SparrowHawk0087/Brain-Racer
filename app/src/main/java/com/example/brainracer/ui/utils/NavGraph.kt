@@ -1,4 +1,4 @@
-﻿package com.example.brainracer.ui.utils
+package com.example.brainracer.ui.utils
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,13 +28,10 @@ import com.example.brainracer.ui.screens.QuizPlayScreen
 import com.example.brainracer.ui.screens.SearchScreen
 import com.example.brainracer.ui.screens.SettingsScreen
 import com.example.brainracer.ui.viewmodels.AuthViewModel
-import com.google.firebase.auth.FirebaseAuth
 
 @Composable
 fun NavGraph(
     authViewModel: AuthViewModel = viewModel(),
-    onAuthStateChange: (Boolean) -> Unit = {},
-    auth: FirebaseAuth
 ) {
     val navController = rememberNavController()
     val user by authViewModel.user.collectAsState()
@@ -47,14 +44,6 @@ fun NavGraph(
     val navigateToHome: () -> Unit = {
         user?.let {
             val route = "home/${it.uid}"
-            if (currentRoute != route)
-                navController.navigate(route) { launchSingleTop = true }
-        }
-    }
-
-    val navigateToFriends: () -> Unit = {
-        user?.let {
-            val route = "friends/${it.uid}"
             if (currentRoute != route)
                 navController.navigate(route) { launchSingleTop = true }
         }
@@ -168,19 +157,14 @@ fun NavGraph(
             QuizDetailScreen(
                 quizId = quizId,
                 navController = navController,
-                onNavigateToPlay = { id, practice ->
-                    navController.navigate(
-                        if (practice) "quiz_play/$id?practice=true"
-                        else "quiz_play/$id"
-                    )
-                }
+                onNavigateToPlay = { id -> navController.navigate("quiz_play/$id") }
             )
         }
 
-        // ── Quiz Play (обычный режим + вызов + тренировка) ─────────────────
+        // ── Quiz Play (соло + вызов) ─────────────────────────────────────────
         // fromNotifFlow: сценарий «уведомление → старт вызова» — интро как с главной, «Отмена» = на главную
         composable(
-            route = "quiz_play/{quizId}?challengeId={challengeId}&introShown={introShown}&fromNotifFlow={fromNotifFlow}&practice={practice}",
+            route = "quiz_play/{quizId}?challengeId={challengeId}&introShown={introShown}&fromNotifFlow={fromNotifFlow}",
             arguments = listOf(
                 navArgument("quizId") { type = NavType.StringType },
                 navArgument("challengeId") {
@@ -194,10 +178,6 @@ fun NavGraph(
                 navArgument("fromNotifFlow") {
                     type = NavType.BoolType
                     defaultValue = false
-                },
-                navArgument("practice") {
-                    type = NavType.BoolType
-                    defaultValue = false
                 }
             )
         ) { back ->
@@ -205,30 +185,36 @@ fun NavGraph(
             val challengeId = back.arguments?.getString("challengeId").orEmpty().ifBlank { null }
             val introShown = back.arguments?.getBoolean("introShown") ?: false
             val fromNotif = back.arguments?.getBoolean("fromNotifFlow") ?: false
-            val practice = back.arguments?.getBoolean("practice") ?: false
             QuizPlayScreen(
                 quizId = quizId,
                 challengeId = challengeId,
                 challengeIntroAlreadyShown = introShown,
                 challengeIntroCancelToHome = fromNotif,
-                practiceMode = practice,
                 navController = navController
             )
         }
 
-        // ── Search ────────────────────────────────────────────────────────
-        composable("search") {
-            SearchScreen(navController = navController)
-        }
+        // ── Search (category + режим только кастомных викторин) ─────────────
         composable(
-            "search?category={category}",
-            arguments = listOf(navArgument("category") {
-                type         = NavType.StringType
-                defaultValue = "Все"
-            })
+            route = "search?category={category}&customOnly={customOnly}",
+            arguments = listOf(
+                navArgument("category") {
+                    type = NavType.StringType
+                    defaultValue = "Все"
+                },
+                navArgument("customOnly") {
+                    type = NavType.StringType
+                    defaultValue = "false"
+                }
+            )
         ) { back ->
             val category = back.arguments?.getString("category") ?: "Все"
-            SearchScreen(navController = navController, initialCategory = category)
+            val customOnly = back.arguments?.getString("customOnly") == "true"
+            SearchScreen(
+                navController = navController,
+                initialCategory = category,
+                initialCustomOnly = customOnly
+            )
         }
 
         // ── Quiz Creator ───────────────────────────────────────────────────

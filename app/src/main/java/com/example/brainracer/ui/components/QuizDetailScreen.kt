@@ -26,7 +26,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Quiz
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Sports
 import androidx.compose.material.icons.filled.Star
@@ -66,6 +65,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.brainracer.data.local.QuizOfflineCache
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
+import com.example.brainracer.data.repositories.UserRepositoryImpl
+import com.example.brainracer.data.utils.Result
 import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.QuizDifficulty
 import com.example.brainracer.ui.theme.BrainRacerColorTokens
@@ -93,16 +94,19 @@ private fun difficultyLabel(d: QuizDifficulty): String = when (d) {
 fun QuizDetailScreen(
     quizId: String,
     navController: NavController,
-    onNavigateToPlay: (quizId: String, practice: Boolean) -> Unit = { _, _ -> }
+    onNavigateToPlay: (quizId: String) -> Unit = { }
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val quizRepository = remember { QuizRepositoryImpl() }
+    val userRepository = remember { UserRepositoryImpl() }
     val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
     var quiz by remember { mutableStateOf<Quiz?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var showFriendDialog by remember { mutableStateOf(false) }
+    var soloAlreadyCompleted by remember { mutableStateOf(false) }
+    var soloCheckDone by remember { mutableStateOf(false) }
 
     // Загружаем квиз
     LaunchedEffect(quizId) {
@@ -118,6 +122,24 @@ fun QuizDetailScreen(
                 }
             }
             isLoading = false
+        }
+    }
+
+    LaunchedEffect(quizId, currentUserId) {
+        if (currentUserId.isBlank()) {
+            soloAlreadyCompleted = false
+            soloCheckDone = true
+            return@LaunchedEffect
+        }
+        when (val u = userRepository.getUser(currentUserId)) {
+            is Result.Success -> {
+                soloAlreadyCompleted = quizId in u.data.stats.soloCompletedQuizIds
+                soloCheckDone = true
+            }
+            is Result.Error -> {
+                soloAlreadyCompleted = false
+                soloCheckDone = true
+            }
         }
     }
 
@@ -187,8 +209,9 @@ fun QuizDetailScreen(
                     item {
                         QuizActionsSection(
                             quizTitle = q.title,
-                            onStart = { onNavigateToPlay(quizId, false) },
-                            onPractice = { onNavigateToPlay(quizId, true) },
+                            totalTimesTaken = q.stats.timesTaken,
+                            soloAlreadyCompleted = soloCheckDone && soloAlreadyCompleted,
+                            onStart = { onNavigateToPlay(quizId) },
                             onChallenge = { showFriendDialog = true },
                             onShare = {
                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -455,8 +478,9 @@ private fun QuizDescriptionSection(description: String) {
 @Composable
 private fun QuizActionsSection(
     quizTitle: String,
+    totalTimesTaken: Int,
+    soloAlreadyCompleted: Boolean,
     onStart: () -> Unit,
-    onPractice: () -> Unit,
     onChallenge: () -> Unit,
     onShare: () -> Unit
 ) {
@@ -466,43 +490,41 @@ private fun QuizActionsSection(
             .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (soloAlreadyCompleted) {
+            Text(
+                "Вы уже прошли эту викторину в соло. Опыт за повторное прохождение не начисляется. Можно сыграть в вызове с другом.",
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
+        Text(
+            "Сыграно раз: $totalTimesTaken",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth()
+        )
         // Начать викторину
         Button(
             onClick = onStart,
+            enabled = !soloAlreadyCompleted,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = LocalBrainRacerExtendedColors.current.detailAccentPurple
+                containerColor = LocalBrainRacerExtendedColors.current.detailAccentPurple,
+                disabledContainerColor = LocalBrainRacerExtendedColors.current.detailSurfaceAlt
             )
         ) {
             Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                "Начать викторину",
+                if (soloAlreadyCompleted) "Уже пройдена" else "Начать викторину",
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 16.sp
-            )
-        }
-
-        OutlinedButton(
-            onClick = onPractice,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = LocalBrainRacerExtendedColors.current.detailBlue
-            ),
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, LocalBrainRacerExtendedColors.current.detailBlue)
-        ) {
-            Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "Тренировка (без зачёта)",
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 15.sp
             )
         }
 

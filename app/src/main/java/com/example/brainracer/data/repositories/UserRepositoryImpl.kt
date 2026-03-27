@@ -1,6 +1,12 @@
 package com.example.brainracer.data.repositories
 
+import com.example.brainracer.domain.entities.Challenge
 import com.example.brainracer.domain.entities.ChallengeResult
+import com.example.brainracer.domain.entities.ChallengeStatus
+import com.example.brainracer.domain.entities.ChallengeWinnerXpOutcome
+import com.example.brainracer.domain.entities.ChallengeXpPolicy
+import com.example.brainracer.domain.entities.LevelSystem
+import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.FriendRequest        // ← добавлен импорт
 import com.example.brainracer.domain.entities.FriendshipStatus     // ← добавлен импорт (вместо несуществующего FriendRequestStatus)
 import com.example.brainracer.domain.entities.User
@@ -17,7 +23,29 @@ class UserRepositoryImpl : UserRepository {
 
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     private val usersCollection = firestore.collection("users")
+    private val challengesCollection = firestore.collection("challenges")
+    private val quizzesCollection = firestore.collection("quizzes")
     private val friendRequestsCollection = firestore.collection("friend_requests")
+
+    private fun intFromStatsMap(m: Map<String, Any?>?, key: String): Int =
+        (m?.get(key) as? Number)?.toInt() ?: 0
+
+    private fun longFromStatsMap(m: Map<String, Any?>?, key: String): Long =
+        (m?.get(key) as? Number)?.toLong() ?: 0L
+
+    @Suppress("UNCHECKED_CAST")
+    private fun paidPairMapFromStats(raw: Any?): Map<String, Int> {
+        val m = raw as? Map<*, *> ?: return emptyMap()
+        return m.mapNotNull { (k, v) ->
+            val key = k as? String ?: return@mapNotNull null
+            val intVal = when (v) {
+                is Int -> v
+                is Long -> v.toInt()
+                else -> null
+            } ?: return@mapNotNull null
+            key to intVal
+        }.toMap()
+    }
 
     // ── Получить пользователя ─────────────────────────────────────────────
     override suspend fun getUser(userId: String): Result<User> = try {
@@ -49,8 +77,60 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
-    // ── Обновить статистику ───────────────────────────────────────────────
-    override suspend fun updateUserStats(
+    // ── Соло: один зачёт XP на quizId ─────────────────────────────────────
+    override suspend fun applySoloQuizCompletion(
+        userId: String,
+        quizResult: ChallengeResult,
+        profileSessionXp: Int
+    ): Result<Int> = try {
+        val userRef = usersCollection.document(userId)
+        val awardedHolder = intArrayOf(0)
+        firestore.runTransaction { transaction ->
+            awardedHolder[0] = 0
+            val userDoc = transaction.get(userRef)
+            val currentStats = userDoc.get("stats") as? Map<String, Any?> ?: mapOf()
+
+            val soloIds = (currentStats["solo_completed_quiz_ids"] as? List<*>)
+                ?.mapNotNull { it as? String } ?: emptyList()
+            val alreadyDone = quizResult.quizId in soloIds
+            val awarded = if (alreadyDone) 0 else profileSessionXp.coerceAtLeast(0)
+            awardedHolder[0] = awarded
+
+            val newTotalQuizzes = longFromStatsMap(currentStats, "total_quizzes_taken") + 1
+            val newTotalQuestions = longFromStatsMap(currentStats, "total_questions_answered") + quizResult.totalQuestions
+            val newCorrect = longFromStatsMap(currentStats, "correct_answers") + quizResult.correctAnswers
+            val newIncorrect = longFromStatsMap(currentStats, "incorrect_answers") + quizResult.incorrectAnswers
+            val prevPoints = longFromStatsMap(currentStats, "total_points")
+            val newTotalPoints = prevPoints + awarded
+
+            val currentAverage = currentStats["average_score"] as? Double ?: 0.0
+            val nq = newTotalQuizzes.toInt()
+            val newAverageScore = if (nq > 0)
+                (currentAverage * (nq - 1) + quizResult.accuracy) / nq
+            else quizResult.accuracy
+
+            val newSoloIds = if (!alreadyDone) soloIds + quizResult.quizId else soloIds
+
+            val updates = mutableMapOf<String, Any>(
+                "stats.total_quizzes_taken" to newTotalQuizzes,
+                "stats.total_questions_answered" to newTotalQuestions,
+                "stats.correct_answers" to newCorrect,
+                "stats.incorrect_answers" to newIncorrect,
+                "stats.total_points" to newTotalPoints,
+                "stats.average_score" to newAverageScore,
+                "stats.solo_completed_quiz_ids" to newSoloIds,
+                "rank" to calculateRank(newTotalPoints.toInt()).name
+            )
+            transaction.update(userRef, updates)
+            null
+        }.await()
+        Result.success(awardedHolder[0])
+    } catch (e: Exception) {
+        Result.error(e)
+    }
+
+    // ── Дуэль: только попытка в статистике ────────────────────────────────
+    override suspend fun applyChallengeQuizParticipation(
         userId: String,
         quizResult: ChallengeResult
     ): Result<Unit> = try {
@@ -59,29 +139,115 @@ class UserRepositoryImpl : UserRepository {
             val userDoc = transaction.get(userRef)
             val currentStats = userDoc.get("stats") as? Map<String, Any?> ?: mapOf()
 
-            val newTotalQuizzes    = (currentStats["total_quizzes_taken"]      as? Long ?: 0) + 1
-            val newTotalQuestions  = (currentStats["total_questions_answered"]  as? Long ?: 0) + quizResult.totalQuestions
-            val newCorrectAnswers  = (currentStats["correct_answers"]           as? Long ?: 0) + quizResult.correctAnswers
-            val newIncorrectAnswers = (currentStats["incorrect_answers"]        as? Long ?: 0) + quizResult.incorrectAnswers
-            val newTotalPoints     = (currentStats["total_points"]              as? Long ?: 0) + quizResult.pointsEarned
+            val newTotalQuizzes = longFromStatsMap(currentStats, "total_quizzes_taken") + 1
+            val newTotalQuestions = longFromStatsMap(currentStats, "total_questions_answered") + quizResult.totalQuestions
+            val newCorrect = longFromStatsMap(currentStats, "correct_answers") + quizResult.correctAnswers
+            val newIncorrect = longFromStatsMap(currentStats, "incorrect_answers") + quizResult.incorrectAnswers
 
             val currentAverage = currentStats["average_score"] as? Double ?: 0.0
-            val newAverageScore = if (newTotalQuizzes > 0)
-                (currentAverage * (newTotalQuizzes - 1) + quizResult.accuracy) / newTotalQuizzes
+            val nq = newTotalQuizzes.toInt()
+            val newAverageScore = if (nq > 0)
+                (currentAverage * (nq - 1) + quizResult.accuracy) / nq
             else quizResult.accuracy
 
             val updates = mapOf(
-                "stats.total_quizzes_taken"      to newTotalQuizzes,
+                "stats.total_quizzes_taken" to newTotalQuizzes,
                 "stats.total_questions_answered" to newTotalQuestions,
-                "stats.correct_answers"          to newCorrectAnswers,
-                "stats.incorrect_answers"        to newIncorrectAnswers,
-                "stats.total_points"             to newTotalPoints,
-                "stats.average_score"            to newAverageScore,
-                "rank"                           to calculateRank(newTotalPoints.toInt()).name
+                "stats.correct_answers" to newCorrect,
+                "stats.incorrect_answers" to newIncorrect,
+                "stats.average_score" to newAverageScore
             )
             transaction.update(userRef, updates)
+            null
         }.await()
         Result.success(Unit)
+    } catch (e: Exception) {
+        Result.error(e)
+    }
+
+    override suspend fun tryGrantChallengeWinnerXp(challengeId: String): Result<ChallengeWinnerXpOutcome?> = try {
+        val outcomeHolder = arrayOfNulls<ChallengeWinnerXpOutcome>(1)
+        firestore.runTransaction { transaction ->
+            outcomeHolder[0] = null
+            val chRef = challengesCollection.document(challengeId)
+            val chDoc = transaction.get(chRef)
+            if (!chDoc.exists()) return@runTransaction null
+
+            val challenge = chDoc.toObject(Challenge::class.java) ?: return@runTransaction null
+            if (challenge.status != ChallengeStatus.COMPLETED) return@runTransaction null
+            if (challenge.isDraw) return@runTransaction null
+            val winnerId = challenge.winnerId ?: return@runTransaction null
+            if (challenge.winnerXpGranted) return@runTransaction null
+
+            val winnerResult = if (winnerId == challenge.challengerUserId) {
+                challenge.challengerResult
+            } else {
+                challenge.challengedResult
+            } ?: return@runTransaction null
+
+            val opponentId = if (winnerId == challenge.challengerUserId) {
+                challenge.challengedUserId
+            } else {
+                challenge.challengerUserId
+            }
+
+            val qRef = quizzesCollection.document(challenge.quizId)
+            val qDoc = transaction.get(qRef)
+            val quiz = qDoc.toObject(Quiz::class.java) ?: throw Exception("quiz missing for challenge XP")
+
+            val userRef = usersCollection.document(winnerId)
+            val uDoc = transaction.get(userRef)
+            val currentStats = uDoc.get("stats") as? Map<String, Any?> ?: mapOf()
+
+            val todayStart = ChallengeXpPolicy.utcDayStartMillis()
+            var dayMillis = longFromStatsMap(currentStats, "challenge_xp_day_utc_millis")
+            var earnedToday = intFromStatsMap(currentStats, "challenge_xp_earned_today")
+            var paidMap = paidPairMapFromStats(currentStats["challenge_pair_paid_today"])
+
+            if (dayMillis != todayStart) {
+                dayMillis = todayStart
+                earnedToday = 0
+                paidMap = emptyMap()
+            }
+
+            val pairKey = ChallengeXpPolicy.pairKeyQuiz(winnerId, opponentId, challenge.quizId)
+            val paidCount = paidMap[pairKey] ?: 0
+            val mult = ChallengeXpPolicy.multiplierForPaidAttemptIndex(paidCount)
+
+            val totalPoints = intFromStatsMap(currentStats, "total_points")
+            val sessionProfileXp = LevelSystem.calculateQuizXp(
+                winnerResult.answers,
+                quiz.questions,
+                quiz.difficulty,
+                totalPoints
+            ).profileTotalXp
+
+            val raw = (sessionProfileXp * mult).toInt()
+            val capRem = (ChallengeXpPolicy.DAILY_CHALLENGE_XP_CAP - earnedToday).coerceAtLeast(0)
+            val awarded = minOf(capRem, raw).coerceAtLeast(0)
+
+            val newTotalPoints = totalPoints + awarded
+            val newEarnedToday = earnedToday + awarded
+            val newPaidMap: Map<String, Int> = if (awarded > 0) {
+                paidMap.toMutableMap().apply { put(pairKey, paidCount + 1) }
+            } else {
+                paidMap
+            }
+
+            val userUpdates = mutableMapOf<String, Any>(
+                "stats.total_points" to newTotalPoints,
+                "stats.challenge_xp_day_utc_millis" to dayMillis,
+                "stats.challenge_xp_earned_today" to newEarnedToday,
+                "stats.challenge_pair_paid_today" to newPaidMap,
+                "rank" to calculateRank(newTotalPoints).name
+            )
+            transaction.update(userRef, userUpdates)
+            transaction.update(chRef, "winnerXpGranted", true)
+
+            outcomeHolder[0] = ChallengeWinnerXpOutcome(winnerId = winnerId, xpAdded = awarded)
+            null
+        }.await()
+        Result.success(outcomeHolder[0])
     } catch (e: Exception) {
         Result.error(e)
     }

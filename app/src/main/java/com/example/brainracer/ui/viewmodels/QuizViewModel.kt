@@ -40,23 +40,19 @@ class QuizViewModel : ViewModel() {
     private var totalTimeSpent = 0
     private var questionStartTime = 0L
 
-    private var practiceModeRequested = false
     private var networkAvailableAtStart = true
 
-    private fun sessionCountsTowardProgress(challengeId: String?): Boolean {
+    private fun sessionCountsTowardProgress(): Boolean {
         val hasUser = currentUserId != null
         if (!hasUser) return false
         if (!networkAvailableAtStart) return false
-        if (!challengeId.isNullOrBlank()) return true
-        return !practiceModeRequested
+        return true
     }
 
-    private fun nonScoringReasonForSession(challengeId: String?): QuizNonScoringReason? {
-        if (sessionCountsTowardProgress(challengeId)) return null
+    private fun nonScoringReasonForSession(): QuizNonScoringReason? {
+        if (sessionCountsTowardProgress()) return null
         if (currentUserId == null) return QuizNonScoringReason.NOT_SIGNED_IN
         if (!networkAvailableAtStart) return QuizNonScoringReason.OFFLINE
-        if (!challengeId.isNullOrBlank()) return QuizNonScoringReason.OFFLINE
-        if (practiceModeRequested) return QuizNonScoringReason.PRACTICE
         return QuizNonScoringReason.NOT_SIGNED_IN
     }
 
@@ -65,21 +61,18 @@ class QuizViewModel : ViewModel() {
     fun loadQuiz(
         quizId: String,
         challengeId: String? = null,
-        practiceMode: Boolean = false,
         networkAvailableAtStart: Boolean = true
     ) {
         val prior = _uiState.value
         val challengeMatches = prior.challengeId == challengeId ||
                 (prior.challengeId.isNullOrBlank() && challengeId.isNullOrBlank())
         if (currentQuiz?.id == quizId && challengeMatches &&
-            prior.sessionPracticeMode == practiceMode &&
             prior.sessionNetworkAvailable == networkAvailableAtStart &&
             (prior.showResults || prior.isQuizCompleted || prior.question.isNotEmpty())
         ) {
             return
         }
 
-        practiceModeRequested = practiceMode
         this.networkAvailableAtStart = networkAvailableAtStart
 
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -87,12 +80,12 @@ class QuizViewModel : ViewModel() {
             quizRepository.getQuiz(quizId).fold(
                 onSuccess = { quiz ->
                     QuizOfflineCache.save(quiz)
-                    onQuizLoaded(quiz, challengeId, practiceMode, networkAvailableAtStart)
+                    onQuizLoaded(quiz, challengeId, networkAvailableAtStart)
                 },
                 onFailure = { error ->
                     val cached = QuizOfflineCache.load(quizId)
                     if (cached != null) {
-                        onQuizLoaded(cached, challengeId, practiceMode, networkAvailableAtStart)
+                        onQuizLoaded(cached, challengeId, networkAvailableAtStart)
                     } else {
                         _uiState.update {
                             it.copy(isLoading = false, errorMessage = "Ошибка загрузки: ${error.message}")
@@ -106,18 +99,16 @@ class QuizViewModel : ViewModel() {
     private fun onQuizLoaded(
         quiz: Quiz,
         challengeId: String?,
-        practiceMode: Boolean,
         networkAvailableAtStart: Boolean
     ) {
-        practiceModeRequested = practiceMode
         this.networkAvailableAtStart = networkAvailableAtStart
 
         currentQuiz = quiz
         userAnswers.clear()
         totalTimeSpent = 0
 
-        val counting = sessionCountsTowardProgress(challengeId)
-        val reason = nonScoringReasonForSession(challengeId)
+        val counting = sessionCountsTowardProgress()
+        val reason = nonScoringReasonForSession()
 
         if (quiz.questions.isNotEmpty()) {
             questionStartTime = System.currentTimeMillis()
@@ -131,7 +122,6 @@ class QuizViewModel : ViewModel() {
                 attachedImageUrl = first.imageUrl ?: first.gifUrl,
                 challengeId = challengeId,
                 quizTitle = quiz.title,
-                sessionPracticeMode = practiceMode,
                 sessionNetworkAvailable = networkAvailableAtStart,
                 isNonScoringSession = !counting,
                 nonScoringReason = reason
@@ -262,7 +252,7 @@ class QuizViewModel : ViewModel() {
                 }
             } ?: 0
 
-            val persist = sessionCountsTowardProgress(_uiState.value.challengeId)
+            val persist = sessionCountsTowardProgress()
             finishWithXp(quiz, xpBefore, persistResults = persist, userId = userId)
         }
     }
@@ -292,38 +282,29 @@ class QuizViewModel : ViewModel() {
             totalXp = xpResult.totalXp
         )
 
-        val displayLevel: Int
-        val displayProgress: Float
-        val showLevelUp: Boolean
-        if (persistResults) {
-            val newTotalXp = xpBefore + xpResult.totalXp
-            displayLevel = LevelSystem.levelFromXp(newTotalXp)
-            displayProgress = LevelSystem.levelProgress(newTotalXp)
-            showLevelUp = xpResult.leveledUp
-        } else {
-            displayLevel = LevelSystem.levelFromXp(xpBefore)
-            displayProgress = LevelSystem.levelProgress(xpBefore)
-            showLevelUp = false
-        }
+        val cid = _uiState.value.challengeId
+        val isChallenge = !cid.isNullOrBlank()
 
-        _uiState.update {
-            it.copy(
-                showResults = true,
-                isQuizCompleted = true,
-                accuracy = accuracy,
-                xpEarned = xpResult.totalXp,
-                xpBreakdown = breakdown,
-                leveledUp = showLevelUp,
-                newLevel = displayLevel,
-                newLevelProgress = displayProgress,
-                reviewQuestions = quiz.questions,
-                reviewAnswers = userAnswers.toList(),
-                isNonScoringSession = !persistResults,
-                nonScoringReason = if (persistResults) null else it.nonScoringReason
-            )
+        if (!persistResults || userId == null) {
+            _uiState.update {
+                it.copy(
+                    showResults = true,
+                    isQuizCompleted = true,
+                    accuracy = accuracy,
+                    xpEarned = 0,
+                    xpBreakdown = breakdown,
+                    leveledUp = false,
+                    newLevel = LevelSystem.levelFromXp(xpBefore),
+                    newLevelProgress = LevelSystem.levelProgress(xpBefore),
+                    reviewQuestions = quiz.questions,
+                    reviewAnswers = userAnswers.toList(),
+                    isNonScoringSession = true,
+                    nonScoringReason = it.nonScoringReason,
+                    duelXpDeferred = isChallenge
+                )
+            }
+            return
         }
-
-        if (!persistResults || userId == null) return
 
         val avgTime = if (totalQ > 0) totalTimeSpent.toDouble() / totalQ else 0.0
         val nickname = when (val r = userRepository.getUser(userId)) {
@@ -331,7 +312,6 @@ class QuizViewModel : ViewModel() {
             is Result.Error -> "Игрок"
         }
 
-        val cid = _uiState.value.challengeId
         val quizResult = com.example.brainracer.domain.entities.ChallengeResult(
             quizId = quiz.id,
             userId = userId,
@@ -343,18 +323,50 @@ class QuizViewModel : ViewModel() {
             timeSpent = totalTimeSpent,
             averageTimePerQuestion = avgTime,
             answers = userAnswers.toList(),
-            pointsEarned = xpResult.totalXp,
+            pointsEarned = 0,
             challengeId = cid
         )
 
-        when (val rec = quizRepository.recordQuizResult(quizResult)) {
-            is Result.Success -> ProfileAfterQuizRefresh.notify(userId)
+        when (val rec = quizRepository.recordQuizResult(quizResult, xpResult.profileTotalXp)) {
             is Result.Error ->
                 _uiState.update {
                     it.copy(
                         errorMessage = "Не удалось завершить сохранение: ${rec.exception.message}"
                     )
                 }
+            is Result.Success -> {
+                val soloAwarded = rec.data
+                var xpAfterDisplay = xpBefore
+                if (!isChallenge) {
+                    xpAfterDisplay = xpBefore + soloAwarded
+                } else {
+                    when (val refreshed = userRepository.getUser(userId)) {
+                        is Result.Success -> xpAfterDisplay = refreshed.data.stats.totalPoints
+                        is Result.Error -> Unit
+                    }
+                }
+
+                val showLevelUp = LevelSystem.levelFromXp(xpAfterDisplay) > LevelSystem.levelFromXp(xpBefore)
+
+                _uiState.update {
+                    it.copy(
+                        showResults = true,
+                        isQuizCompleted = true,
+                        accuracy = accuracy,
+                        xpEarned = if (isChallenge) 0 else soloAwarded,
+                        xpBreakdown = breakdown,
+                        leveledUp = showLevelUp,
+                        newLevel = LevelSystem.levelFromXp(xpAfterDisplay),
+                        newLevelProgress = LevelSystem.levelProgress(xpAfterDisplay),
+                        reviewQuestions = quiz.questions,
+                        reviewAnswers = userAnswers.toList(),
+                        isNonScoringSession = false,
+                        nonScoringReason = null,
+                        duelXpDeferred = isChallenge
+                    )
+                }
+                ProfileAfterQuizRefresh.notify(userId)
+            }
         }
     }
 
@@ -362,13 +374,12 @@ class QuizViewModel : ViewModel() {
         if (!_uiState.value.challengeId.isNullOrBlank()) return
         val id = currentQuiz?.id ?: return
         val cid = _uiState.value.challengeId
-        val practice = _uiState.value.sessionPracticeMode
         val ctx = QuizOfflineCache.applicationContextOrNull()
         val online = ctx != null && isNetworkLikelyAvailable(ctx)
         userAnswers.clear()
         totalTimeSpent = 0
         _uiState.value = QuizUIState()
-        loadQuiz(id, cid, practice, online)
+        loadQuiz(id, cid, online)
     }
 
     fun closeResults() {

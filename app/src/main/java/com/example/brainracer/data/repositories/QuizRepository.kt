@@ -15,7 +15,16 @@ interface QuizRepository {
     suspend fun updateQuiz(quiz: Quiz): Result<Unit>
     suspend fun deleteQuiz(quizId: String): Result<Unit>
     suspend fun searchQuizzes(query: String, category: String? = null): Result<List<Quiz>>
-    suspend fun recordQuizResult(quizResult: ChallengeResult): Result<Unit>
+    /**
+     * @param profileSessionXpForSolo XP без speed для соло; для дуэли игнорируется.
+     * @return фактически зачтённый в профиль XP за эту запись (соло — после правила «один раз»; дуэль — 0 здесь, победа обрабатывается отдельно).
+     */
+    suspend fun recordQuizResult(
+        quizResult: ChallengeResult,
+        profileSessionXpForSolo: Int? = null
+    ): Result<Int>
     suspend fun getRecentResultsForUser(userId: String, limit: Int = 40): Result<List<ChallengeResult>>
     suspend fun getPopularQuizzes(limit: Int = 10): Result<List<Quiz>>
+    /** Публичные викторины с id `quiz_custom_*` (пользовательский конструктор). */
+    suspend fun getPublicCustomQuizzes(limit: Int = 50): Result<List<Quiz>>
 }
