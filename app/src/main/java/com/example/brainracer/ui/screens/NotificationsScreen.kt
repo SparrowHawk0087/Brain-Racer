@@ -30,17 +30,11 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.brainracer.domain.entities.AppNotification
 import com.example.brainracer.domain.entities.AppNotificationType
+import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.viewmodels.NotificationsViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-private val NBg      = Color(0xFF0F0F1A)
-private val NCard    = Color(0xFF1A1A2E)
-private val NBorder  = Color(0xFF2A2A3E)
-private val NPurple  = Color(0xFF667EEA)
-private val NTextPri = Color(0xFFFFFFFF)
-private val NTextSec = Color(0xFF8B8AAE)
 
 private fun formatNotificationQuizDuration(totalSec: Int?): String? {
     if (totalSec == null || totalSec <= 0) return null
@@ -79,19 +73,19 @@ fun NotificationsScreen(
     val listShown = if (tabIndex == 0) generalList else challengesList
 
     Scaffold(
-        containerColor      = NBg,
+        containerColor      = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets.systemBars,
         topBar = {
             TopAppBar(
                 title = {
-                    Text("Уведомления", color = NTextPri, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text("Уведомления", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = NTextPri)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = NBg)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
     ) { padding ->
@@ -102,18 +96,18 @@ fun NotificationsScreen(
         ) {
             TabRow(
                 selectedTabIndex = tabIndex,
-                containerColor   = NBg,
-                contentColor     = NPurple,
+                containerColor   = MaterialTheme.colorScheme.background,
+                contentColor     = MaterialTheme.colorScheme.primary,
                 indicator = { tabPositions ->
                     if (tabIndex < tabPositions.size) {
                         TabRowDefaults.SecondaryIndicator(
                             modifier = Modifier.tabIndicatorOffset(tabPositions[tabIndex]),
-                            color    = NPurple,
+                            color    = MaterialTheme.colorScheme.primary,
                             height   = 2.dp
                         )
                     }
                 },
-                divider = { HorizontalDivider(color = NBorder) }
+                divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outline) }
             ) {
                 tabTitles.forEachIndexed { i, title ->
                     val showUnreadDot = when (i) {
@@ -137,13 +131,13 @@ fun NotificationsScreen(
                                         Modifier
                                             .size(7.dp)
                                             .clip(CircleShape)
-                                            .background(Color(0xFFf5576c))
+                                            .background(LocalBrainRacerExtendedColors.current.difficultyHard)
                                     )
                                 }
                             }
                         },
-                        selectedContentColor   = NPurple,
-                        unselectedContentColor = NTextSec
+                        selectedContentColor   = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -151,18 +145,18 @@ fun NotificationsScreen(
             when {
                 uiState.isLoading ->
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = NPurple)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 uiState.errorMessage != null ->
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text(uiState.errorMessage!!, color = Color(0xFFEA5C7E), fontSize = 14.sp)
+                        Text(uiState.errorMessage!!, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
                     }
                 listShown.isEmpty() ->
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Text(
                             if (tabIndex == 0) "Пока нет общих уведомлений"
                             else "Нет уведомлений о вызовах",
-                            color = NTextSec,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 14.sp
                         )
                     }
@@ -216,7 +210,7 @@ private fun NotificationCard(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape     = RoundedCornerShape(16.dp),
-        colors    = CardDefaults.cardColors(containerColor = NCard),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(0.dp),
         border    = CardDefaults.outlinedCardBorder()
     ) {
@@ -231,22 +225,22 @@ private fun NotificationCard(
                         model             = n.actorAvatarUrl,
                         contentDescription = null,
                         modifier          = Modifier.size(48.dp).clip(CircleShape)
-                            .border(1.dp, NBorder, CircleShape),
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
                         contentScale      = ContentScale.Crop
                     )
                 n.type == AppNotificationType.CHALLENGE ->
                     Box(
-                        Modifier.size(48.dp).clip(CircleShape).background(NPurple.copy(0.2f)),
+                        Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(0.2f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Sports, null, tint = NPurple, modifier = Modifier.size(26.dp))
+                        Icon(Icons.Default.Sports, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
                     }
                 else ->
                     Box(
-                        Modifier.size(48.dp).clip(CircleShape).background(NBorder),
+                        Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.outline),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Notifications, null, tint = NTextSec, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.Notifications, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                     }
             }
 
@@ -256,7 +250,7 @@ private fun NotificationCard(
                         n.title,
                         fontWeight = FontWeight.SemiBold,
                         fontSize   = 14.sp,
-                        color      = NTextPri,
+                        color      = MaterialTheme.colorScheme.onSurface,
                         maxLines   = 2,
                         overflow   = TextOverflow.Ellipsis
                     )
@@ -266,7 +260,7 @@ private fun NotificationCard(
                     Text(
                         n.actorNickname,
                         fontSize = 12.sp,
-                        color    = NPurple,
+                        color    = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium
                     )
                     Spacer(Modifier.height(4.dp))
@@ -274,7 +268,7 @@ private fun NotificationCard(
                 Text(
                     n.message,
                     fontSize   = 13.sp,
-                    color      = NTextSec,
+                    color      = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 18.sp,
                     maxLines   = 4,
                     overflow   = TextOverflow.Ellipsis
@@ -288,13 +282,13 @@ private fun NotificationCard(
                         Icon(
                             Icons.Default.Schedule,
                             contentDescription = null,
-                            tint = NPurple,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
                             quizTimeLabel,
                             fontSize = 12.sp,
-                            color = NPurple,
+                            color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -305,15 +299,15 @@ private fun NotificationCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment     = Alignment.CenterVertically
                 ) {
-                    Text(timeStr, fontSize = 11.sp, color = NTextSec.copy(0.8f))
+                    Text(timeStr, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.8f))
                     if (!n.read) {
-                        Surface(shape = RoundedCornerShape(6.dp), color = NPurple.copy(0.2f)) {
+                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primary.copy(0.2f)) {
                             Text(
                                 "Новое",
                                 modifier   = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                 fontSize   = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color      = NPurple
+                                color      = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
