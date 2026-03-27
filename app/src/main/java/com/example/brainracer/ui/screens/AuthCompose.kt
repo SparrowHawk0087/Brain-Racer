@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -23,23 +24,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import com.example.brainracer.ui.theme.BrainRacerColorTokens
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-val AuthBgBlack       = Color(0xFF000000)
-val AuthFieldBg       = Color(0xFF2D2B45)
-val AuthFieldBorder   = Color(0xFF8B82C8)
-val AuthTextPrimary   = Color(0xFFFFFFFF)
-val AuthPlaceholder   = Color(0xFF9E9EAE)
-val AuthLinkForgot    = Color(0xFF8AB4FF)
-val AuthGradientStart = Color(0xFF7B61FF)
-val AuthGradientEnd   = Color(0xFFB066FE)
-
 val AuthFieldShape = RoundedCornerShape(12.dp)
-val AuthPillShape  = RoundedCornerShape(50)
+val AuthPillShape = RoundedCornerShape(50)
 
 @Composable
 fun AuthGradientButton(
@@ -49,7 +41,9 @@ fun AuthGradientButton(
     loading: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val brush = Brush.horizontalGradient(listOf(AuthGradientStart, AuthGradientEnd))
+    val brush = Brush.horizontalGradient(
+        listOf(BrainRacerColorTokens.Accent, BrainRacerColorTokens.AccentSecondary)
+    )
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -64,12 +58,12 @@ fun AuthGradientButton(
             CircularProgressIndicator(
                 modifier = Modifier.size(24.dp),
                 strokeWidth = 2.dp,
-                color = AuthTextPrimary
+                color = BrainRacerColorTokens.OnAccent
             )
         } else {
             Text(
                 text = text,
-                color = AuthTextPrimary,
+                color = BrainRacerColorTokens.OnAccent,
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
@@ -90,6 +84,11 @@ fun AuthStyledTextField(
     trailingIcon: @Composable (() -> Unit)? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None
 ) {
+    val cs = MaterialTheme.colorScheme
+    val fieldBg = cs.surfaceContainerHigh
+    val onField = cs.onSurface
+    val muted = cs.onSurfaceVariant
+
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -100,14 +99,14 @@ fun AuthStyledTextField(
         label = {
             Text(
                 text = label,
-                color = AuthPlaceholder,
+                color = if (isError) cs.error else muted,
                 fontSize = 14.sp
             )
         },
         placeholder = {
             Text(
                 text = placeholder,
-                color = AuthPlaceholder.copy(alpha = 0.85f),
+                color = muted.copy(alpha = 0.75f),
                 fontSize = 14.sp
             )
         },
@@ -115,20 +114,29 @@ fun AuthStyledTextField(
         isError = isError,
         supportingText = supportingText,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = AuthTextPrimary,
-            unfocusedTextColor = AuthTextPrimary,
-            cursorColor = AuthTextPrimary,
-            focusedBorderColor = AuthFieldBorder,
-            unfocusedBorderColor = AuthFieldBorder.copy(alpha = 0.45f),
-            errorBorderColor = Color(0xFFFF6B6B),
-            focusedContainerColor = AuthFieldBg,
-            unfocusedContainerColor = AuthFieldBg,
-            errorContainerColor = AuthFieldBg,
-            focusedLabelColor = AuthPlaceholder,
-            unfocusedLabelColor = AuthPlaceholder,
-            errorSupportingTextColor = Color(0xFFFF8A8A),
-            focusedSupportingTextColor = AuthPlaceholder,
-            unfocusedSupportingTextColor = AuthPlaceholder
+            focusedTextColor = onField,
+            unfocusedTextColor = onField,
+            disabledTextColor = onField.copy(alpha = 0.38f),
+            errorTextColor = onField,
+            focusedContainerColor = fieldBg,
+            unfocusedContainerColor = fieldBg,
+            disabledContainerColor = fieldBg.copy(alpha = 0.6f),
+            errorContainerColor = fieldBg,
+            cursorColor = cs.primary,
+            errorCursorColor = cs.error,
+            focusedBorderColor = cs.outline,
+            unfocusedBorderColor = cs.outline.copy(alpha = 0.55f),
+            disabledBorderColor = cs.outline.copy(alpha = 0.35f),
+            errorBorderColor = cs.error,
+            focusedLabelColor = muted,
+            unfocusedLabelColor = muted,
+            errorLabelColor = cs.error,
+            focusedPlaceholderColor = muted.copy(alpha = 0.65f),
+            unfocusedPlaceholderColor = muted.copy(alpha = 0.65f),
+            errorPlaceholderColor = muted.copy(alpha = 0.75f),
+            focusedSupportingTextColor = muted,
+            unfocusedSupportingTextColor = muted,
+            errorSupportingTextColor = cs.error
         )
     )
 }
@@ -138,13 +146,14 @@ fun AuthGoogleButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val cs = MaterialTheme.colorScheme
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp)
             .clip(AuthPillShape)
-            .background(AuthFieldBg)
-            .border(1.dp, AuthFieldBorder.copy(alpha = 0.55f), AuthPillShape)
+            .background(cs.surfaceContainerHigh)
+            .border(1.dp, cs.outline.copy(alpha = 0.65f), AuthPillShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -157,12 +166,12 @@ fun AuthGoogleButton(
                 modifier = Modifier
                     .size(22.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .background(AuthTextPrimary),
+                    .background(cs.onSurface),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "G",
-                    color = AuthFieldBg,
+                    color = cs.surfaceContainerHigh,
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp
                 )
@@ -170,7 +179,7 @@ fun AuthGoogleButton(
             Spacer(Modifier.width(10.dp))
             Text(
                 text = "Sign in with Google",
-                color = AuthTextPrimary,
+                color = cs.onSurface,
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp
             )

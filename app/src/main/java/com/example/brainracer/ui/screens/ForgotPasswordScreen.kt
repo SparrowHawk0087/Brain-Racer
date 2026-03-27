@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,7 +38,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.brainracer.ui.theme.BrainRacerColorTokens
 import com.example.brainracer.ui.theme.BrainRacerTheme
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import kotlinx.coroutines.delay
@@ -54,6 +54,7 @@ fun ForgotPasswordScreen(
     var emailValidationMessage by remember { mutableStateOf("") }
     var isCheckingEmail by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val colorScheme = MaterialTheme.colorScheme
 
     LaunchedEffect(email) {
         if (email.isNotBlank()) {
@@ -73,7 +74,7 @@ fun ForgotPasswordScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(AuthBgBlack)
+            .background(colorScheme.background)
             .windowInsetsPadding(WindowInsets.statusBars)
     ) {
         IconButton(
@@ -86,7 +87,7 @@ fun ForgotPasswordScreen(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back",
-                tint = AuthTextPrimary
+                tint = colorScheme.onBackground
             )
         }
 
@@ -100,7 +101,7 @@ fun ForgotPasswordScreen(
         ) {
             Text(
                 text = "Forgot Password",
-                color = AuthTextPrimary,
+                color = colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
                 fontSize = 22.sp,
                 textAlign = TextAlign.Center,
@@ -111,7 +112,7 @@ fun ForgotPasswordScreen(
 
             Text(
                 text = "Enter your email to receive a password reset link",
-                color = AuthPlaceholder,
+                color = colorScheme.onSurfaceVariant,
                 fontSize = 15.sp,
                 lineHeight = 22.sp,
                 textAlign = TextAlign.Center,
@@ -131,7 +132,7 @@ fun ForgotPasswordScreen(
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp,
-                            color = AuthGradientEnd
+                            color = colorScheme.primary
                         )
                     }
                 } else null,
@@ -141,14 +142,14 @@ fun ForgotPasswordScreen(
                             Text(
                                 text = emailValidationMessage,
                                 fontSize = 12.sp,
-                                color = if (isEmailValid) AuthPlaceholder else BrainRacerColorTokens.InputValidationError
+                                color = if (isEmailValid) colorScheme.onSurfaceVariant else colorScheme.error
                             )
                         }
                         isCheckingEmail -> {
                             Text(
                                 text = "Checking email...",
                                 fontSize = 12.sp,
-                                color = AuthPlaceholder
+                                color = colorScheme.onSurfaceVariant
                             )
                         }
                     }

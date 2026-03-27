@@ -17,6 +17,8 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageException
+import com.google.firebase.storage.StorageMetadata
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -165,6 +167,14 @@ class QuizCreatorViewModel : ViewModel() {
 
     private val userId get() = auth.currentUser?.uid ?: ""
 
+    private fun logStorageFailure(op: String, e: Exception) {
+        if (e is StorageException) {
+            Log.e("QuizCreator", "$op StorageException errorCode=${e.errorCode} message=${e.message}", e)
+        } else {
+            Log.e("QuizCreator", "$op failed: ${e.message}", e)
+        }
+    }
+
     init { loadDrafts() }
 
     // ── Редактирование мета-данных викторины ──────────────────────────────
@@ -183,15 +193,30 @@ class QuizCreatorViewModel : ViewModel() {
         val uri = _uiState.value.currentDraft.coverUri ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(uploadingCover = true) }
+            val uid = auth.currentUser?.uid
+            if (uid.isNullOrBlank()) {
+                _uiState.update {
+                    it.copy(
+                        uploadingCover = false,
+                        error = "Войдите в аккаунт, чтобы загрузить обложку"
+                    )
+                }
+                return@launch
+            }
             try {
                 val optimized = ImageOptimizerUtil.optimize(context, uri, isCover = true)
-                val path = "quiz_covers/$userId/${UUID.randomUUID()}.${optimized.mimeType.substringAfter('/')}"
-                val ref  = storage.reference.child(path)
-                ref.putBytes(optimized.bytes).await()
+                val ext = optimized.mimeType.substringAfter('/').ifBlank { "jpeg" }
+                val path = "quiz_covers/$uid/${UUID.randomUUID()}.$ext"
+                val ref = storage.reference.child(path)
+                val metadata = StorageMetadata.Builder()
+                    .setContentType(optimized.mimeType)
+                    .build()
+                ref.putBytes(optimized.bytes, metadata).await()
                 val url = ref.downloadUrl.await().toString()
                 updateDraft { it.copy(coverUrl = url) }
-                Log.d("Creator", "Cover uploaded: ${optimized.sizeKb}KB")
+                Log.d("Creator", "Cover uploaded: ${optimized.sizeKb}KB path=$path")
             } catch (e: Exception) {
+                logStorageFailure("uploadCover", e)
                 _uiState.update { it.copy(error = "Ошибка загрузки обложки: ${e.message}") }
             }
             _uiState.update { it.copy(uploadingCover = false) }
@@ -241,16 +266,30 @@ class QuizCreatorViewModel : ViewModel() {
         val uri = _uiState.value.currentDraft.questions.getOrNull(qIndex)?.imageUri ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(uploadingImageForQuestion = qIndex) }
+            val uid = auth.currentUser?.uid
+            if (uid.isNullOrBlank()) {
+                _uiState.update {
+                    it.copy(
+                        uploadingImageForQuestion = null,
+                        error = "Войдите в аккаунт, чтобы загрузить изображение к вопросу"
+                    )
+                }
+                return@launch
+            }
             try {
                 val optimized = ImageOptimizerUtil.optimize(context, uri, isCover = false)
-                val ext  = if (optimized.mimeType == "image/gif") "gif" else optimized.mimeType.substringAfter('/')
-                val path = "quiz_images/$userId/${UUID.randomUUID()}.$ext"
-                val ref  = storage.reference.child(path)
-                ref.putBytes(optimized.bytes).await()
+                val ext = if (optimized.mimeType == "image/gif") "gif" else optimized.mimeType.substringAfter('/').ifBlank { "jpeg" }
+                val path = "quiz_images/$uid/${UUID.randomUUID()}.$ext"
+                val ref = storage.reference.child(path)
+                val metadata = StorageMetadata.Builder()
+                    .setContentType(optimized.mimeType)
+                    .build()
+                ref.putBytes(optimized.bytes, metadata).await()
                 val url = ref.downloadUrl.await().toString()
                 updateQuestion(qIndex) { it.copy(imageUrl = url, isGif = optimized.mimeType == "image/gif") }
-                Log.d("Creator", "Q$qIndex image uploaded: ${optimized.sizeKb}KB")
+                Log.d("Creator", "Q$qIndex image uploaded: ${optimized.sizeKb}KB path=$path")
             } catch (e: Exception) {
+                logStorageFailure("uploadQuestionImage(q=$qIndex)", e)
                 _uiState.update { it.copy(error = "Ошибка загрузки картинки: ${e.message}") }
             }
             _uiState.update { it.copy(uploadingImageForQuestion = null) }

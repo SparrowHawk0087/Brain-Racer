@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,7 +45,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.brainracer.R
-import com.example.brainracer.ui.theme.BrainRacerColorTokens
 import com.example.brainracer.ui.theme.BrainRacerTheme
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import kotlinx.coroutines.Dispatchers
@@ -71,6 +71,7 @@ fun AuthScreen(
     var isPasswordVisible by rememberSaveable { mutableStateOf(false) }
     val error by authViewModel.error.collectAsState()
     val context = LocalContext.current
+    val colorScheme = MaterialTheme.colorScheme
     var isLoading by remember { mutableStateOf(false) }
 
     var emailValidationMessage by remember { mutableStateOf("") }
@@ -108,7 +109,7 @@ fun AuthScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(AuthBgBlack)
+            .background(colorScheme.background)
             .windowInsetsPadding(WindowInsets.statusBars)
     ) {
         if (!isLogin) {
@@ -122,7 +123,7 @@ fun AuthScreen(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
-                    tint = AuthTextPrimary
+                    tint = colorScheme.onBackground
                 )
             }
         }
@@ -137,7 +138,7 @@ fun AuthScreen(
         ) {
             Text(
                 text = if (isLogin) "Welcome back" else "Create Account",
-                color = AuthTextPrimary,
+                color = colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
                 fontSize = if (isLogin) 30.sp else 28.sp,
                 textAlign = TextAlign.Center,
@@ -158,7 +159,7 @@ fun AuthScreen(
                             Text(
                                 "Username cannot be empty or contain spaces",
                                 fontSize = 12.sp,
-                                color = AuthPlaceholder
+                                color = colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -177,7 +178,7 @@ fun AuthScreen(
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp,
-                            color = AuthGradientEnd
+                            color = colorScheme.primary
                         )
                     }
                 } else null,
@@ -186,7 +187,7 @@ fun AuthScreen(
                         Text(
                             text = emailValidationMessage,
                             fontSize = 12.sp,
-                            color = if (isEmailValid) AuthPlaceholder else BrainRacerColorTokens.InputValidationError
+                            color = if (isEmailValid) colorScheme.onSurfaceVariant else colorScheme.error
                         )
                     }
                 }
@@ -217,14 +218,14 @@ fun AuthScreen(
                                 painterResource(R.drawable.visibility_off)
                             },
                             contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
-                            tint = AuthPlaceholder
+                            tint = colorScheme.onSurfaceVariant
                         )
                     }
                 },
                 supportingText = {
                     val msg = validatePasswordMessage(password)
                     if (msg.isNotEmpty() && msg != "Success") {
-                        Text(text = msg, fontSize = 12.sp, color = BrainRacerColorTokens.InputValidationError)
+                        Text(text = msg, fontSize = 12.sp, color = colorScheme.error)
                     }
                 }
             )
@@ -232,7 +233,7 @@ fun AuthScreen(
             if (isLogin) {
                 Text(
                     text = "Forgot Password?",
-                    color = AuthLinkForgot,
+                    color = colorScheme.primary,
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
@@ -283,7 +284,7 @@ fun AuthScreen(
 
             Text(
                 text = if (isLogin) "Don't have an account? Sign up" else "Already have an account? Log in",
-                color = AuthTextPrimary,
+                color = colorScheme.onBackground,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
