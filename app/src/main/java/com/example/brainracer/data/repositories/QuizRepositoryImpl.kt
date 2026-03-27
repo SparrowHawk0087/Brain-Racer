@@ -4,11 +4,17 @@ import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.data.utils.getOrNull
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.tasks.await
 
 class QuizRepositoryImpl: QuizRepository {
@@ -30,6 +36,52 @@ class QuizRepositoryImpl: QuizRepository {
     } catch (e: Exception) {
         Result.error(e)
     }
+
+    /** Firestore: не более 30 значений в одном `in` по полю. */
+    private companion object {
+        const val WHERE_IN_CHUNK = 30
+        /** Сколько публичных викторин прочитать для клиентского поиска по названию. */
+        const val SEARCH_SCAN_LIMIT = 500
+        const val SEARCH_MAX_RESULTS = 50
+    }
+
+    override suspend fun getQuizzesByIds(
+        quizIds: List<String>,
+        maxConcurrentChunkQueries: Int
+    ): Result<Map<String, Quiz>> {
+        return try {
+            val distinct = quizIds.filter { it.isNotBlank() }.distinct()
+            if (distinct.isEmpty()) {
+                Result.success(emptyMap())
+            } else {
+                val chunks = distinct.chunked(WHERE_IN_CHUNK)
+                val concurrency = maxConcurrentChunkQueries.coerceIn(1, 32)
+                val semaphore = Semaphore(concurrency)
+                val snapshots = coroutineScope {
+                    chunks.map { chunk ->
+                        async {
+                            semaphore.withPermit {
+                                quizzesCollection
+                                    .whereIn(FieldPath.documentId(), chunk)
+                                    .get()
+                                    .await()
+                            }
+                        }
+                    }.awaitAll()
+                }
+                val out = LinkedHashMap<String, Quiz>()
+                for (snap in snapshots) {
+                    for (doc in snap.documents) {
+                        doc.toObject(Quiz::class.java)?.let { out[doc.id] = it }
+                    }
+                }
+                Result.success(out)
+            }
+        } catch (e: Exception) {
+            Result.error(e)
+        }
+    }
+
     //Получение квизов по категории
     override suspend fun getQuizzesByCategory(category: String, limit: Int): Result<List<Quiz>> = try {
         val res = quizzesCollection
@@ -89,20 +141,34 @@ class QuizRepositoryImpl: QuizRepository {
         Result.error(e)
     }
 
-    // Поиск квизов по названию (+ категории)
-    override suspend fun searchQuizzes(query: String, category: String?): Result<List<Quiz>> = try {
-        var queryRef = quizzesCollection
-            .whereEqualTo("public", true)  // Изменить здесь
-            .whereGreaterThanOrEqualTo("title", query)
-            .whereLessThanOrEqualTo("title", query + "\uf8ff")
-            .limit(20)
-        if (!category.isNullOrBlank())
-            queryRef = queryRef.whereEqualTo("categoryId", category)
-        val res = queryRef.get().await()
-        val quizzes = res.documents.mapNotNull { it.toObject(Quiz::class.java) }
-        Result.success(quizzes)
-    } catch (e: Exception) {
-        Result.error(e)
+    // Поиск по названию: префиксный range + public + category требует составного индекса в Firestore и часто падает
+    // без него. Надёжный вариант выборка публичных документов (одно поле) и фильтр по подстроке на клиенте
+    override suspend fun searchQuizzes(query: String, category: String?): Result<List<Quiz>> {
+        return try {
+            val trimmed = query.trim()
+            if (trimmed.isEmpty()) {
+                Result.success(emptyList())
+            } else {
+                val res = quizzesCollection
+                    .whereEqualTo("public", true)
+                    .limit(SEARCH_SCAN_LIMIT.toLong())
+                    .get()
+                    .await()
+
+                val needle = trimmed.lowercase()
+                var list = res.documents
+                    .mapNotNull { it.toObject(Quiz::class.java) }
+                    .filter { it.title.lowercase().contains(needle) }
+
+                if (!category.isNullOrBlank()) {
+                    list = list.filter { it.categoryId == category }
+                }
+
+                Result.success(list.take(SEARCH_MAX_RESULTS))
+            }
+        } catch (e: Exception) {
+            Result.error(e)
+        }
     }
 
     // Запись результатов прохождения квиза
@@ -144,6 +210,21 @@ class QuizRepositoryImpl: QuizRepository {
         Result.success(quizzes)
     } catch (e: Exception) {
         println("DEBUG QuizRepositoryImpl: Error: ${e.message}")
+        Result.error(e)
+    }
+
+    override suspend fun getRecentResultsForUser(userId: String, limit: Int): Result<List<ChallengeResult>> = try {
+        val res = quizResultsCollection
+            .whereEqualTo("userId", userId)
+            .orderBy("completedAt", Query.Direction.DESCENDING)
+            .limit(limit.toLong())
+            .get()
+            .await()
+        val list = res.documents.mapNotNull { doc ->
+            doc.toObject(ChallengeResult::class.java)?.copy(id = doc.id)
+        }
+        Result.success(list)
+    } catch (e: Exception) {
         Result.error(e)
     }
 

@@ -3,6 +3,16 @@ package com.example.brainracer.ui.utils
 import com.example.brainracer.domain.entities.Question
 import com.example.brainracer.domain.entities.UserAnswer
 
+/** Почему прохождение не идёт в прогресс / облако */
+enum class QuizNonScoringReason {
+    /** Явный режим тренировки из навигации */
+    PRACTICE,
+    /** Нет подключения при старте сессии */
+    OFFLINE,
+    /** Нет вошедшего пользователя */
+    NOT_SIGNED_IN
+}
+
 /**
  * UI-состояние экрана прохождения викторины.
  */
@@ -50,7 +60,16 @@ data class QuizUIState(
     /** ID вызова, если викторина проходится в режиме Challenge. null = обычный режим */
     val challengeId: String? = null,
     /** Название викторины (для экрана старта вызова) */
-    val quizTitle: String = ""
+    val quizTitle: String = "",
+
+    /** Запрошенный из навигации режим тренировки (для восстановления после поворота) */
+    val sessionPracticeMode: Boolean = false,
+    /** Сеть была доступна при старте loadQuiz */
+    val sessionNetworkAvailable: Boolean = true,
+
+    /** true, если результат не сохраняется и не влияет на статистику */
+    val isNonScoringSession: Boolean = false,
+    val nonScoringReason: QuizNonScoringReason? = null
 )
 
 data class XpBreakdown(

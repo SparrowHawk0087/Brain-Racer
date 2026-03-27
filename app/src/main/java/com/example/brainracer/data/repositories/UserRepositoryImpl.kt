@@ -108,6 +108,13 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
+    override suspend fun updateUserBio(userId: String, bio: String): Result<Unit> = try {
+        usersCollection.document(userId).update("bio", bio).await()
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.error(e)
+    }
+
     // ── Обновить аватар ───────────────────────────────────────────────────
     override suspend fun updateUserAvatar(userId: String, avatarUrl: String): Result<Unit> = try {
         usersCollection.document(userId).update("avatarUrl", avatarUrl).await()

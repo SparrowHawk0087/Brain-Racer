@@ -1,24 +1,84 @@
 package com.example.brainracer.ui.utils
 
 import androidx.compose.runtime.Stable
+import com.example.brainracer.domain.entities.UserStats
 import java.text.SimpleDateFormat
 import java.util.*
 
 @Stable
+data class PassedQuizUi(
+    val quizId: String,
+    val title: String,
+    val category: String,
+    val accuracyPercent: Int,
+    val pointsEarned: Int,
+    val completedAtEpochMs: Long
+)
+
+@Stable
+data class TopicStatUi(
+    val categoryName: String,
+    /** 0f–100f */
+    val percent: Float,
+    val paletteIndex: Int
+)
+
+@Stable
+data class AchievementUi(
+    val id: String,
+    val title: String,
+    val description: String,
+    val unlocked: Boolean
+)
+
+/** Бейджи целей хранятся в `User.interests` как список id. */
+object ProfileGoalBadges {
+    const val MAX_SELECTED = 5
+
+    data class Option(val id: String, val label: String)
+
+    val all: List<Option> = listOf(
+        Option("accuracy", "Точность"),
+        Option("speed", "Скорость"),
+        Option("streak", "Серии побед"),
+        Option("creator", "Создаю викторины"),
+        Option("marathon", "Марафон игр"),
+        Option("history", "История"),
+        Option("science", "Наука"),
+        Option("sport", "Спорт"),
+        Option("geo", "География"),
+        Option("movies", "Кино и музыка"),
+        Option("math", "Математика")
+    )
+
+    private val byId: Map<String, String> = all.associate { it.id to it.label }
+
+    fun labelFor(id: String): String? = byId[id]
+
+    fun normalizeBadgeIds(ids: List<String>): List<String> =
+        ids.distinct().filter { byId.containsKey(it) }.take(MAX_SELECTED)
+}
+
+@Stable
 data class ProfileUIState(
     val isLoading: Boolean = true,
+    val isUploadingAvatar: Boolean = false,
+    val isSavingProfile: Boolean = false,
     val errorMessage: String? = null,
     val userId: String = "",
     val username: String = "",
     val email: String = "",
     val avatarUrl: String? = null,
     val registrationDate: String = "",
-    val gamesPlayed: Int = 0,
-    val gamesWon: Int = 0,
-    val winRate: Double = 0.0,
-    val totalPoints: Int = 0,
+    val userLevel: Int = 1,
+    val levelProgress: Float = 0f,
+    val rankName: String = "Новичок",
+    val userStats: UserStats? = null,
     val createdQuizzes: List<QuizItem> = emptyList(),
     val likedQuizzes: List<QuizItem> = emptyList(),
+    val passedAttempts: List<PassedQuizUi> = emptyList(),
+    val topicStats: List<TopicStatUi> = emptyList(),
+    val achievements: List<AchievementUi> = emptyList(),
     val currentRank: String = "Новичок",
     val achievementsCount: Int = 0,
     val friendsCount: Int = 0,
@@ -37,6 +97,59 @@ data class QuizItem(
     val rating: Double,
     val playCount: Int,
 )
+
+object ProfileAchievements {
+
+    fun compute(
+        stats: UserStats?,
+        topicStats: List<TopicStatUi>,
+        createdQuizCount: Int
+    ): List<AchievementUi> {
+        val played = stats?.totalQuizzesTaken ?: 0
+        val longest = stats?.longestStreak ?: 0
+        val current = stats?.currentStreak ?: 0
+        val masterTopics = topicStats.count { it.percent >= 90f }
+
+        return listOf(
+            AchievementUi(
+                id = "first_quiz",
+                title = "Новичок",
+                description = "Пройдите первую викторину",
+                unlocked = played >= 1
+            ),
+            AchievementUi(
+                id = "ten_quizzes",
+                title = "Эксперт",
+                description = "Пройдите 10 викторин",
+                unlocked = played >= 10
+            ),
+            AchievementUi(
+                id = "streak_5",
+                title = "Непобедимый",
+                description = "Серия из 5 успешных игр",
+                unlocked = current >= 5 || longest >= 5
+            ),
+            AchievementUi(
+                id = "topic_master",
+                title = "Мастер тем",
+                description = "90%+ точности в 3+ темах",
+                unlocked = masterTopics >= 3
+            ),
+            AchievementUi(
+                id = "week_streak",
+                title = "Марафонец",
+                description = "Серия из 7 игр",
+                unlocked = longest >= 7 || current >= 7
+            ),
+            AchievementUi(
+                id = "creator",
+                title = "Автор",
+                description = "Создайте хотя бы одну викторину",
+                unlocked = createdQuizCount >= 1 || (stats?.quizzesCreated ?: 0) >= 1
+            )
+        )
+    }
+}
 
 object ProfileUtils {
     fun calculateWinRate(gamesPlayed: Int, gamesWon: Int): Double {
@@ -100,6 +213,16 @@ object ProfileUtils {
             totalPointsFormatted = formatLargeNumber(totalPoints)
         )
     }
+
+    fun formatPassedDate(epochMs: Long): String {
+        if (epochMs <= 0L) return "—"
+        return try {
+            val fmt = SimpleDateFormat("dd.MM.yy HH:mm", Locale.getDefault())
+            fmt.format(Date(epochMs))
+        } catch (_: Exception) {
+            "—"
+        }
+    }
 }
 
 @Stable
@@ -121,12 +244,3 @@ object ProfileConstants {
     const val MIN_USERNAME_LENGTH = 1
     const val DEFAULT_AVATAR_SIZE = 100
 }
-
-/*fun String.isValidUsername(): Boolean {
-    return length in ProfileConstants.MIN_USERNAME_LENGTH..ProfileConstants.MAX_USERNAME_LENGTH &&
-            matches(Regex("^[a-zA-Zа-яА-Я0-9_]+$"))
-}
-
-fun Double.toFormattedPercent(): String {
-    return "%.1f%%".format(this)
-}*/
