@@ -1,5 +1,7 @@
 package com.example.brainracer.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -14,6 +16,7 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.MaterialTheme
 
-internal fun bottomBarSelectedKey(route: String): String = when {
+fun bottomBarSelectedKey(route: String): String = when {
     route.startsWith("home/")        -> "home"
     route.startsWith("leaderboard/") -> "leaderboard"
     route.startsWith("challenges/")  -> "challenges"
@@ -134,7 +137,11 @@ private fun BottomBarItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val tint = if (selected) activeColor else inactiveColor
+    val tint by animateColorAsState(
+        targetValue = if (selected) activeColor else inactiveColor,
+        animationSpec = tween(durationMillis = 220),
+        label = "bottomBarTint"
+    )
     val interactionSource = remember { MutableInteractionSource() }
     Column(
         modifier = modifier

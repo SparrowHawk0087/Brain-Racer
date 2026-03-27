@@ -27,6 +27,7 @@ import com.example.brainracer.ui.screens.QuizCreatorScreen
 import com.example.brainracer.ui.screens.QuizPlayScreen
 import com.example.brainracer.ui.screens.SearchScreen
 import com.example.brainracer.ui.screens.SettingsScreen
+import com.example.brainracer.ui.components.bottomBarSelectedKey
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 
 @Composable
@@ -44,7 +45,8 @@ fun NavGraph(
     val navigateToHome: () -> Unit = {
         user?.let {
             val route = "home/${it.uid}"
-            if (currentRoute != route)
+            // route у destination — шаблон (`home/{userId}`), не `home/uid`; иначе каждый тап дублирует navigate.
+            if (bottomBarSelectedKey(currentRoute) != "home")
                 navController.navigate(route) { launchSingleTop = true }
         }
     }
@@ -52,7 +54,7 @@ fun NavGraph(
     val navigateToLeaderboard: () -> Unit = {
         user?.let {
             val route = "leaderboard/${it.uid}"
-            if (currentRoute != route)
+            if (bottomBarSelectedKey(currentRoute) != "leaderboard")
                 navController.navigate(route) { launchSingleTop = true }
         }
     }
@@ -60,20 +62,20 @@ fun NavGraph(
     val navigateToChallenges: () -> Unit = {
         user?.let {
             val route = "challenges/${it.uid}"
-            if (currentRoute != route)
+            if (bottomBarSelectedKey(currentRoute) != "challenges")
                 navController.navigate(route) { launchSingleTop = true }
         }
     }
 
     val navigateToQuizzes: () -> Unit = {
-        if (currentRoute != "quizzes")
+        if (bottomBarSelectedKey(currentRoute) != "quizzes")
             navController.navigate("quizzes") { launchSingleTop = true }
     }
 
     val navigateToProfile: () -> Unit = {
         user?.let {
             val route = "profile/${it.uid}"
-            if (currentRoute != route)
+            if (bottomBarSelectedKey(currentRoute) != "profile")
                 navController.navigate(route) { launchSingleTop = true }
         }
     }

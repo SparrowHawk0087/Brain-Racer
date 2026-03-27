@@ -134,15 +134,17 @@ fun QuizPlayScreen(
                 )
             }
         }
-        uiState.question.isNotEmpty() ->
+        uiState.question.isNotEmpty() -> {
+            BackHandler { }
             QuestionScreen(
                 uiState    = uiState,
-                onBack     = { navController.popBackStack() },
+                onBack     = null,
                 onSelect   = { quizViewModel.selectAnswer(it) },
                 onSubmit   = { quizViewModel.submitAnswer() },
                 onNext     = { quizViewModel.nextQuestion() },
                 onTimeout  = { quizViewModel.timeoutQuestion() }
             )
+        }
         else -> LoadingScreen()
     }
 }
@@ -323,7 +325,7 @@ private fun SessionModeBadge(
 @Composable
 private fun QuestionScreen(
     uiState: QuizUIState,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onSelect: (Int) -> Unit,
     onSubmit: () -> Unit,
     onNext: () -> Unit,
@@ -399,13 +401,15 @@ private fun QuestionScreen(
                         fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Box(
-                            modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null,
-                                tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Box(
+                                modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, null,
+                                    tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
+                            }
                         }
                     }
                 },
