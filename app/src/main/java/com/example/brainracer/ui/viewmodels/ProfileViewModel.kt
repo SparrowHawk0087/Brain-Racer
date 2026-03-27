@@ -1,18 +1,34 @@
 package com.example.brainracer.ui.viewmodels
+
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
-import com.example.brainracer.data.utils.fold
+import com.example.brainracer.data.utils.ImageOptimizerUtil
+import com.example.brainracer.data.utils.Result
+import com.example.brainracer.domain.entities.LevelSystem
 import com.example.brainracer.domain.entities.User as DomainUser
+import com.example.brainracer.ui.utils.PassedQuizUi
+import com.example.brainracer.ui.utils.ProfileAchievements
+import com.example.brainracer.ui.utils.ProfileGoalBadges
 import com.example.brainracer.ui.utils.ProfileUIState
 import com.example.brainracer.ui.utils.QuizItem
+import com.example.brainracer.ui.utils.TopicStatUi
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.storage.FirebaseStorage
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import com.example.brainracer.data.utils.Result
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.tasks.await
+import java.util.UUID
 
 class ProfileViewModel : ViewModel() {
 
@@ -21,93 +37,184 @@ class ProfileViewModel : ViewModel() {
 
     private val userRepository = UserRepositoryImpl()
     private val quizRepository = QuizRepositoryImpl()
+    private val auth = FirebaseAuth.getInstance()
+    private val storage = FirebaseStorage.getInstance()
 
-    fun loadUserProfile(userId: String) {
-        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+    private val profileLoadMutex = Mutex()
+    private var profileCacheUserId: String? = null
+    private var profileCacheLoadedAtMs: Long = 0L
 
+    companion object {
+        private const val MAX_BIO_LENGTH = 400
+        /** Не полная перезагрузка с ON_RESUME чаще этого интервала; после игры срабатывает ProfileAfterQuizRefresh. */
+        private const val PROFILE_CACHE_TTL_MS = 20_000L
+    }
+
+    /**
+     * @param forceRefresh `true` — смена userId или первый заход; `false` — ON_RESUME (учитывается TTL).
+     */
+    fun loadUserProfile(userId: String, forceRefresh: Boolean = false) {
+        if (userId.isBlank()) return
         viewModelScope.launch {
-            try {
-                userRepository.getUser(userId).fold(
-                    onSuccess = { user ->
-                        loadUserQuizzes(user)
-                    },
-                    onFailure = { error ->
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                errorMessage = "Ошибка загрузки профиля: ${error.message}"
-                            )
+            profileLoadMutex.withLock {
+                if (!forceRefresh &&
+                    userId == profileCacheUserId &&
+                    (System.currentTimeMillis() - profileCacheLoadedAtMs) < PROFILE_CACHE_TTL_MS &&
+                    _uiState.value.userId == userId &&
+                    _uiState.value.username.isNotBlank()
+                ) {
+                    return@withLock
+                }
+
+                _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+                try {
+                    when (val ur = userRepository.getUser(userId)) {
+                        is Result.Success -> loadProfileData(ur.data)
+                        is Result.Error -> {
+                            _uiState.update {
+                                it.copy(
+                                    isLoading = false,
+                                    errorMessage = "Ошибка загрузки профиля: ${ur.exception.message}"
+                                )
+                            }
                         }
                     }
-                )
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Ошибка загрузки профиля: ${e.message}"
-                    )
+                } catch (e: Exception) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = "Ошибка загрузки профиля: ${e.message}"
+                        )
+                    }
                 }
             }
         }
     }
 
-    private fun loadUserQuizzes(user: DomainUser) {
-        viewModelScope.launch {
-            try {
-                // Загружаем созданные викторины
-                when (val createdQuizzesResult = quizRepository.getQuizzesByUser(user.id)) {
-                    is Result.Success -> {
-                        val createdQuizzes = createdQuizzesResult.data
+    fun invalidateProfileCache() {
+        profileCacheUserId = null
+        profileCacheLoadedAtMs = 0L
+    }
 
-                        // Конвертируем в QuizItem для UI
-                        val createdQuizItems = createdQuizzes.map { quiz ->
-                            QuizItem(
-                                id = quiz.id,
-                                title = quiz.title,
-                                category = quiz.categoryId,
-                                questionCount = quiz.questions.size,
-                                difficulty = quiz.difficulty.name,
-                                description = quiz.description,
-                                rating = quiz.stats.averageRating,
-                                playCount = quiz.stats.timesTaken
-                            )
-                        }
+    private suspend fun loadProfileData(user: DomainUser) {
+        val stats = user.stats
+        val totalXp = stats.totalPoints
+        val level = LevelSystem.levelFromXp(totalXp)
+        val progress = LevelSystem.levelProgress(totalXp)
+        val rankName = LevelSystem.rankForLevel(level).displayName
 
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                userId = user.id,
-                                username = user.nickname,
-                                email = user.email,
-                                avatarUrl = user.avatarUrl,
-                                registrationDate = user.createdAt.toDate().toString(),
-                                gamesPlayed = user.stats.totalQuizzesTaken,
-                                gamesWon = user.stats.correctAnswers,
-                                winRate = user.stats.averageScore,
-                                totalPoints = user.stats.totalPoints,
-                                createdQuizzes = createdQuizItems,
-                                likedQuizzes = emptyList()
-                            )
-                        }
-                    }
-                    is Result.Error -> {
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                errorMessage = "Ошибка загрузки викторин: ${createdQuizzesResult.exception.message}"
-                            )
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Ошибка загрузки викторин: ${e.message}"
+        val displayName = when {
+            user.nickname.isNotBlank() -> user.nickname
+            user.email.isNotBlank() -> user.email.substringBefore("@")
+            else -> "Игрок"
+        }
+
+        val (createdQuizItems, resultsData) = coroutineScope {
+            val createdDeferred = async { quizRepository.getQuizzesByUser(user.id) }
+            val resultsDeferred = async { quizRepository.getRecentResultsForUser(user.id, 50) }
+            val createdRes = createdDeferred.await()
+            val resultsRes = resultsDeferred.await()
+
+            val items = when (createdRes) {
+                is Result.Success -> createdRes.data.map { quiz ->
+                    QuizItem(
+                        id = quiz.id,
+                        title = quiz.title,
+                        category = quiz.categoryId,
+                        questionCount = quiz.questions.size,
+                        difficulty = quiz.difficulty.name,
+                        description = quiz.description,
+                        rating = quiz.stats.averageRating,
+                        playCount = quiz.stats.timesTaken
                     )
                 }
+                is Result.Error -> emptyList()
+            }
+            val rows = when (resultsRes) {
+                is Result.Success -> resultsRes.data
+                is Result.Error -> emptyList()
+            }
+            items to rows
+        }
+
+        val ids = resultsData.map { it.quizId }.distinct()
+        val quizById = when (val batch = quizRepository.getQuizzesByIds(ids)) {
+            is Result.Success -> batch.data
+            is Result.Error -> emptyMap()
+        }
+
+        val passed = mutableListOf<PassedQuizUi>()
+        val byCategory = linkedMapOf<String, MutableList<Double>>()
+
+        for (r in resultsData) {
+            val q = quizById[r.quizId]
+            if (q != null) {
+                passed.add(
+                    PassedQuizUi(
+                        quizId = r.quizId,
+                        title = q.title,
+                        category = q.categoryId,
+                        accuracyPercent = r.accuracy.toInt().coerceIn(0, 100),
+                        pointsEarned = r.pointsEarned,
+                        completedAtEpochMs = r.completedAt.toDate().time
+                    )
+                )
+                byCategory.getOrPut(q.categoryId) { mutableListOf() }.add(r.accuracy)
+            } else {
+                passed.add(
+                    PassedQuizUi(
+                        quizId = r.quizId,
+                        title = "Викторина",
+                        category = "—",
+                        accuracyPercent = r.accuracy.toInt().coerceIn(0, 100),
+                        pointsEarned = r.pointsEarned,
+                        completedAtEpochMs = r.completedAt.toDate().time
+                    )
+                )
             }
         }
+
+        val topicStats = byCategory.entries
+            .map { (name, accs) ->
+                val avg = if (accs.isNotEmpty()) accs.average().toFloat() else 0f
+                TopicStatUi(
+                    categoryName = name,
+                    percent = avg.coerceIn(0f, 100f),
+                    paletteIndex = 0
+                )
+            }
+            .sortedByDescending { it.percent }
+            .mapIndexed { idx, t -> t.copy(paletteIndex = idx) }
+
+        val achievements = ProfileAchievements.compute(stats, topicStats, createdQuizItems.size)
+
+        _uiState.update {
+            it.copy(
+                isLoading = false,
+                errorMessage = null,
+                userId = user.id,
+                username = displayName,
+                email = user.email,
+                avatarUrl = user.avatarUrl,
+                registrationDate = user.createdAt.toDate().toString(),
+                userLevel = level,
+                levelProgress = progress,
+                rankName = rankName,
+                currentRank = rankName,
+                userStats = stats,
+                createdQuizzes = createdQuizItems,
+                likedQuizzes = emptyList(),
+                passedAttempts = passed,
+                topicStats = topicStats,
+                achievements = achievements,
+                achievementsCount = achievements.count { a -> a.unlocked },
+                friendsCount = user.friends.size,
+                bio = user.bio,
+                interests = user.interests
+            )
+        }
+        profileCacheUserId = user.id
+        profileCacheLoadedAtMs = System.currentTimeMillis()
     }
 
     fun updateUserAvatar(userId: String, avatarUrl: String) {
@@ -123,19 +230,102 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
+    fun uploadAvatar(context: Context, userId: String, uri: Uri) {
+        val uid = auth.currentUser?.uid
+        if (uid == null || uid != userId) {
+            _uiState.update { it.copy(errorMessage = "Нужна авторизация для смены аватара") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUploadingAvatar = true, errorMessage = null) }
+            try {
+                val optimized = ImageOptimizerUtil.optimize(context, uri, isCover = false)
+                val ext = if (optimized.mimeType == "image/gif") "gif" else optimized.mimeType.substringAfter('/')
+                val path = "avatars/$userId/${UUID.randomUUID()}.$ext"
+                val ref = storage.reference.child(path)
+                ref.putBytes(optimized.bytes).await()
+                val url = ref.downloadUrl.await().toString()
+                when (val result = userRepository.updateUserAvatar(userId, url)) {
+                    is Result.Success -> _uiState.update { it.copy(avatarUrl = url) }
+                    is Result.Error -> _uiState.update {
+                        it.copy(errorMessage = "Ошибка сохранения аватара: ${result.exception.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = "Ошибка загрузки аватара: ${e.message}") }
+            }
+            _uiState.update { it.copy(isUploadingAvatar = false) }
+        }
+    }
+
+    fun saveBioAndGoalBadges(
+        userId: String,
+        bio: String,
+        badgeIds: List<String>,
+        onFinished: (success: Boolean) -> Unit = {}
+    ) {
+        val uid = auth.currentUser?.uid
+        if (uid == null || uid != userId) {
+            _uiState.update { it.copy(errorMessage = "Нужна авторизация для сохранения профиля") }
+            onFinished(false)
+            return
+        }
+        val trimmedBio = bio.trim().take(MAX_BIO_LENGTH)
+        val badges = ProfileGoalBadges.normalizeBadgeIds(badgeIds)
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingProfile = true, errorMessage = null) }
+            when (val bioRes = userRepository.updateUserBio(userId, trimmedBio)) {
+                is Result.Error -> {
+                    _uiState.update {
+                        it.copy(
+                            isSavingProfile = false,
+                            errorMessage = "Ошибка сохранения: ${bioRes.exception.message}"
+                        )
+                    }
+                    onFinished(false)
+                    return@launch
+                }
+                is Result.Success -> Unit
+            }
+            when (val intRes = userRepository.updateUserInterests(userId, badges)) {
+                is Result.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            isSavingProfile = false,
+                            bio = trimmedBio,
+                            interests = badges
+                        )
+                    }
+                    onFinished(true)
+                }
+                is Result.Error -> {
+                    _uiState.update {
+                        it.copy(
+                            isSavingProfile = false,
+                            errorMessage = "Био сохранено, но бейджи не обновились: ${intRes.exception.message}"
+                        )
+                    }
+                    onFinished(false)
+                }
+            }
+        }
+    }
+
     fun updateUsername(userId: String, newUsername: String) {
         viewModelScope.launch {
             when (val userResult = userRepository.getUser(userId)) {
                 is Result.Success -> {
-                    val user = userResult.data
-                    val updatedUser = user.copy(nickname = newUsername)
+                    val u = userResult.data
+                    val updatedUser = u.copy(nickname = newUsername)
 
                     when (val updateResult = userRepository.updateUser(updatedUser)) {
                         is Result.Success -> {
                             _uiState.update { it.copy(username = newUsername) }
                         }
                         is Result.Error -> {
-                            _uiState.update { it.copy(errorMessage = "Ошибка обновления имени: ${updateResult.exception.message}") }
+                            _uiState.update {
+                                it.copy(errorMessage = "Ошибка обновления имени: ${updateResult.exception.message}")
+                            }
                         }
                     }
                 }
@@ -150,84 +340,3 @@ class ProfileViewModel : ViewModel() {
         _uiState.update { it.copy(errorMessage = null) }
     }
 }
-
-
-    /* fun toggleQuizLike(quizId: String) {
-        viewModelScope.launch {
-            _uiState.update { currentState ->
-                val updatedLikedQuizzes = currentState.likedQuizzes.toMutableList()
-                currentState.copy(likedQuizzes = updatedLikedQuizzes)
-            }
-        }
-    }
-
-    fun deleteCreatedQuiz(quizId: String) {
-        viewModelScope.launch {
-            _uiState.update { currentState ->
-                val updatedCreatedQuizzes = currentState.createdQuizzes
-                    .filter { it.id != quizId }
-                currentState.copy(createdQuizzes = updatedCreatedQuizzes)
-            }
-        }
-    }
-
-    fun updateUserAvatar(avatarUrl: String) {
-        _uiState.update { it.copy(avatarUrl = avatarUrl) }
-    }
-
-    fun updateUsername(newUsername: String) {
-        _uiState.update { it.copy(username = newUsername) }
-    }
-
-    fun clearError() {
-        _uiState.update { it.copy(errorMessage = null) }
-    }
-
-    fun updateGameStats(isWin: Boolean, pointsEarned: Int) {
-        _uiState.update { currentState ->
-            val newGamesPlayed = currentState.gamesPlayed + 1
-            val newGamesWon = currentState.gamesWon + if (isWin) 1 else 0
-            val newWinRate = if (newGamesPlayed > 0) {
-                (newGamesWon.toDouble() / newGamesPlayed) * 100
-            } else 0.0
-            val newTotalPoints = currentState.totalPoints + pointsEarned
-
-            currentState.copy(
-                gamesPlayed = newGamesPlayed,
-                gamesWon = newGamesWon,
-                winRate = newWinRate,
-                totalPoints = newTotalPoints
-            )
-        }
-    }
-
-    private fun createMockProfile(): ProfileUIState {
-        return ProfileUIState(
-            userId = "user_123",
-            username = "BrainMaster",
-            email = "brainmaster@example.com",
-            avatarUrl = "https://example.com/avatar.jpg",
-            registrationDate = "2024-01-15",
-            gamesPlayed = 150,
-            gamesWon = 95,
-            winRate = 63.3,
-            totalPoints = 12500,
-            likedQuizzes = listOf(
-                QuizItem(
-                    id = "quiz_1",
-                    title = "История Древнего Рима",
-                    category = "История",
-                    questionCount = 15
-                )
-            ),
-            createdQuizzes = listOf(
-                QuizItem(
-                    id = "quiz_2",
-                    title = "Космос и вселенная",
-                    category = "Наука",
-                    questionCount = 20
-                )
-            )
-        )
-    }
-}*/

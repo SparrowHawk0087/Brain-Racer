@@ -32,34 +32,9 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.domain.entities.QuizDifficulty
+import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.utils.QuizItem
 import kotlinx.coroutines.delay
-
-// ─── Палитра ───────────────────────────────────────────────────────────────
-private val SBg       = Color(0xFF0F0F1A)
-private val SCard     = Color(0xFF1A1A2E)
-private val SBorder   = Color(0xFF2A2A3E)
-private val SPurple   = Color(0xFF667EEA)
-private val STextPri  = Color(0xFFFFFFFF)
-private val STextSec  = Color(0xFF8B8AAE)
-
-private val sCardGradients = listOf(
-    listOf(Color(0xFF667EEA), Color(0xFF764BA2)),
-    listOf(Color(0xFFf093fb), Color(0xFFf5576c)),
-    listOf(Color(0xFF4facfe), Color(0xFF00f2fe)),
-    listOf(Color(0xFF43e97b), Color(0xFF38f9d7)),
-    listOf(Color(0xFFfa709a), Color(0xFFfee140)),
-    listOf(Color(0xFFa18cd1), Color(0xFFfbc2eb)),
-)
-
-// Сложность → метка + цвет
-private val difficultyOptions = listOf(
-    Triple("Все уровни", null, STextSec),
-    Triple("Лёгкий",    QuizDifficulty.EASY,   Color(0xFF43e97b)),
-    Triple("Средний",   QuizDifficulty.MEDIUM,  Color(0xFF4facfe)),
-    Triple("Сложный",   QuizDifficulty.HARD,    Color(0xFFf5576c)),
-    Triple("Эксперт",   QuizDifficulty.EXPERT,  Color(0xFFFFD700)),
-)
 
 private val allCategories = listOf(
     "Все", "География", "История", "Математика",
@@ -86,6 +61,18 @@ fun SearchScreen(
     var results          by remember { mutableStateOf<List<QuizItem>>(emptyList()) }
     var isLoading        by remember { mutableStateOf(false) }
     var hasSearched      by remember { mutableStateOf(false) }
+
+    val cs = MaterialTheme.colorScheme
+    val ext = LocalBrainRacerExtendedColors.current
+    val difficultyOptions = remember(cs, ext) {
+        listOf(
+            Triple("Все уровни", null, cs.onSurfaceVariant),
+            Triple("Лёгкий", QuizDifficulty.EASY, ext.difficultyEasy),
+            Triple("Средний", QuizDifficulty.MEDIUM, ext.difficultyMedium),
+            Triple("Сложный", QuizDifficulty.HARD, ext.difficultyHard),
+            Triple("Эксперт", QuizDifficulty.EXPERT, ext.difficultyExpert),
+        )
+    }
 
     // Фокус на поле ввода при открытии
     LaunchedEffect(Unit) {
@@ -157,9 +144,9 @@ fun SearchScreen(
     }
 
     Scaffold(
-        containerColor = SBg,
+        containerColor = cs.background,
         topBar = {
-            Surface(color = SBg) {
+            Surface(color = cs.background) {
                 Column {
                     // ── Строка поиска ──────────────────────────────────────
                     Row(
@@ -171,15 +158,15 @@ fun SearchScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = STextPri)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = cs.onBackground)
                         }
 
                         OutlinedTextField(
                             value         = query,
                             onValueChange = { query = it },
-                            placeholder   = { Text("Найти викторину…", color = STextSec, fontSize = 14.sp) },
+                            placeholder   = { Text("Найти викторину…", color = cs.onSurfaceVariant, fontSize = 14.sp) },
                             leadingIcon   = {
-                                Icon(Icons.Default.Search, null, tint = STextSec, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Search, null, tint = cs.onSurfaceVariant, modifier = Modifier.size(18.dp))
                             },
                             trailingIcon  = {
                                 AnimatedVisibility(
@@ -188,7 +175,7 @@ fun SearchScreen(
                                     exit    = fadeOut()
                                 ) {
                                     IconButton(onClick = { query = "" }) {
-                                        Icon(Icons.Default.Clear, null, tint = STextSec, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Clear, null, tint = cs.onSurfaceVariant, modifier = Modifier.size(16.dp))
                                     }
                                 }
                             },
@@ -198,13 +185,13 @@ fun SearchScreen(
                             singleLine    = true,
                             shape         = RoundedCornerShape(14.dp),
                             colors        = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor   = SPurple,
-                                unfocusedBorderColor = SBorder,
-                                focusedTextColor     = STextPri,
-                                unfocusedTextColor   = STextPri,
-                                cursorColor          = SPurple,
-                                focusedContainerColor   = SCard,
-                                unfocusedContainerColor = SCard
+                                focusedBorderColor   = cs.primary,
+                                unfocusedBorderColor = cs.outline,
+                                focusedTextColor     = cs.onSurface,
+                                unfocusedTextColor   = cs.onSurface,
+                                cursorColor          = cs.primary,
+                                focusedContainerColor   = cs.surface,
+                                unfocusedContainerColor = cs.surface
                             ),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                             keyboardActions = KeyboardActions(onSearch = {
@@ -224,8 +211,8 @@ fun SearchScreen(
                             val isSelected = cat == selectedCategory
                             Surface(
                                 shape  = RoundedCornerShape(20.dp),
-                                color  = if (isSelected) SPurple else SCard,
-                                border = if (!isSelected) BorderStroke(1.dp, SBorder) else null,
+                                color  = if (isSelected) cs.primary else cs.surface,
+                                border = if (!isSelected) BorderStroke(1.dp, cs.outline) else null,
                                 modifier = Modifier.clickable { selectedCategory = cat }
                             ) {
                                 Text(
@@ -233,7 +220,7 @@ fun SearchScreen(
                                     modifier   = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                                     fontSize   = 13.sp,
                                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                    color      = if (isSelected) Color.White else STextSec
+                                    color      = if (isSelected) cs.onPrimary else cs.onSurfaceVariant
                                 )
                             }
                         }
@@ -248,10 +235,10 @@ fun SearchScreen(
                             val isSelected = selectedDifficulty == diff
                             Surface(
                                 shape  = RoundedCornerShape(20.dp),
-                                color  = if (isSelected) color.copy(alpha = 0.25f) else SCard,
+                                color  = if (isSelected) color.copy(alpha = 0.25f) else cs.surface,
                                 border = BorderStroke(
                                     1.dp,
-                                    if (isSelected) color else SBorder
+                                    if (isSelected) color else cs.outline
                                 ),
                                 modifier = Modifier.clickable {
                                     selectedDifficulty = if (isSelected) null else diff
@@ -272,7 +259,7 @@ fun SearchScreen(
                                         label,
                                         fontSize   = 12.sp,
                                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                        color      = if (isSelected) color else STextSec
+                                        color      = if (isSelected) color else cs.onSurfaceVariant
                                     )
                                 }
                             }
@@ -280,7 +267,7 @@ fun SearchScreen(
                     }
 
                     Spacer(Modifier.height(4.dp))
-                    HorizontalDivider(color = SBorder, thickness = 1.dp)
+                    HorizontalDivider(color = cs.outline, thickness = 1.dp)
                 }
             }
         }
@@ -290,7 +277,7 @@ fun SearchScreen(
                 // ── Загрузка ──────────────────────────────────────────────
                 isLoading -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = SPurple)
+                        CircularProgressIndicator(color = cs.primary)
                     }
                 }
 
@@ -321,7 +308,7 @@ fun SearchScreen(
                         item {
                             Text(
                                 "Найдено: ${results.size}",
-                                color    = STextSec,
+                                color    = cs.onSurfaceVariant,
                                 fontSize = 13.sp,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
@@ -350,14 +337,17 @@ private fun SearchResultCard(
     highlight: String,
     onClick: () -> Unit
 ) {
-    val gradient = sCardGradients[colorIndex % sCardGradients.size]
+    val cs = MaterialTheme.colorScheme
+    val ext = LocalBrainRacerExtendedColors.current
+    val gradients = ext.cardGradients
+    val gradient = gradients[colorIndex % gradients.size]
 
     val diffColor = when (quiz.difficulty) {
-        "EASY"   -> Color(0xFF43e97b)
-        "MEDIUM" -> Color(0xFF4facfe)
-        "HARD"   -> Color(0xFFf5576c)
-        "EXPERT" -> Color(0xFFFFD700)
-        else     -> STextSec
+        "EASY"   -> ext.difficultyEasy
+        "MEDIUM" -> ext.difficultyMedium
+        "HARD"   -> ext.difficultyHard
+        "EXPERT" -> ext.difficultyExpert
+        else     -> cs.onSurfaceVariant
     }
     val diffLabel = when (quiz.difficulty) {
         "EASY"   -> "Лёгкий"
@@ -370,8 +360,8 @@ private fun SearchResultCard(
     Box(
         modifier = Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(SCard)
-            .border(1.dp, SBorder, RoundedCornerShape(16.dp))
+            .background(cs.surface)
+            .border(1.dp, cs.outline, RoundedCornerShape(16.dp))
             .clickable { onClick() }
     ) {
         Row(
@@ -384,7 +374,7 @@ private fun SearchResultCard(
                     .background(Brush.linearGradient(gradient, Offset.Zero, Offset(400f, 400f))),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Quiz, null, tint = Color.White, modifier = Modifier.size(28.dp))
+                Icon(Icons.Default.Quiz, null, tint = cs.onPrimary, modifier = Modifier.size(28.dp))
             }
 
             Spacer(Modifier.width(14.dp))
@@ -394,7 +384,7 @@ private fun SearchResultCard(
                     quiz.title,
                     fontWeight = FontWeight.SemiBold,
                     fontSize   = 14.sp,
-                    color      = STextPri,
+                    color      = cs.onSurface,
                     maxLines   = 2,
                     overflow   = TextOverflow.Ellipsis
                 )
@@ -406,13 +396,13 @@ private fun SearchResultCard(
                     // Категория
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = SPurple.copy(alpha = 0.15f)
+                        color = cs.primary.copy(alpha = 0.15f)
                     ) {
                         Text(
                             quiz.category,
                             modifier   = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
                             fontSize   = 11.sp,
-                            color      = SPurple,
+                            color      = cs.primary,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -430,11 +420,11 @@ private fun SearchResultCard(
                         )
                     }
                     // Вопросы
-                    Text("${quiz.questionCount} вопр.", fontSize = 11.sp, color = STextSec)
+                    Text("${quiz.questionCount} вопр.", fontSize = 11.sp, color = cs.onSurfaceVariant)
                 }
             }
 
-            Icon(Icons.Default.ChevronRight, null, tint = STextSec, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.ChevronRight, null, tint = cs.onSurfaceVariant, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -447,6 +437,7 @@ private fun SearchEmptyState(
     title: String,
     subtitle: String
 ) {
+    val cs = MaterialTheme.colorScheme
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -455,15 +446,15 @@ private fun SearchEmptyState(
         ) {
             Box(
                 modifier = Modifier.size(72.dp).clip(CircleShape)
-                    .background(SCard),
+                    .background(cs.surface),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, null, tint = STextSec, modifier = Modifier.size(32.dp))
+                Icon(icon, null, tint = cs.onSurfaceVariant, modifier = Modifier.size(32.dp))
             }
-            Text(title, color = STextPri, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+            Text(title, color = cs.onSurface, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
             Text(
                 subtitle,
-                color     = STextSec,
+                color     = cs.onSurfaceVariant,
                 fontSize  = 14.sp,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )

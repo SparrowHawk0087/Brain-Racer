@@ -1,503 +1,1300 @@
+
 package com.example.brainracer.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.brainracer.ui.theme.onBackgroundLight
-import com.example.brainracer.ui.theme.onSurfaceVariantLight
-import com.example.brainracer.ui.theme.primaryLight
-import com.example.brainracer.ui.theme.surfaceContainerLight
-import com.example.brainracer.ui.theme.surfaceContainerLowLight
-import com.example.brainracer.ui.theme.surfaceLight
+import androidx.activity.compose.BackHandler
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import com.example.brainracer.data.utils.isNetworkLikelyAvailable
+import com.example.brainracer.domain.entities.LevelSystem
+import com.example.brainracer.ui.theme.BrainRacerColorTokens
+import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
+import com.example.brainracer.ui.utils.QuizNonScoringReason
+import com.example.brainracer.ui.utils.QuizUIState
+import com.example.brainracer.ui.viewmodels.QuizViewModel
 import kotlinx.coroutines.delay
 
+// Задержка авто-перехода: 1400 мс при ответе, 900 мс при тайм-ауте
+private const val AUTO_ADVANCE_AFTER_ANSWER_MS  = 1400L
+private const val AUTO_ADVANCE_AFTER_TIMEOUT_MS = 900L
 
-data class QuizQuestionNew(
-    val question: String,
-    val options: List<String>,
-    val correctIndex: Int
+// ─── Уровни результата ───────────────────────────────────────────────────────
+private data class ResultLevel(
+    val label: String,
+    val icon: ImageVector,
+    val color: Color,
+    val subtitle: String
 )
 
+private fun resultLevel(pct: Int) = when {
+    pct >= 86 -> ResultLevel("Легенда!",     Icons.Default.EmojiEvents,      BrainRacerColorTokens.DifficultyExpert, "Безупречный результат 🏆")
+    pct >= 71 -> ResultLevel("А ты крут!",   Icons.Default.Whatshot,         BrainRacerColorTokens.QuizResultEncouragement, "Отличная работа, так держать 🔥")
+    pct >= 51 -> ResultLevel("Не плохо",     Icons.Default.ThumbUp,          BrainRacerColorTokens.DetailGreen, "Хороший результат, ещё немного 👍")
+    pct >= 31 -> ResultLevel("На миде",      Icons.Default.SentimentNeutral, BrainRacerColorTokens.StatusOrange, "Есть куда расти, продолжай 💪")
+    else      -> ResultLevel("Попробуй ещё", Icons.Default.Refresh,          BrainRacerColorTokens.Dark.Error, "Не сдавайся, попробуй снова 😤")
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ЭКРАН
+// ══════════════════════════════════════════════════════════════════════════════
+
+@Composable
+fun QuizPlayScreen(
+    quizId: String,
+    navController: NavController,
+    challengeId: String? = null,
+    challengeIntroAlreadyShown: Boolean = false,
+    challengeIntroCancelToHome: Boolean = false,
+    practiceMode: Boolean = false,
+    quizViewModel: QuizViewModel = viewModel()
+) {
+    val uiState by quizViewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
+    LaunchedEffect(quizId, challengeId, practiceMode) {
+        val online = isNetworkLikelyAvailable(context.applicationContext)
+        quizViewModel.loadQuiz(quizId, challengeId, practiceMode, online)
+    }
+
+    var challengeIntroAcknowledged by rememberSaveable(quizId, challengeId, challengeIntroAlreadyShown) {
+        mutableStateOf(challengeIntroAlreadyShown)
+    }
+
+    when {
+        uiState.isLoading -> LoadingScreen()
+        uiState.errorMessage != null ->
+            ErrorScreen(uiState.errorMessage!!) { navController.popBackStack() }
+        !challengeId.isNullOrBlank() && !challengeIntroAcknowledged -> {
+            BackHandler { navController.popBackStack() }
+            ChallengeDuelIntroScreen(
+                quizTitle       = uiState.quizTitle.ifBlank { "Викторина" },
+                totalQuestions  = uiState.totalQuestions,
+                onStart         = { challengeIntroAcknowledged = true },
+                onCancel        = { navController.popBackStack() },
+                cancelButtonLabel = if (challengeIntroCancelToHome) "На главную" else "Отмена"
+            )
+        }
+        uiState.showResults || uiState.isQuizCompleted -> {
+            var showReview by rememberSaveable(quizId, challengeId) { mutableStateOf(false) }
+            val challengeMode = !uiState.challengeId.isNullOrBlank()
+            BackHandler(enabled = challengeMode && showReview) { showReview = false }
+            BackHandler(enabled = challengeMode && !showReview) { navController.popBackStack() }
+            if (showReview) {
+                AnswerReviewScreen(
+                    uiState = uiState,
+                    onBack  = { showReview = false }
+                )
+            } else {
+                ResultsScreen(
+                    uiState = uiState,
+                    onBack = { navController.popBackStack() },
+                    onRestart = { quizViewModel.restartQuiz() },
+                    onShowReview            = { showReview = true },
+                    allowRestart            = uiState.challengeId.isNullOrBlank(),
+                    challengeId             = uiState.challengeId,
+                    onOpenChallengeSummary  = uiState.challengeId?.let { cid ->
+                        { navController.navigate("challenge_review/$cid") }
+                    }
+                )
+            }
+        }
+        uiState.question.isNotEmpty() ->
+            QuestionScreen(
+                uiState    = uiState,
+                onBack     = { navController.popBackStack() },
+                onSelect   = { quizViewModel.selectAnswer(it) },
+                onSubmit   = { quizViewModel.submitAnswer() },
+                onNext     = { quizViewModel.nextQuestion() },
+                onTimeout  = { quizViewModel.timeoutQuestion() }
+            )
+        else -> LoadingScreen()
+    }
+}
+
+// ── Старт дуэли (вызов) ─────────────────────────────────────────────────────
+
+@Composable
+private fun ChallengeDuelIntroScreen(
+    quizTitle: String,
+    totalQuestions: Int,
+    onStart: () -> Unit,
+    onCancel: () -> Unit,
+    cancelButtonLabel: String = "Отмена"
+) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Icon(
+                Icons.Default.Sports,
+                contentDescription = null,
+                tint     = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(56.dp)
+            )
+            Text(
+                "Вызов",
+                fontWeight = FontWeight.Bold,
+                fontSize   = 26.sp,
+                color      = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                quizTitle,
+                fontSize   = 16.sp,
+                color      = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign  = TextAlign.Center,
+                lineHeight = 22.sp
+            )
+            Card(
+                modifier  = Modifier.fillMaxWidth(),
+                shape     = RoundedCornerShape(20.dp),
+                colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(0.dp),
+                border    = CardDefaults.outlinedCardBorder()
+            ) {
+                Column(
+                    modifier              = Modifier.padding(20.dp),
+                    verticalArrangement   = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(
+                        "Перед стартом",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize   = 15.sp,
+                        color      = MaterialTheme.colorScheme.onSurface
+                    )
+                    IntroBullet("Одна попытка: повторно пройти эту дуэль нельзя.")
+                    IntroBullet("Счёт станет виден обоим после того, как оба завершат викторину.")
+                    IntroBullet("По завершении дуэль окажется во вкладке «Завершённые».")
+                    if (totalQuestions > 0) {
+                        Text(
+                            "Вопросов: $totalQuestions",
+                            fontSize = 13.sp,
+                            color    = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+            Button(
+                onClick  = onStart,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape    = RoundedCornerShape(14.dp),
+                colors   = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Начать викторину", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            }
+            TextButton(onClick = onCancel) {
+                Text(cancelButtonLabel, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun IntroBullet(text: String) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment     = Alignment.Top
+    ) {
+        Text("•", color = MaterialTheme.colorScheme.primary, fontSize = 16.sp, modifier = Modifier.padding(top = 1.dp))
+        Text(text, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 18.sp, modifier = Modifier.weight(1f))
+    }
+}
+
+// ── Загрузка ─────────────────────────────────────────────────────────────────
+
+@Composable
+private fun LoadingScreen() {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(16.dp))
+            Text("Загружаем викторину…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+        }
+    }
+}
+
+// ── Ошибка ────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun ErrorScreen(message: String, onBack: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(24.dp)
+        ) {
+            Text("Ошибка", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Spacer(Modifier.height(8.dp))
+            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(24.dp))
+            Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) {
+                Text("Назад")
+            }
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ЭКРАН ВОПРОСА
+// ══════════════════════════════════════════════════════════════════════════════
+
+@Composable
+private fun QuizSessionBadges(uiState: QuizUIState) {
+    val showOffline = !uiState.sessionNetworkAvailable
+    val showPractice = uiState.sessionPracticeMode && uiState.challengeId.isNullOrBlank()
+    if (!showOffline && !showPractice) return
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (showOffline) {
+            SessionModeBadge(
+                label = "Офлайн",
+                containerColor = LocalBrainRacerExtendedColors.current.statusOrange.copy(alpha = 0.18f),
+                contentColor = LocalBrainRacerExtendedColors.current.statusOrange
+            )
+        }
+        if (showPractice) {
+            SessionModeBadge(
+                label = "Тренировка",
+                containerColor = LocalBrainRacerExtendedColors.current.detailBlue.copy(alpha = 0.18f),
+                contentColor = LocalBrainRacerExtendedColors.current.detailBlue
+            )
+        }
+    }
+}
+
+@Composable
+private fun SessionModeBadge(
+    label: String,
+    containerColor: Color,
+    contentColor: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = contentColor
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QuizScreenNew(
-    topic: String = "Математика",
-    onBack: () -> Unit = {}
+private fun QuestionScreen(
+    uiState: QuizUIState,
+    onBack: () -> Unit,
+    onSelect: (Int) -> Unit,
+    onSubmit: () -> Unit,
+    onNext: () -> Unit,
+    onTimeout: () -> Unit
 ) {
-    val questions = remember {
-        listOf(
-            QuizQuestionNew(
-                "Сколько будет 7 × 8?",
-                listOf("54", "56", "64", "48"),
-                1
-            ),
-            QuizQuestionNew(
-                "Чему равно π (пи) приблизительно?",
-                listOf("2.14", "3.14", "4.14", "1.14"),
-                1
-            ),
-            QuizQuestionNew(
-                "Квадратный корень из 144?",
-                listOf("11", "14", "12", "13"),
-                2
-            ),
-            QuizQuestionNew(
-                "Сколько градусов в прямом угле?",
-                listOf("45°", "180°", "90°", "60°"),
-                2
-            ),
-            QuizQuestionNew(
-                "Чему равно 2 в степени 10?",
-                listOf("512", "1024", "2048", "256"),
-                1
-            )
-        )
-    }
+    val timeLimit = uiState.currentQuestionTimeLimit
 
-    var currentIndex by remember { mutableIntStateOf(0) }
-    var selectedOption by remember { mutableStateOf<Int?>(null) }
-    var score by remember { mutableIntStateOf(0) }
-    var timeLeft by remember { mutableIntStateOf(20) }
-    var isFinished by remember { mutableStateOf(false) }
+    // ── Таймер вопроса ────────────────────────────────────────────────────
+    // Когда ключ меняется (новый вопрос или ответ засчитан), эффект перезапускается.
+    // Если ответ уже засчитан — таймер останавливается.
+    // Если время вышло и ответа нет — вызывает onTimeout().
+    var timeLeft by remember(uiState.currentQuestionIndex) { mutableIntStateOf(timeLimit) }
 
-    val totalQuestions = questions.size
-    val currentQuestion = questions[currentIndex]
-
-    val progressAnimated by animateFloatAsState(
-        targetValue = (currentIndex + 1f) / totalQuestions,
-        animationSpec = tween(500),
-        label = "progress"
-    )
-
-    val timerProgress by animateFloatAsState(
-        targetValue = timeLeft / 20f,
-        animationSpec = tween(300),
-        label = "timer"
-    )
-
-    LaunchedEffect(currentIndex, isFinished) {
-        if (isFinished) return@LaunchedEffect
-        timeLeft = 20
-        while (timeLeft > 0 && selectedOption == null) {
+    LaunchedEffect(uiState.currentQuestionIndex, uiState.isAnswerSubmitted) {
+        if (uiState.isAnswerSubmitted) return@LaunchedEffect  // ответ уже есть, таймер не нужен
+        timeLeft = timeLimit
+        while (timeLeft > 0) {
             delay(1000)
             timeLeft--
         }
-        if (selectedOption == null && !isFinished) {
-            if (currentIndex < totalQuestions - 1) {
-                currentIndex++
-                selectedOption = null
-            } else {
-                isFinished = true
-            }
+        // Время вышло — сообщаем ViewModel
+        onTimeout()
+    }
+
+    // ── Авто-переход после ответа ─────────────────────────────────────────
+    // Показывает прогресс-полосу и автоматически переходит к следующему вопросу.
+    // Запускается только когда ответ засчитан, отменяется при переходе (isAnswerSubmitted → false).
+    var autoAdvanceProgress by remember { mutableFloatStateOf(0f) }
+    val autoAdvanceDelayMs = if (uiState.isAnswerCorrect == null)
+        AUTO_ADVANCE_AFTER_TIMEOUT_MS   // тайм-аут — быстрее
+    else
+        AUTO_ADVANCE_AFTER_ANSWER_MS    // обычный ответ — чуть дольше для фидбека
+
+    LaunchedEffect(uiState.isAnswerSubmitted) {
+        if (!uiState.isAnswerSubmitted) {
+            autoAdvanceProgress = 0f
+            return@LaunchedEffect
         }
+        // Анимируем полосу заполнения, затем переходим
+        autoAdvanceProgress = 0f
+        val startMs = System.currentTimeMillis()
+        while (true) {
+            delay(16L)   // ~60fps
+            val elapsed  = System.currentTimeMillis() - startMs
+            val progress = (elapsed.toFloat() / autoAdvanceDelayMs).coerceIn(0f, 1f)
+            autoAdvanceProgress = progress
+            if (progress >= 1f) break
+        }
+        onNext()
+    }
+
+    // ── Прогресс вопросов ─────────────────────────────────────────────────
+    val questionProgressAnimated by animateFloatAsState(
+        targetValue   = if (uiState.totalQuestions > 0)
+            (uiState.currentQuestionIndex + 1f) / uiState.totalQuestions else 0f,
+        animationSpec = tween(400),
+        label         = "qProgress"
+    )
+
+    val timerColor = when {
+        timeLeft > timeLimit * 0.5  -> LocalBrainRacerExtendedColors.current.detailGreen
+        timeLeft > timeLimit * 0.25 -> LocalBrainRacerExtendedColors.current.statusOrange
+        else                        -> MaterialTheme.colorScheme.error
     }
 
     Scaffold(
         contentWindowInsets = WindowInsets.systemBars,
-        containerColor = surfaceContainerLowLight,
+        containerColor      = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = topic,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 18.sp,
-                        color = onBackgroundLight
-                    )
+                    Text("Счёт: ${uiState.score}", color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = onSurfaceVariantLight)
+                        Box(
+                            modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null,
+                                tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
+                        }
                     }
                 },
                 actions = {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(end = 16.dp)
+                        verticalAlignment     = Alignment.CenterVertically,
+                        modifier              = Modifier.padding(end = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(Icons.Default.Star, null, Modifier.size(16.dp), tint = Color(0xFFFFA000))
-                        Text(
-                            "$score",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = onBackgroundLight
-                        )
+                        Icon(Icons.Default.Star, null,
+                            modifier = Modifier.size(16.dp), tint = LocalBrainRacerExtendedColors.current.difficultyExpert)
+                        Text("${uiState.correctAnswers}/${uiState.totalQuestions}",
+                            color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = surfaceContainerLowLight)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
     ) { padding ->
-        if (isFinished) {
-            QuizResultSectionNew(
-                score = score,
-                total = totalQuestions,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-            )
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Spacer(Modifier.height(4.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Spacer(Modifier.height(4.dp))
 
-                QuizProgressBarNew(
-                    current = currentIndex + 1,
-                    total = totalQuestions,
-                    progress = progressAnimated
-                )
+            QuizSessionBadges(uiState)
 
-                QuizTimerNew(timeLeft = timeLeft, timerProgress = timerProgress)
-
-                QuizQuestionCardNew(question = currentQuestion.question)
-
-                QuizOptionsNew(
-                    options = currentQuestion.options,
-                    selectedOption = selectedOption,
-                    correctIndex = currentQuestion.correctIndex,
-                    onOptionSelected = { index ->
-                        if (selectedOption == null) {
-                            selectedOption = index
-                            if (index == currentQuestion.correctIndex) {
-                                score += 100 + (timeLeft * 5)
-                            }
-                        }
-                    }
-                )
-
-                if (selectedOption != null) {
-                    NextButtonNew(
-                        isLast = currentIndex == totalQuestions - 1,
-                        onClick = {
-                            if (currentIndex < totalQuestions - 1) {
-                                currentIndex++
-                                selectedOption = null
-                            } else {
-                                isFinished = true
-                            }
-                        }
+            // ── Прогресс вопросов ─────────────────────────────────────────
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(
+                        "Вопрос ${uiState.currentQuestionIndex + 1} из ${uiState.totalQuestions}",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "${(questionProgressAnimated * 100).toInt()}%",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold
                     )
                 }
-            }
-        }
-    }
-}
-
-
-@Composable
-fun QuizProgressBarNew(current: Int, total: Int, progress: Float) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text("Вопрос $current из $total", fontSize = 13.sp, color = onSurfaceVariantLight)
-            Text("${(progress * 100).toInt()}%", fontSize = 13.sp, color = primaryLight, fontWeight = FontWeight.SemiBold)
-        }
-        LinearProgressIndicator(
-            progress = { progress },
-            modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(4.dp)),
-            color = primaryLight,
-            trackColor = surfaceContainerLight,
-            strokeCap = StrokeCap.Round
-        )
-    }
-}
-
-
-@Composable
-fun QuizTimerNew(timeLeft: Int, timerProgress: Float) {
-    val timerColor = when {
-        timeLeft > 10 -> Color(0xFF388E3C)
-        timeLeft > 5  -> Color(0xFFFF8F00)
-        else          -> Color(0xFFC62828)
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceLight),
-        elevation = CardDefaults.cardElevation(1.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(timerColor.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Timer, null, Modifier.size(18.dp), tint = timerColor)
-            }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 LinearProgressIndicator(
-                    progress = { timerProgress },
-                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                    color = timerColor,
-                    trackColor = surfaceContainerLight,
-                    strokeCap = StrokeCap.Round
+                    progress      = { questionProgressAnimated },
+                    modifier      = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(4.dp)),
+                    color         = MaterialTheme.colorScheme.primary,
+                    trackColor    = MaterialTheme.colorScheme.surface,
+                    strokeCap     = StrokeCap.Round
                 )
             }
-            Text(
-                "$timeLeft с",
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                color = timerColor
-            )
-        }
-    }
-}
 
-
-@Composable
-fun QuizQuestionCardNew(question: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceLight),
-        elevation = CardDefaults.cardElevation(2.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = question,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = onBackgroundLight,
-                textAlign = TextAlign.Center,
-                lineHeight = 26.sp
-            )
-        }
-    }
-}
-
-
-@Composable
-fun QuizOptionsNew(
-    options: List<String>,
-    selectedOption: Int?,
-    correctIndex: Int,
-    onOptionSelected: (Int) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        options.forEachIndexed { index, option ->
-            val bgColor: Color
-            val borderColor: Color
-            val textColor: Color
-
-            when {
-                selectedOption == null -> {
-                    bgColor = surfaceLight
-                    borderColor = surfaceContainerLight
-                    textColor = onBackgroundLight
-                }
-                index == correctIndex -> {
-                    bgColor = Color(0xFF4CAF50).copy(alpha = 0.12f)
-                    borderColor = Color(0xFF4CAF50)
-                    textColor = Color(0xFF2E7D32)
-                }
-                index == selectedOption -> {
-                    bgColor = Color(0xFFE57373).copy(alpha = 0.12f)
-                    borderColor = Color(0xFFE57373)
-                    textColor = Color(0xFFC62828)
-                }
-                else -> {
-                    bgColor = surfaceLight
-                    borderColor = surfaceContainerLight
-                    textColor = onSurfaceVariantLight.copy(alpha = 0.5f)
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(bgColor)
-                    .border(1.dp, borderColor, RoundedCornerShape(14.dp))
-                    .clickable(enabled = selectedOption == null) { onOptionSelected(index) }
-                    .padding(horizontal = 18.dp, vertical = 16.dp)
+            // ── Таймер ────────────────────────────────────────────────────
+            Card(
+                modifier  = Modifier.fillMaxWidth(),
+                shape     = RoundedCornerShape(14.dp),
+                colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(0.dp)
             ) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                    modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(borderColor.copy(alpha = 0.15f)),
+                        modifier = Modifier.size(34.dp).clip(CircleShape)
+                            .background(timerColor.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = listOf("A", "B", "C", "D")[index],
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (selectedOption == null) onSurfaceVariantLight else borderColor
-                        )
+                        Icon(Icons.Default.Timer, null, Modifier.size(17.dp), tint = timerColor)
                     }
+                    LinearProgressIndicator(
+                        progress      = { (timeLeft.toFloat() / timeLimit).coerceIn(0f, 1f) },
+                        modifier      = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)),
+                        color         = timerColor,
+                        trackColor    = MaterialTheme.colorScheme.outline,
+                        strokeCap     = StrokeCap.Round
+                    )
                     Text(
-                        text = option,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = textColor
+                        "$timeLeft с",
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 15.sp,
+                        color      = timerColor
                     )
                 }
             }
+
+            // ── Анимированный блок: вопрос + варианты ────────────────────
+            // targetState — пара (текст вопроса, варианты ответов).
+            // Параметр лямбды (questionText, options) используется напрямую —
+            // это гарантирует корректное «замораживание» контента во время анимации
+            // уходящего кадра (Compose не подставит свежий uiState в уходящий вопрос).
+            AnimatedContent(
+                targetState   = uiState.question to uiState.options,
+                transitionSpec = {
+                    (slideInHorizontally(tween(300)) { it } + fadeIn(tween(300)))
+                        .togetherWith(slideOutHorizontally(tween(300)) { -it } + fadeOut(tween(300)))
+                },
+                label = "questionContent",
+                modifier = Modifier.weight(1f)
+            ) { (questionText, options) ->
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier            = Modifier.fillMaxSize()
+                ) {
+                    // Текст вопроса
+                    Card(
+                        modifier  = Modifier.fillMaxWidth(),
+                        shape     = RoundedCornerShape(20.dp),
+                        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(0.dp)
+                    ) {
+                        Box(
+                            modifier         = Modifier.fillMaxWidth().padding(22.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text       = questionText,
+                                fontSize   = 18.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color      = MaterialTheme.colorScheme.onSurface,
+                                textAlign  = TextAlign.Center,
+                                lineHeight = 26.sp
+                            )
+                        }
+                    }
+
+                    // Варианты ответов
+                    val letters = listOf("A", "B", "C", "D", "E")
+                    options.forEachIndexed { index, option ->
+                        AnswerOption(
+                            letter      = letters.getOrElse(index) { "${index + 1}" },
+                            text        = option,
+                            state       = answerOptionState(uiState, index),
+                            isSubmitted = uiState.isAnswerSubmitted,
+                            onClick     = { onSelect(index) }
+                        )
+                    }
+                }
+            }
+
+            // ── Зона действий ─────────────────────────────────────────────
+            ActionZone(
+                uiState              = uiState,
+                autoAdvanceProgress  = autoAdvanceProgress,
+                onSubmit             = onSubmit,
+                onNext               = onNext
+            )
+
+            Spacer(Modifier.height(12.dp))
         }
     }
 }
 
+// ── Варианты ответов ──────────────────────────────────────────────────────────
+
+private enum class AnswerState { IDLE, SELECTED, CORRECT, WRONG, DIMMED }
+
+private fun answerOptionState(uiState: QuizUIState, index: Int): AnswerState {
+    val isSelected  = uiState.selectedAnswerIndex == index
+    val isSubmitted = uiState.isAnswerSubmitted
+    return when {
+        !isSubmitted && isSelected  -> AnswerState.SELECTED
+        !isSubmitted                -> AnswerState.IDLE
+        isSubmitted && isSelected && uiState.isAnswerCorrect == true  -> AnswerState.CORRECT
+        isSubmitted && isSelected && uiState.isAnswerCorrect == false -> AnswerState.WRONG
+        else                        -> AnswerState.DIMMED
+    }
+}
 
 @Composable
-fun NextButtonNew(isLast: Boolean, onClick: () -> Unit) {
+private fun AnswerOption(
+    letter: String,
+    text: String,
+    state: AnswerState,
+    isSubmitted: Boolean,
+    onClick: () -> Unit
+) {
+    val bgColor     = when (state) {
+        AnswerState.SELECTED -> MaterialTheme.colorScheme.primary.copy(alpha = .20f)
+        AnswerState.CORRECT  -> LocalBrainRacerExtendedColors.current.detailGreen.copy(alpha = .15f)
+        AnswerState.WRONG    -> MaterialTheme.colorScheme.error.copy(alpha = .15f)
+        else                 -> MaterialTheme.colorScheme.surface
+    }
+    val borderColor = when (state) {
+        AnswerState.SELECTED -> MaterialTheme.colorScheme.primary
+        AnswerState.CORRECT  -> LocalBrainRacerExtendedColors.current.detailGreen
+        AnswerState.WRONG    -> MaterialTheme.colorScheme.error
+        else                 -> MaterialTheme.colorScheme.outline
+    }
+    val textColor   = when (state) {
+        AnswerState.SELECTED -> MaterialTheme.colorScheme.primary
+        AnswerState.CORRECT  -> LocalBrainRacerExtendedColors.current.detailGreen
+        AnswerState.WRONG    -> MaterialTheme.colorScheme.error
+        AnswerState.DIMMED   -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .45f)
+        AnswerState.IDLE     -> MaterialTheme.colorScheme.onSurface
+    }
+
+    // Иконка справа для правильного / неверного после подтверждения
+    val trailingIcon: ImageVector? = when (state) {
+        AnswerState.CORRECT -> Icons.Default.CheckCircle
+        AnswerState.WRONG   -> Icons.Default.Cancel
+        else                -> null
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(primaryLight)
-            .clickable { onClick() }
-            .padding(vertical = 16.dp),
-        contentAlignment = Alignment.Center
+            .background(bgColor)
+            .border(1.dp, borderColor, RoundedCornerShape(14.dp))
+            .clickable(enabled = !isSubmitted) { onClick() }
+            .padding(horizontal = 14.dp, vertical = 13.dp)
     ) {
-        Text(
-            text = if (isLast) "Завершить" else "Следующий вопрос →",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.White
-        )
+        Row(
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier.size(28.dp).clip(CircleShape)
+                    .background(borderColor.copy(alpha = .15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(letter, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = borderColor)
+            }
+            Text(
+                text       = text,
+                fontSize   = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color      = textColor,
+                modifier   = Modifier.weight(1f)
+            )
+            if (trailingIcon != null) {
+                Icon(trailingIcon, null, tint = borderColor, modifier = Modifier.size(20.dp))
+            }
+        }
     }
 }
 
+// ── Зона действий (кнопка + авто-переход) ────────────────────────────────────
 
 @Composable
-fun QuizResultSectionNew(score: Int, total: Int, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .clip(CircleShape)
-                .background(primaryLight.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.Star, null, Modifier.size(48.dp), tint = primaryLight)
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Text("Викторина завершена!", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = onBackgroundLight)
-
-        Spacer(Modifier.height(8.dp))
-
-        Text("Ваши очки", fontSize = 14.sp, color = onSurfaceVariantLight)
-
-        Text(
-            "$score",
-            fontWeight = FontWeight.Bold,
-            fontSize = 48.sp,
-            color = primaryLight
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = surfaceLight),
-            elevation = CardDefaults.cardElevation(1.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(32.dp)
+private fun ActionZone(
+    uiState: QuizUIState,
+    autoAdvanceProgress: Float,
+    onSubmit: () -> Unit,
+    onNext: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (!uiState.isAnswerSubmitted) {
+            // Кнопка «Ответить»
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (uiState.selectedAnswerIndex != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+                    .clickable(enabled = uiState.selectedAnswerIndex != null) { onSubmit() }
+                    .padding(vertical = 16.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("$total", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = onBackgroundLight)
-                    Text("Вопросов", fontSize = 12.sp, color = onSurfaceVariantLight)
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "Ответить",
+                    fontSize   = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color      = if (uiState.selectedAnswerIndex != null) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            val isLast = uiState.currentQuestionIndex >= uiState.totalQuestions - 1
+
+            // Полоса авто-перехода — заполняется за AUTO_ADVANCE_AFTER_ANSWER_MS
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
                     Text(
-                        "${score / if (total > 0) total else 1}",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp,
-                        color = primaryLight
+                        if (isLast) "Переход к результатам…" else "Следующий вопрос…",
+                        fontSize = 12.sp,
+                        color    = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text("Очков/вопрос", fontSize = 12.sp, color = onSurfaceVariantLight)
+                    Text(
+                        "Нажмите для пропуска",
+                        fontSize = 12.sp,
+                        color    = MaterialTheme.colorScheme.primary
+                    )
+                }
+                LinearProgressIndicator(
+                    progress      = { autoAdvanceProgress },
+                    modifier      = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                    color         = MaterialTheme.colorScheme.primary,
+                    trackColor    = MaterialTheme.colorScheme.outline,
+                    strokeCap     = StrokeCap.Round
+                )
+            }
+
+            // Кнопка ручного пропуска (кликабельна сразу)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .clickable { onNext() }
+                    .padding(vertical = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        if (isLast) "Завершить" else "Следующий вопрос →",
+                        fontSize   = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color      = Color.White
+                    )
                 }
             }
         }
     }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  ЭКРАН РЕЗУЛЬТАТОВ
+// ══════════════════════════════════════════════════════════════════════════════
 
-@Preview(showBackground = true, device = "spec:parent=pixel_5,orientation=portrait")
+private fun nonScoringResultsMessage(reason: QuizNonScoringReason?): String {
+    val detail = when (reason) {
+        QuizNonScoringReason.PRACTICE -> "Режим тренировки."
+        QuizNonScoringReason.OFFLINE -> "Нет сети или данные взяты только из кэша устройства."
+        QuizNonScoringReason.NOT_SIGNED_IN -> "Войдите в аккаунт, чтобы сохранять прогресс."
+        null -> ""
+    }
+    return "Результат не учитывается в рейтинге и статистике и не сохраняется. $detail".trim()
+}
+
 @Composable
-fun QuizScreenNewPreview() {
-    MaterialTheme {
-        QuizScreenNew(topic = "Математика")
+private fun NonScoringResultsBanner(reason: QuizNonScoringReason?) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)),
+        border = CardDefaults.outlinedCardBorder()
+    ) {
+        Text(
+            nonScoringResultsMessage(reason),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
+
+@Composable
+private fun ResultsScreen(
+    uiState: QuizUIState,
+    onBack: () -> Unit,
+    onRestart: () -> Unit,
+    onShowReview: () -> Unit,
+    allowRestart: Boolean = true,
+    challengeId: String? = null,
+    onOpenChallengeSummary: (() -> Unit)? = null
+) {
+    val accuracyPct = if (uiState.totalQuestions > 0)
+        (uiState.correctAnswers * 100) / uiState.totalQuestions else 0
+
+    val level = resultLevel(accuracyPct)
+
+    val accuracyAnimated by animateFloatAsState(
+        targetValue   = accuracyPct / 100f,
+        animationSpec = tween(1000), label = "accuracy"
+    )
+    val xpProgressAnimated by animateFloatAsState(
+        targetValue   = uiState.newLevelProgress,
+        animationSpec = tween(1200), label = "xpProgress"
+    )
+
+    var showLevelUpBanner by remember { mutableStateOf(false) }
+    LaunchedEffect(uiState.leveledUp) {
+        if (uiState.leveledUp) {
+            delay(600)
+            showLevelUpBanner = true
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            if (uiState.isNonScoringSession) {
+                NonScoringResultsBanner(uiState.nonScoringReason)
+            }
+
+            AnimatedVisibility(
+                visible = showLevelUpBanner,
+                enter   = fadeIn(tween(400)) + expandVertically(tween(400))
+            ) {
+                LevelUpBanner(newLevel = uiState.newLevel)
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(110.dp)
+                    .clip(CircleShape)
+                    .background(level.color.copy(alpha = 0.15f))
+                    .border(2.dp, level.color.copy(alpha = 0.4f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(level.icon, null, modifier = Modifier.size(54.dp), tint = level.color)
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(level.label, fontWeight = FontWeight.Bold, fontSize = 28.sp, color = level.color)
+                Spacer(Modifier.height(4.dp))
+                Text(level.subtitle, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+            }
+
+            Card(
+                shape     = RoundedCornerShape(24.dp),
+                colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(0.dp),
+                modifier  = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("${uiState.score}", fontWeight = FontWeight.Bold,
+                            fontSize = 52.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("игровых очков", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Точность", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("$accuracyPct%", fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold, color = level.color)
+                        }
+                        LinearProgressIndicator(
+                            progress  = { accuracyAnimated },
+                            modifier  = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                            color      = level.color, trackColor = MaterialTheme.colorScheme.outline, strokeCap = StrokeCap.Round
+                        )
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        ResultStat("${uiState.correctAnswers}",  "правильно", LocalBrainRacerExtendedColors.current.detailGreen)
+                        Box(Modifier.width(1.dp).height(40.dp).background(MaterialTheme.colorScheme.outline))
+                        ResultStat("${uiState.incorrectAnswers}", "неверно",  MaterialTheme.colorScheme.error)
+                        Box(Modifier.width(1.dp).height(40.dp).background(MaterialTheme.colorScheme.outline))
+                        ResultStat("${uiState.totalQuestions}",  "всего",    MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+
+            if (uiState.xpEarned > 0) {
+                XpCard(
+                    uiState = uiState,
+                    xpProgressAnimated = xpProgressAnimated,
+                    isReferenceOnly = uiState.isNonScoringSession
+                )
+            }
+
+            if (allowRestart) {
+                Button(
+                    onClick  = onRestart,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape    = RoundedCornerShape(14.dp),
+                    colors   = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Пройти снова", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                }
+            } else {
+                Text(
+                    "В режиме вызова повторное прохождение недоступно.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            if (!challengeId.isNullOrBlank() && onOpenChallengeSummary != null) {
+                Button(
+                    onClick  = onOpenChallengeSummary,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape    = RoundedCornerShape(14.dp),
+                    colors   = ButtonDefaults.buttonColors(containerColor = LocalBrainRacerExtendedColors.current.detailGreen)
+                ) {
+                    Icon(Icons.Default.EmojiEvents, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Итоги вызова", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                }
+            }
+
+            // Кнопка разбора — показывается только если есть что разбирать
+            if (uiState.reviewQuestions.isNotEmpty()) {
+                OutlinedButton(
+                    onClick  = onShowReview,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape    = RoundedCornerShape(14.dp),
+                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = LocalBrainRacerExtendedColors.current.detailGreen),
+                    border   = androidx.compose.foundation.BorderStroke(1.5.dp, LocalBrainRacerExtendedColors.current.detailGreen)
+                ) {
+                    Icon(Icons.Default.Checklist, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Разбор ответов", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                }
+            }
+
+            OutlinedButton(
+                onClick  = onBack,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape    = RoundedCornerShape(14.dp),
+                colors   = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                border   = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Icon(Icons.Default.Home, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("На главную", fontSize = 14.sp)
+            }
+
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+// ── Вспомогательные ───────────────────────────────────────────────────────────
+
+@Composable
+private fun LevelUpBanner(newLevel: Int) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape    = RoundedCornerShape(16.dp),
+        colors   = CardDefaults.cardColors(containerColor = LocalBrainRacerExtendedColors.current.difficultyExpert.copy(alpha = 0.12f)),
+        border   = CardDefaults.outlinedCardBorder()
+    ) {
+        Row(
+            modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier.size(44.dp).clip(CircleShape).background(LocalBrainRacerExtendedColors.current.difficultyExpert.copy(alpha = 0.20f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.ArrowUpward, null, tint = LocalBrainRacerExtendedColors.current.difficultyExpert, modifier = Modifier.size(24.dp))
+            }
+            Column {
+                Text("🎉 Новый уровень!", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = LocalBrainRacerExtendedColors.current.difficultyExpert)
+                Text(
+                    "Вы достигли уровня $newLevel. Продолжайте в том же духе!",
+                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun XpCard(
+    uiState: QuizUIState,
+    xpProgressAnimated: Float,
+    isReferenceOnly: Boolean = false
+) {
+    val breakdown    = uiState.xpBreakdown
+    val currentLevel = uiState.newLevel
+
+    Card(
+        shape     = RoundedCornerShape(20.dp),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(0.dp),
+        modifier  = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (isReferenceOnly) "XP (справочно)" else "Заработано XP",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (isReferenceOnly) {
+                        Text(
+                            "Не сохраняется в профиле",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)) {
+                    Text("+${uiState.xpEarned} XP",
+                        modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+
+            if (breakdown != null) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    XpRow("Базовые", breakdown.baseXp, MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (breakdown.speedBonusXp > 0)
+                        XpRow("Бонус скорости ⚡", breakdown.speedBonusXp, LocalBrainRacerExtendedColors.current.detailGreen)
+                    if (breakdown.accuracyBonusXp > 0)
+                        XpRow("Бонус точности 🎯", breakdown.accuracyBonusXp, BrainRacerColorTokens.QuizXpBonusAccent)
+                    if (!breakdown.difficultyLabel.startsWith("×1.0")) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Множитель сложности", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(breakdown.difficultyLabel, fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium, color = LocalBrainRacerExtendedColors.current.difficultyExpert)
+                        }
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Уровень $currentLevel", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (currentLevel < LevelSystem.MAX_LEVEL) "Уровень ${currentLevel + 1}"
+                    else "Максимум", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                LinearProgressIndicator(
+                    progress  = { xpProgressAnimated },
+                    modifier  = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                    color      = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.outline, strokeCap = StrokeCap.Round
+                )
+                Text(
+                    "Ур. $currentLevel  ·  ${LevelSystem.rankForLevel(currentLevel).displayName}",
+                    fontSize  = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier  = Modifier.fillMaxWidth(), textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun XpRow(label: String, value: Int, color: Color) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("+$value XP", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = color)
+    }
+}
+
+@Composable
+private fun ResultStat(value: String, label: String, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = color)
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ЭКРАН РАЗБОРА ОТВЕТОВ
+// ══════════════════════════════════════════════════════════════════════════════
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AnswerReviewScreen(
+    uiState: QuizUIState,
+    onBack: () -> Unit
+) {
+    val questions = uiState.reviewQuestions
+    val answers   = uiState.reviewAnswers
+
+    val correctCount   = answers.count { it.isCorrect }
+    val incorrectCount = answers.count { !it.isCorrect }
+
+    Scaffold(
+        containerColor      = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets.systemBars,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("Разбор ответов", color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("${questions.size} вопросов  ·  $correctCount правильно  ·  $incorrectCount неверно",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Box(
+                            modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null,
+                                tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier            = Modifier.fillMaxSize().padding(padding),
+            contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            itemsIndexed(questions) { i, question ->
+                val answer = answers.getOrNull(i)
+                ReviewQuestionCard(
+                    index    = i,
+                    question = question,
+                    answer   = answer
+                )
+            }
+            item { Spacer(Modifier.height(16.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun ReviewQuestionCard(
+    index: Int,
+    question: com.example.brainracer.domain.entities.Question,
+    answer: com.example.brainracer.domain.entities.UserAnswer?
+) {
+    val isCorrect     = answer?.isCorrect == true
+    val isTimeout     = answer == null || answer.selectedAnswerIndex == -1
+    val accentColor   = when {
+        isTimeout  -> LocalBrainRacerExtendedColors.current.statusOrange
+        isCorrect  -> LocalBrainRacerExtendedColors.current.detailGreen
+        else       -> MaterialTheme.colorScheme.error
+    }
+    val statusLabel   = when {
+        isTimeout -> "Время вышло"
+        isCorrect -> "Правильно"
+        else      -> "Неверно"
+    }
+    val statusIcon    = when {
+        isTimeout -> Icons.Default.Timer
+        isCorrect -> Icons.Default.CheckCircle
+        else      -> Icons.Default.Cancel
+    }
+
+    Card(
+        modifier  = Modifier.fillMaxWidth(),
+        shape     = RoundedCornerShape(18.dp),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(0.dp),
+        border    = CardDefaults.outlinedCardBorder()
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+            // ── Заголовок: номер + статус ─────────────────────────────────
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically
+            ) {
+                // Номер вопроса
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        "Вопрос ${index + 1}",
+                        modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        fontSize   = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color      = MaterialTheme.colorScheme.primary
+                    )
+                }
+                // Статус
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(statusIcon, null, tint = accentColor, modifier = Modifier.size(16.dp))
+                    Text(statusLabel, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                        color = accentColor)
+                    // Время ответа
+                    if (answer != null && answer.timeSpent > 0) {
+                        Text("·", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${answer.timeSpent}с", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+
+            // ── Текст вопроса ─────────────────────────────────────────────
+            Text(
+                text       = question.questionText,
+                fontSize   = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color      = MaterialTheme.colorScheme.onSurface,
+                lineHeight = 22.sp
+            )
+
+            // ── Варианты ответов ──────────────────────────────────────────
+            val letters = listOf("A", "B", "C", "D", "E")
+            question.options.forEachIndexed { optIdx, optText ->
+                val isUserChoice    = answer?.selectedAnswerIndex == optIdx
+                val isRightAnswer   = question.correctAnswerIndex == optIdx
+
+                val (bg, border, text, icon) = when {
+                    // Правильный вариант — всегда зелёный
+                    isRightAnswer && isUserChoice ->
+                        Quad(LocalBrainRacerExtendedColors.current.detailGreen.copy(.15f), LocalBrainRacerExtendedColors.current.detailGreen, LocalBrainRacerExtendedColors.current.detailGreen, Icons.Default.CheckCircle)
+                    isRightAnswer ->
+                        Quad(LocalBrainRacerExtendedColors.current.detailGreen.copy(.08f), LocalBrainRacerExtendedColors.current.detailGreen.copy(.6f), LocalBrainRacerExtendedColors.current.detailGreen, null)
+                    // Ответ пользователя, но неверный
+                    isUserChoice ->
+                        Quad(MaterialTheme.colorScheme.error.copy(.15f), MaterialTheme.colorScheme.error, MaterialTheme.colorScheme.error, Icons.Default.Cancel)
+                    // Остальные варианты — приглушённые
+                    else ->
+                        Quad(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.onSurfaceVariant.copy(.4f), null)
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(bg)
+                        .border(1.dp, border, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Row(
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Буква варианта
+                        Box(
+                            modifier = Modifier.size(24.dp).clip(CircleShape)
+                                .background(border.copy(alpha = .18f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(letters.getOrElse(optIdx) { "${optIdx + 1}" },
+                                fontSize = 11.sp, fontWeight = FontWeight.Bold, color = border)
+                        }
+                        Text(optText, fontSize = 14.sp, color = text, modifier = Modifier.weight(1f))
+                        if (icon != null) {
+                            Icon(icon, null, tint = border, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+
+            // ── Объяснение (если есть) ────────────────────────────────────
+            val explanation = question.explanation
+            if (!explanation.isNullOrBlank()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .5f))
+                Row(
+                    verticalAlignment     = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Lightbulb, null,
+                        tint = LocalBrainRacerExtendedColors.current.difficultyExpert, modifier = Modifier.size(16.dp).padding(top = 2.dp))
+                    Text(
+                        text       = explanation,
+                        fontSize   = 13.sp,
+                        color      = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 19.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Вспомогательный data class для деструктурирования четырёх значений стиля варианта */
+private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
