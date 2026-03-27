@@ -36,25 +36,9 @@ import com.example.brainracer.domain.entities.UserStats
 import com.example.brainracer.ui.components.BottomBar
 import com.example.brainracer.ui.components.ChallengeFriendQuizSheetContent
 import com.example.brainracer.ui.utils.QuizItem
+import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import com.example.brainracer.ui.viewmodels.HomeViewModel
-
-// ─── Цвета ──────────────────────────────────────────────────────────────────
-private val BgDeep       = Color(0xFF0F0F1A)
-private val BgCard       = Color(0xFF1A1A2E)
-private val BgBorder     = Color(0xFF2A2A3E)
-private val AccentPurple = Color(0xFF667EEA)
-private val TextPri      = Color(0xFFFFFFFF)
-private val TextSec      = Color(0xFF8B8AAE)
-
-private val cardGradients = listOf(
-    listOf(Color(0xFF667EEA), Color(0xFF764BA2)),
-    listOf(Color(0xFFf093fb), Color(0xFFf5576c)),
-    listOf(Color(0xFF4facfe), Color(0xFF00f2fe)),
-    listOf(Color(0xFF43e97b), Color(0xFF38f9d7)),
-    listOf(Color(0xFFfa709a), Color(0xFFfee140)),
-    listOf(Color(0xFFa18cd1), Color(0xFFfbc2eb)),
-)
 
 private data class Banner(
     val id: Int,
@@ -64,15 +48,6 @@ private data class Banner(
     val actionLabel: String = "Участвовать →"
 )
 
-private val homeBanners = listOf(
-    Banner(1, "🏆 Турнир Чемпионов", "Призовой фонд 5000 монет",
-        listOf(Color(0xFF667EEA), Color(0xFF764BA2))),
-    Banner(2, "⚡ Блиц-неделя", "x2 опыта до воскресенья",
-        listOf(Color(0xFFf093fb), Color(0xFFf5576c))),
-    Banner(3, "🎯 Новая категория", "Искусство и Культура",
-        listOf(Color(0xFF4facfe), Color(0xFF00f2fe)))
-)
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
@@ -80,13 +55,24 @@ fun HomeScreen(
     authViewModel: AuthViewModel = viewModel(),
     homeViewModel: HomeViewModel = viewModel(),
     onHomeClick: () -> Unit = {},
-    onFriendsClick: () -> Unit = {},
+    onLeaderboardClick: () -> Unit = {},
+    onChallengesClick: () -> Unit = {},
+    onQuizzesClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
     currentRoute: String = "home"
 ) {
     val uiState       by homeViewModel.uiState.collectAsState()
     val context       = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val ext = LocalBrainRacerExtendedColors.current
+    val homeBanners = remember(ext.cardGradients) {
+        val g = ext.cardGradients
+        listOf(
+            Banner(1, "🏆 Турнир Чемпионов", "Призовой фонд 5000 монет", g[0]),
+            Banner(2, "⚡ Блиц-неделя", "x2 опыта до воскресенья", g[1]),
+            Banner(3, "🎯 Новая категория", "Искусство и Культура", g[2])
+        )
+    }
 
     // ── Обновляем статистику при каждом возвращении на экран ─────────────
     // Это нужно, чтобы уровень/XP обновились после прохождения викторины
@@ -137,8 +123,8 @@ fun HomeScreen(
         ModalBottomSheet(
             onDismissRequest = { showChallengeSheet = false },
             sheetState       = challengeSheetState,
-            containerColor   = BgCard,
-            contentColor     = TextPri
+            containerColor   = MaterialTheme.colorScheme.surface,
+            contentColor     = MaterialTheme.colorScheme.onSurface
         ) {
             ChallengeFriendQuizSheetContent(
                 fixedFriend   = null,
@@ -176,28 +162,45 @@ fun HomeScreen(
         },
         bottomBar = {
             BottomBar(
-                showBar        = true,
-                currentRoute   = currentRoute,
-                onHomeClick    = onHomeClick,
-                onFriendsClick = onFriendsClick,
-                onProfileClick = onProfileClick
+                showBar              = true,
+                currentRoute         = currentRoute,
+                onHomeClick          = onHomeClick,
+                onLeaderboardClick   = onLeaderboardClick,
+                onChallengesClick    = onChallengesClick,
+                onQuizzesClick       = onQuizzesClick,
+                onProfileClick       = onProfileClick
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick        = { navController.navigate("quiz_creator") },
-                icon           = { Icon(Icons.Default.Create, null) },
-                text           = { Text("Создать", fontWeight = FontWeight.SemiBold) },
-                containerColor = AccentPurple,
-                contentColor   = Color.White,
-                elevation      = FloatingActionButtonDefaults.elevation(8.dp, 12.dp)
-            )
+            Button(
+                onClick = { navController.navigate("quiz_creator") },
+                modifier = Modifier.heightIn(min = 48.dp),
+                shape = RoundedCornerShape(percent = 50),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                elevation = ButtonDefaults.buttonElevation(
+                    defaultElevation = 6.dp,
+                    pressedElevation = 10.dp,
+                    hoveredElevation = 8.dp
+                ),
+                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 14.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text("Создать", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
         },
-        containerColor = BgDeep
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         LazyColumn(
-            modifier            = Modifier.fillMaxSize().padding(padding).background(BgDeep),
-            contentPadding      = PaddingValues(bottom = 100.dp),
+            modifier            = Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.background),
+            contentPadding      = PaddingValues(top = 20.dp, bottom = 100.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             item { UserStatRow(uiState.userStats, uiState.userLevel, uiState.levelProgress) }
@@ -254,6 +257,7 @@ private fun HomeTopBar(
     onNotificationsClick: () -> Unit,
     onSignOut: () -> Unit
 ) {
+    val ext = LocalBrainRacerExtendedColors.current
     // Анимируем прогресс-бар чтобы он плавно заполнялся при загрузке
     val animatedProgress by animateFloatAsState(
         targetValue   = levelProgress,
@@ -261,7 +265,7 @@ private fun HomeTopBar(
         label         = "levelProgress"
     )
 
-    Surface(color = BgDeep) {
+    Surface(color = MaterialTheme.colorScheme.background) {
         Column {
             Row(
                 modifier = Modifier
@@ -276,7 +280,7 @@ private fun HomeTopBar(
                         "Brain Racer",
                         fontWeight = FontWeight.ExtraBold,
                         fontSize   = 20.sp,
-                        color      = TextPri
+                        color      = MaterialTheme.colorScheme.onSurface
                     )
                     // Показываем уровень И ранг
                     Row(
@@ -286,35 +290,35 @@ private fun HomeTopBar(
                         Text(
                             "Ур. $userLevel",
                             fontSize   = 12.sp,
-                            color      = AccentPurple,
+                            color      = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold
                         )
-                        Text("·", fontSize = 12.sp, color = TextSec)
+                        Text("·", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
                             rankName,
                             fontSize = 12.sp,
-                            color    = TextSec
+                            color    = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     IconButton(onClick = onSearchClick) {
-                        Icon(Icons.Outlined.Search, null, tint = TextPri.copy(0.7f))
+                        Icon(Icons.Outlined.Search, null, tint = MaterialTheme.colorScheme.onSurface.copy(0.7f))
                     }
                     IconButton(onClick = onNotificationsClick) {
                         Box {
-                            Icon(Icons.Outlined.Notifications, null, tint = TextPri.copy(0.7f))
+                            Icon(Icons.Outlined.Notifications, null, tint = MaterialTheme.colorScheme.onSurface.copy(0.7f))
                             if (unreadNotificationsCount > 0) {
                                 Box(
                                     Modifier.size(8.dp).align(Alignment.TopEnd)
                                         .offset(x = 2.dp, y = (-2).dp)
-                                        .background(Color(0xFFf5576c), CircleShape)
+                                        .background(ext.difficultyHard, CircleShape)
                                 )
                             }
                         }
                     }
                     IconButton(onClick = onSignOut) {
-                        Icon(Icons.Default.Logout, null, tint = TextSec)
+                        Icon(Icons.Default.Logout, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -324,8 +328,8 @@ private fun HomeTopBar(
                 LinearProgressIndicator(
                     progress  = { animatedProgress },
                     modifier  = Modifier.fillMaxWidth().height(4.dp),
-                    color      = AccentPurple,
-                    trackColor = BgCard
+                    color      = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surface
                 )
             }
         }
@@ -359,13 +363,13 @@ private fun UserStatRow(
             Box(
                 modifier = Modifier.weight(1f).height(72.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(BgCard)
-                    .border(1.dp, AccentPurple.copy(0.25f), RoundedCornerShape(16.dp)),
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(0.25f), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextPri)
-                    Text(label, fontSize = 11.sp, color = TextSec)
+                    Text(value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -378,23 +382,26 @@ private fun UserStatRow(
 
 @Composable
 private fun WelcomeRow(userName: String) {
+    val ext = LocalBrainRacerExtendedColors.current
+    val g = ext.cardGradients
+    val avatarStops = listOf(g[0][0], g[1][0])
     Row(
         modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
         verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column {
-            Text("Добрый день,", color = TextPri.copy(0.6f), fontSize = 14.sp)
-            Text("$userName! 🚀", fontWeight = FontWeight.Bold, fontSize = 24.sp, color = TextPri)
+            Text("Добрый день,", color = MaterialTheme.colorScheme.onSurface.copy(0.6f), fontSize = 14.sp)
+            Text("$userName! 🚀", fontWeight = FontWeight.Bold, fontSize = 24.sp, color = MaterialTheme.colorScheme.onSurface)
         }
         Box(
             modifier = Modifier.size(54.dp).clip(CircleShape)
-                .background(Brush.linearGradient(listOf(Color(0xFF667EEA), Color(0xFFf093fb)))),
+                .background(Brush.linearGradient(avatarStops)),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 userName.firstOrNull()?.uppercase() ?: "?",
-                fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White
+                fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary
             )
         }
     }
@@ -445,7 +452,7 @@ private fun BannerCarousel(banners: List<Banner>) {
                     Modifier.padding(horizontal = 3.dp)
                         .size(if (selected) 22.dp else 7.dp, 7.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(if (selected) AccentPurple else BgCard)
+                        .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
                 )
             }
         }
@@ -456,26 +463,26 @@ private fun BannerCarousel(banners: List<Banner>) {
 private fun CategoryTabs(tabs: List<String>, selectedIndex: Int, onSelect: (Int) -> Unit) {
     ScrollableTabRow(
         selectedTabIndex = selectedIndex,
-        containerColor   = BgDeep,
-        contentColor     = AccentPurple,
+        containerColor   = MaterialTheme.colorScheme.background,
+        contentColor     = MaterialTheme.colorScheme.primary,
         edgePadding      = 20.dp,
         indicator = { positions ->
             if (selectedIndex < positions.size) {
                 TabRowDefaults.Indicator(
                     modifier = Modifier.tabIndicatorOffset(positions[selectedIndex])
                         .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)),
-                    color = AccentPurple, height = 3.dp
+                    color = MaterialTheme.colorScheme.primary, height = 3.dp
                 )
             }
         },
-        divider = { HorizontalDivider(color = BgBorder, thickness = 1.dp) }
+        divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 1.dp) }
     ) {
         tabs.forEachIndexed { i, name ->
             Tab(
                 selected               = selectedIndex == i,
                 onClick                = { onSelect(i) },
-                selectedContentColor   = AccentPurple,
-                unselectedContentColor = TextSec
+                selectedContentColor   = MaterialTheme.colorScheme.primary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
             ) {
                 Text(
                     name,
@@ -490,11 +497,12 @@ private fun CategoryTabs(tabs: List<String>, selectedIndex: Int, onSelect: (Int)
 
 @Composable
 private fun HotQuizzesSection(quizzes: List<QuizItem>, onQuizClick: (String) -> Unit) {
+    val cardGradients = LocalBrainRacerExtendedColors.current.cardGradients
     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("🔥", fontSize = 17.sp)
-            Text("Популярное", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPri)
+            Text("Популярное", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -546,9 +554,9 @@ private fun AllQuizzesSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            Text("📖 Все викторины", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPri)
+            Text("📖 Все викторины", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
             TextButton(onClick = { onShowAll(currentCategory) }) {
-                Text("Смотреть все", color = AccentPurple, fontSize = 13.sp)
+                Text("Смотреть все", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -556,7 +564,7 @@ private fun AllQuizzesSection(
         when {
             isLoading -> {
                 Box(Modifier.fillMaxWidth().height(90.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = AccentPurple)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             }
             quizzes.isEmpty() -> {
@@ -565,13 +573,13 @@ private fun AllQuizzesSection(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Spacer(Modifier.height(8.dp))
-                    Icon(Icons.Default.Quiz, null, tint = TextSec, modifier = Modifier.size(40.dp))
+                    Icon(Icons.Default.Quiz, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(40.dp))
                     Spacer(Modifier.height(8.dp))
-                    Text("В этой категории пока нет викторин", color = TextSec, fontSize = 14.sp)
+                    Text("В этой категории пока нет викторин", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = onCreateQuiz,
-                        colors  = ButtonDefaults.buttonColors(containerColor = AccentPurple),
+                        colors  = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape   = RoundedCornerShape(12.dp)
                     ) {
                         Icon(Icons.Default.Create, null, modifier = Modifier.size(16.dp))
@@ -597,12 +605,13 @@ private fun AllQuizzesSection(
 
 @Composable
 private fun QuizRowCard(quiz: QuizItem, colorIndex: Int, onClick: () -> Unit) {
+    val cardGradients = LocalBrainRacerExtendedColors.current.cardGradients
     val gradient = cardGradients[colorIndex % cardGradients.size]
     Box(
         modifier = Modifier.fillMaxWidth().height(86.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(BgCard)
-            .border(1.dp, BgBorder, RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
             .clickable { onClick() }
     ) {
         Row(
@@ -619,16 +628,16 @@ private fun QuizRowCard(quiz: QuizItem, colorIndex: Int, onClick: () -> Unit) {
             Spacer(Modifier.width(13.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(quiz.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
-                    color = TextPri, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    Text(quiz.category, fontSize = 12.sp, color = AccentPurple)
-                    Text("·", color = TextSec)
-                    Text("${quiz.questionCount} вопр.", fontSize = 12.sp, color = TextSec)
+                    Text(quiz.category, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                    Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${quiz.questionCount} вопр.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Icon(Icons.Default.ChevronRight, null, tint = TextSec, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -670,7 +679,7 @@ private fun RecentChallengesSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            Text("⚔️ Последние вызовы", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPri)
+            Text("⚔️ Последние вызовы", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment     = Alignment.CenterVertically
@@ -679,14 +688,14 @@ private fun RecentChallengesSection(
                     Icon(
                         Icons.Default.Sports,
                         contentDescription = null,
-                        tint       = AccentPurple,
+                        tint       = MaterialTheme.colorScheme.primary,
                         modifier   = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text("Вызов", color = AccentPurple, fontSize = 13.sp)
+                    Text("Вызов", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
                 }
                 TextButton(onClick = onViewAll) {
-                    Text("Все вызовы", color = AccentPurple, fontSize = 13.sp)
+                    Text("Все вызовы", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
                 }
             }
         }
@@ -694,26 +703,26 @@ private fun RecentChallengesSection(
 
         TabRow(
             selectedTabIndex = tabIndex,
-            containerColor   = BgDeep,
-            contentColor     = AccentPurple,
+            containerColor   = MaterialTheme.colorScheme.background,
+            contentColor     = MaterialTheme.colorScheme.primary,
             indicator = { positions ->
                 if (tabIndex < positions.size) {
                     TabRowDefaults.SecondaryIndicator(
                         modifier = Modifier.tabIndicatorOffset(positions[tabIndex]),
-                        color    = AccentPurple,
+                        color    = MaterialTheme.colorScheme.primary,
                         height   = 2.dp
                     )
                 }
             },
-            divider = { HorizontalDivider(color = BgBorder) }
+            divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outline) }
         ) {
             tabLabels.forEachIndexed { i, title ->
                 Tab(
                     selected = tabIndex == i,
                     onClick  = { tabIndex = i },
                     text     = { Text(title, fontSize = 13.sp) },
-                    selectedContentColor   = AccentPurple,
-                    unselectedContentColor = TextSec
+                    selectedContentColor   = MaterialTheme.colorScheme.primary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -730,21 +739,21 @@ private fun RecentChallengesSection(
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(BgCard)
-                    .border(1.dp, BgBorder, RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
                     .padding(20.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(title, color = TextPri, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                    Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                    Text(subtitle, color = TextSec, fontSize = 12.sp,
+                    Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     if (tabIndex == 0) {
                         Button(
                             onClick     = onNewChallenge,
-                            colors      = ButtonDefaults.buttonColors(containerColor = AccentPurple),
+                            colors      = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             shape       = RoundedCornerShape(12.dp)
                         ) {
                             Icon(Icons.Default.Sports, null, Modifier.size(18.dp), Color.White)
@@ -778,6 +787,10 @@ private fun HomeChallengeRow(
     currentUserId: String,
     onClick: () -> Unit
 ) {
+    val cs = MaterialTheme.colorScheme
+    val ext = LocalBrainRacerExtendedColors.current
+    val g = ext.cardGradients
+    val rowAvatarGradient = listOf(g[0][0], g[1][0])
     val isChallenger = ch.challengerUserId == currentUserId
     val opponentName = if (isChallenger) ch.challengedNickname else ch.challengerNickname
     val myResult     = if (isChallenger) ch.challengerResult else ch.challengedResult
@@ -785,11 +798,11 @@ private fun HomeChallengeRow(
 
     val (statusColor, statusLabel) = when {
         ch.status == ChallengeStatus.PENDING && !isChallenger ->
-            Color(0xFFFFA726) to "Входящий"
+            ext.statusOrange to "Входящий"
         ch.status == ChallengeStatus.PENDING && isChallenger ->
-            Color(0xFFFFA726) to "В обработке"
+            ext.statusOrange to "В обработке"
         ch.status == ChallengeStatus.ACCEPTED ->
-            Color(0xFF4facfe) to when {
+            cs.tertiary to when {
                 ch.hasUserResult(currentUserId) -> "Пройдено"
                 else -> "Нужно пройти"
             }
@@ -797,12 +810,12 @@ private fun HomeChallengeRow(
             val isDraw = ch.isDraw || ch.winnerId == "draw"
             val isWin  = !isDraw && ch.winnerId == currentUserId
             when {
-                isDraw -> Color(0xFFFFA726) to "Ничья"
-                isWin  -> Color(0xFF3ECFA3) to "Победа"
-                else   -> Color(0xFFEA5C7E) to "Поражение"
+                isDraw -> ext.statusOrange to "Ничья"
+                isWin  -> ext.detailGreen to "Победа"
+                else   -> cs.error to "Поражение"
             }
         }
-        else -> Color(0xFF8B8AAE) to ch.status.name
+        else -> cs.onSurfaceVariant to ch.status.name
     }
 
     val isFinishedRow = ch.status == ChallengeStatus.COMPLETED
@@ -811,7 +824,7 @@ private fun HomeChallengeRow(
             .fillMaxWidth()
             .alpha(if (isFinishedRow) 0.82f else 1f)
             .clip(RoundedCornerShape(16.dp))
-            .background(BgCard)
+            .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, statusColor.copy(0.3f), RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
     ) {
@@ -827,18 +840,17 @@ private fun HomeChallengeRow(
             ) {
                 Box(
                     modifier = Modifier.size(42.dp).clip(CircleShape)
-                        .background(Brush.linearGradient(
-                            listOf(Color(0xFF667EEA), Color(0xFFf093fb)))),
+                        .background(Brush.linearGradient(rowAvatarGradient)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(opponentName.take(2).uppercase(),
-                        color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text("vs $opponentName", fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp, color = TextPri,
+                        fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(ch.quizTitle, fontSize = 11.sp, color = TextSec,
+                    Text(ch.quizTitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
@@ -849,7 +861,7 @@ private fun HomeChallengeRow(
                 if (ch.status == ChallengeStatus.COMPLETED) {
                     Text(
                         "${myResult?.score ?: 0} : ${oppResult?.score ?: 0}",
-                        fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPri
+                        fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 if (ch.status == ChallengeStatus.ACCEPTED) {
@@ -874,7 +886,9 @@ private fun HomeChallengeRow(
 
 @Composable
 private fun HomeProgressDot(played: Boolean, label: String) {
-    val color = if (played) Color(0xFF3ECFA3) else Color(0xFF8B8AAE)
+    val cs = MaterialTheme.colorScheme
+    val ext = LocalBrainRacerExtendedColors.current
+    val color = if (played) ext.detailGreen else cs.onSurfaceVariant
     Row(
         verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp)
