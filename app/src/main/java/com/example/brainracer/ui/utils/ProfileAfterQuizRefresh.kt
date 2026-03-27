@@ -5,9 +5,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
 /**
- * После успешного [recordQuizResult] профиль нужно перезагрузить с сервера
- * - [events]: если экран профиля уже на экране — подписка обновит сразу
- * - [pendingUserId]: если пользователь ушёл на другой экран — [takePending] на ON_RESUME
+ * После успешного [recordQuizResult] профиль нужно перезагрузить с сервера.
+ * - [events]: если экран профиля уже на экране — подписка обновит сразу.
+ * - [pendingUserId]: если пользователь ушёл на другой экран — [takePending] на ON_RESUME.
  */
 object ProfileAfterQuizRefresh {
 
