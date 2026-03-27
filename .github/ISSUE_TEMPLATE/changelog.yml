@@ -1,0 +1,30 @@
+name: Update Changelog
+
+on:
+  release:
+    types: [published]  # Срабатывает когда релиз опубликован
+
+jobs:
+  update-changelog:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Нужно для получения всех тегов
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Generate changelog
+        uses: orhun/git-cliff-action@v3
+        with:
+          config: cliff.toml
+          args: --verbose --tag ${{ github.event.release.tag_name }}
+      
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --quiet && git diff --staged --quiet || git commit -m "docs: update changelog for ${{ github.event.release.tag_name }}"
+          git push
