@@ -16,6 +16,7 @@ import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.QuizDifficulty
 import com.example.brainracer.domain.entities.QuizStats
 import com.example.brainracer.domain.entities.QuestionType
+import com.example.brainracer.ui.utils.HOME_CATEGORY_CUSTOM
 import com.example.brainracer.ui.utils.HomeUiState
 import com.example.brainracer.ui.utils.QuizItem
 import com.google.firebase.Timestamp
@@ -42,6 +43,8 @@ class HomeViewModel : ViewModel() {
 
     // Кэш полного списка викторин для фильтрации по категории
     private var allQuizzes: List<QuizItem> = emptyList()
+    /** Кэш пользовательских викторин для вкладки [HOME_CATEGORY_CUSTOM]. */
+    private var customQuizzesCache: List<QuizItem> = emptyList()
 
     init {
         loadInitialData()
@@ -164,23 +167,61 @@ class HomeViewModel : ViewModel() {
                     )
                 }
                 allQuizzes = items
+                loadCustomQuizzesIntoCache()
+                val filtered = quizzesForSelectedCategory(_uiState.value.selectedCategory)
                 if (items.isEmpty()) {
                     _uiState.update {
-                        it.copy(isLoading = false, quizzes = emptyList(),
-                            errorMessage = "Викторин нет. Нажмите ➕ чтобы добавить")
+                        it.copy(
+                            isLoading = false,
+                            quizzes = filtered,
+                            errorMessage = "Викторин нет. Нажмите ➕ чтобы добавить"
+                        )
                     }
                 } else {
                     _uiState.update {
-                        it.copy(isLoading = false, quizzes = items, selectedCategory = "Все")
+                        it.copy(isLoading = false, quizzes = filtered, errorMessage = null)
                     }
                 }
             }
 
             is Result.Error -> {
+                loadCustomQuizzesIntoCache()
+                val filtered = quizzesForSelectedCategory(_uiState.value.selectedCategory)
                 _uiState.update {
-                    it.copy(isLoading = false,
-                        errorMessage = "Ошибка загрузки: ${result.exception.message}")
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Ошибка загрузки: ${result.exception.message}",
+                        quizzes = filtered
+                    )
                 }
+            }
+        }
+    }
+
+    private fun quizzesForSelectedCategory(category: String): List<QuizItem> = when (category) {
+        "Все" -> allQuizzes
+        HOME_CATEGORY_CUSTOM -> customQuizzesCache
+        else -> allQuizzes.filter { it.category == category }
+    }
+
+    private suspend fun loadCustomQuizzesIntoCache() {
+        when (val r = quizRepository.getPublicCustomQuizzes(limit = 50)) {
+            is Result.Success -> {
+                customQuizzesCache = r.data.map { quiz ->
+                    QuizItem(
+                        id            = quiz.id,
+                        title         = quiz.title,
+                        category      = quiz.categoryId,
+                        questionCount = quiz.questions.size,
+                        difficulty    = quiz.difficulty.name,
+                        description   = quiz.description,
+                        rating        = quiz.stats.averageRating,
+                        playCount     = quiz.stats.timesTaken
+                    )
+                }
+            }
+            is Result.Error -> {
+                customQuizzesCache = emptyList()
             }
         }
     }
@@ -270,13 +311,15 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    /** Фильтрация по категории — работает с кэшем, без сетевого запроса. */
+    /** Фильтрация по категории — работает с кэшем; вкладка «Кастомные» подгружает список при необходимости. */
     fun loadQuizzesByCategory(category: String) {
         _uiState.update { it.copy(selectedCategory = category, isLoading = true) }
         viewModelScope.launch {
             delay(300) // небольшая задержка для ощущения отклика
-            val filtered = if (category == "Все") allQuizzes
-            else allQuizzes.filter { it.category == category }
+            if (category == HOME_CATEGORY_CUSTOM && customQuizzesCache.isEmpty()) {
+                loadCustomQuizzesIntoCache()
+            }
+            val filtered = quizzesForSelectedCategory(category)
             _uiState.update { it.copy(quizzes = filtered, isLoading = false) }
         }
     }

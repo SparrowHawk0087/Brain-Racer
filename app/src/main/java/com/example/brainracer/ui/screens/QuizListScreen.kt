@@ -87,7 +87,7 @@ fun QuizListScreen(
                     )
                 },
                 actions = {
-                    IconButton(onClick = { navController.navigate("search") }) {
+                    IconButton(onClick = { navController.navigate("search?category=Все&customOnly=false") }) {
                         Icon(Icons.Default.Search, contentDescription = "Поиск", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },

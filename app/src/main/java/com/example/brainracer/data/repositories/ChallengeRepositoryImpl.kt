@@ -3,6 +3,7 @@ package com.example.brainracer.data.repositories
 import com.example.brainracer.domain.entities.Challenge
 import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.domain.entities.ChallengeStatus
+import com.example.brainracer.domain.entities.ChallengeXpPolicy
 import com.example.brainracer.data.utils.Result
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
@@ -215,6 +216,18 @@ class ChallengeRepositoryImpl : ChallengeRepository {
 
     override suspend fun createChallenge(challenge: Challenge): Result<String> {
         return try {
+            val challengerSnap = usersCollection.document(challenge.challengerUserId).get().await()
+            val stats = challengerSnap.get("stats") as? Map<String, Any?>
+            val lastCreated = stats?.get("last_challenge_created_at") as? Timestamp
+            if (lastCreated != null) {
+                val elapsedMs = System.currentTimeMillis() - lastCreated.toDate().time
+                if (elapsedMs < ChallengeXpPolicy.CHALLENGE_CREATE_COOLDOWN_SECONDS * 1000L) {
+                    return Result.error(
+                        Exception("Слишком часто: подождите перед следующим вызовом (${ChallengeXpPolicy.CHALLENGE_CREATE_COOLDOWN_SECONDS} с)")
+                    )
+                }
+            }
+
             val existingSnapshot = challengesCollection
                 .whereEqualTo("challengerUserId", challenge.challengerUserId)
                 .limit(80)
@@ -231,9 +244,9 @@ class ChallengeRepositoryImpl : ChallengeRepository {
                 return Result.error(Exception("Уже есть активный вызов на эту викторину"))
             }
 
-            // Получаем никнеймы для денормализации
-            val challengerDoc = usersCollection.document(challenge.challengerUserId).get().await()
+            // Получаем никнеймы для денормализации (challengerSnap уже загружен выше)
             val challengedDoc = usersCollection.document(challenge.challengedUserId).get().await()
+            val challengerDoc = challengerSnap
 
             val challengeWithDetails = challenge.copy(
                 challengerNickname = challengerDoc.getString("nickname") ?: "Игрок",
@@ -244,6 +257,12 @@ class ChallengeRepositoryImpl : ChallengeRepository {
             val challengeWithId = challengeWithDetails.copy(id = docRef.id)
 
             docRef.set(challengeWithId).await()
+
+            try {
+                usersCollection.document(challenge.challengerUserId)
+                    .update("stats.last_challenge_created_at", Timestamp.now())
+                    .await()
+            } catch (_: Exception) { /* не блокируем вызов */ }
 
             val challengerAvatar = challengerDoc.getString("avatarUrl")
             val quizTotalSec = when (val qr = quizRepository.getQuiz(challengeWithId.quizId)) {
@@ -337,7 +356,7 @@ class ChallengeRepositoryImpl : ChallengeRepository {
             val alreadySent = if (userId == challengerId) parsed.challengerResult != null
             else parsed.challengedResult != null
             if (alreadySent) {
-                return@runTransaction null
+                throw Exception("Результат этого вызова уже отправлен")
             }
 
             transaction.update(challengeRef, resultField, result)

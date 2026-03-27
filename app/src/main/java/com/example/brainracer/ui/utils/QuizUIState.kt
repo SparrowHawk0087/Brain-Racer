@@ -5,8 +5,6 @@ import com.example.brainracer.domain.entities.UserAnswer
 
 /** Почему прохождение не идёт в прогресс / облако */
 enum class QuizNonScoringReason {
-    /** Явный режим тренировки из навигации */
-    PRACTICE,
     /** Нет подключения при старте сессии */
     OFFLINE,
     /** Нет вошедшего пользователя */
@@ -62,14 +60,18 @@ data class QuizUIState(
     /** Название викторины (для экрана старта вызова) */
     val quizTitle: String = "",
 
-    /** Запрошенный из навигации режим тренировки (для восстановления после поворота) */
-    val sessionPracticeMode: Boolean = false,
     /** Сеть была доступна при старте loadQuiz */
     val sessionNetworkAvailable: Boolean = true,
 
     /** true, если результат не сохраняется и не влияет на статистику */
     val isNonScoringSession: Boolean = false,
-    val nonScoringReason: QuizNonScoringReason? = null
+    val nonScoringReason: QuizNonScoringReason? = null,
+
+    /**
+     * Дуэль: XP в профиль за победу начисляется при завершении вызова (кап/decay).
+     * На экране результатов показываем подсказку вместо «+XP».
+     */
+    val duelXpDeferred: Boolean = false
 )
 
 data class XpBreakdown(

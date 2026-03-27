@@ -18,7 +18,9 @@ package com.example.brainracer.domain.entities
  *
  *   diffMultiplier:  EASY=1.0 / MEDIUM=1.2 / HARD=1.5 / EXPERT=2.0
  *
- *   totalXp = round((baseXp + speedBonus + accuracyBonus) × diffMultiplier)
+ *   totalXp = round((baseXp + speedBonus + accuracyBonus) × diffMultiplier) — отображение сессии
+ *
+ *   profileTotalXp = round((baseXp + accuracyBonus) × diffMultiplier) — зачёт в профиль (без speed)
  *
  * ── Пороги уровней ────────────────────────────────────────────────────────
  *
@@ -97,8 +99,10 @@ object LevelSystem {
         val accuracyBonusXp: Int,
         /** Множитель сложности (строка для отображения, напр. "×1.5") */
         val difficultyMultiplierLabel: String,
-        /** Итоговый XP, который добавляется к totalPoints пользователя */
+        /** Полный XP сессии (со speed), для экрана результатов */
         val totalXp: Int,
+        /** XP для начисления в профиль и дуэлей (без speed bonus) */
+        val profileTotalXp: Int,
         /** true, если после этого прохождения пользователь перешёл на новый уровень */
         val leveledUp: Boolean = false,
         val newLevel: Int = 1
@@ -152,7 +156,8 @@ object LevelSystem {
         }
 
         val totalXp    = ((baseXp + speedBonus + accuracyBonus) * diffMult).toInt()
-        val levelAfter = levelFromXp(xpBefore + totalXp)
+        val profileTotalXp = ((baseXp + accuracyBonus) * diffMult).toInt()
+        val levelAfter = levelFromXp(xpBefore + profileTotalXp)
         val levelBefore = levelFromXp(xpBefore)
 
         return QuizXpResult(
@@ -161,6 +166,7 @@ object LevelSystem {
             accuracyBonusXp          = accuracyBonus,
             difficultyMultiplierLabel = diffLabel,
             totalXp                  = totalXp,
+            profileTotalXp           = profileTotalXp,
             leveledUp                = levelAfter > levelBefore,
             newLevel                 = levelAfter
         )

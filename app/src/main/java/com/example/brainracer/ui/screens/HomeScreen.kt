@@ -35,6 +35,7 @@ import com.example.brainracer.domain.entities.ChallengeStatus
 import com.example.brainracer.domain.entities.UserStats
 import com.example.brainracer.ui.components.BottomBar
 import com.example.brainracer.ui.components.ChallengeFriendQuizSheetContent
+import com.example.brainracer.ui.utils.HOME_CATEGORY_CUSTOM
 import com.example.brainracer.ui.utils.QuizItem
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.viewmodels.AuthViewModel
@@ -146,7 +147,7 @@ fun HomeScreen(
                 levelProgress              = uiState.levelProgress,
                 rankName                   = uiState.rankName,
                 unreadNotificationsCount   = uiState.unreadNotificationsCount,
-                onSearchClick              = { navController.navigate("search") },
+                onSearchClick              = { navController.navigate("search?category=Все&customOnly=false") },
                 onNotificationsClick       = {
                     if (uiState.currentUserId.isNotBlank()) {
                         navController.navigate("notifications/${uiState.currentUserId}")
@@ -221,9 +222,21 @@ fun HomeScreen(
                     quizzes         = tabQuizzes,
                     isLoading       = uiState.isLoading,
                     currentCategory = currentCategory,
+                    listTitle       = if (currentCategory == HOME_CATEGORY_CUSTOM) "📖 Кастомные" else "📖 Все викторины",
+                    emptyMessage    = if (currentCategory == HOME_CATEGORY_CUSTOM) {
+                        "Пока нет пользовательских викторин"
+                    } else {
+                        "В этой категории пока нет викторин"
+                    },
                     onQuizClick     = { id -> navController.navigate("quiz_detail/$id") },
                     onCreateQuiz    = { navController.navigate("quiz_creator") },
-                    onShowAll       = { cat -> navController.navigate("search?category=$cat") }
+                    onShowAll       = { cat ->
+                        if (cat == HOME_CATEGORY_CUSTOM) {
+                            navController.navigate("search?category=Все&customOnly=true")
+                        } else {
+                            navController.navigate("search?category=$cat&customOnly=false")
+                        }
+                    }
                 )
             }
 
@@ -544,6 +557,8 @@ private fun AllQuizzesSection(
     quizzes: List<QuizItem>,
     isLoading: Boolean,
     currentCategory: String,
+    listTitle: String,
+    emptyMessage: String,
     onQuizClick: (String) -> Unit,
     onCreateQuiz: () -> Unit,
     onShowAll: (String) -> Unit
@@ -554,7 +569,7 @@ private fun AllQuizzesSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            Text("📖 Все викторины", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+            Text(listTitle, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
             TextButton(onClick = { onShowAll(currentCategory) }) {
                 Text("Смотреть все", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
             }
@@ -575,7 +590,7 @@ private fun AllQuizzesSection(
                     Spacer(Modifier.height(8.dp))
                     Icon(Icons.Default.Quiz, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(40.dp))
                     Spacer(Modifier.height(8.dp))
-                    Text("В этой категории пока нет викторин", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                    Text(emptyMessage, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = onCreateQuiz,

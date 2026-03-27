@@ -4,6 +4,9 @@ import com.example.brainracer.domain.entities.Challenge
 import com.example.brainracer.domain.entities.User
 import com.example.brainracer.domain.entities.UserStats
 
+/** Вкладка категорий на главной: пользовательские викторины (`quiz_custom_*`). */
+const val HOME_CATEGORY_CUSTOM = "Кастомные"
+
 data class HomeUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
@@ -15,7 +18,7 @@ data class HomeUiState(
     val selectedCategory: String = "Все",
     val categories: List<String> = listOf(
         "Все", "География", "История", "Математика",
-        "Фильмы и музыка", "Наука", "Спорт"
+        "Фильмы и музыка", "Наука", "Спорт", HOME_CATEGORY_CUSTOM
     ),
 
     // ── Уровень ───────────────────────────────────────────────────────────

@@ -82,15 +82,14 @@ fun QuizPlayScreen(
     challengeId: String? = null,
     challengeIntroAlreadyShown: Boolean = false,
     challengeIntroCancelToHome: Boolean = false,
-    practiceMode: Boolean = false,
     quizViewModel: QuizViewModel = viewModel()
 ) {
     val uiState by quizViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    LaunchedEffect(quizId, challengeId, practiceMode) {
+    LaunchedEffect(quizId, challengeId) {
         val online = isNetworkLikelyAvailable(context.applicationContext)
-        quizViewModel.loadQuiz(quizId, challengeId, practiceMode, online)
+        quizViewModel.loadQuiz(quizId, challengeId, online)
     }
 
     var challengeIntroAcknowledged by rememberSaveable(quizId, challengeId, challengeIntroAlreadyShown) {
@@ -285,28 +284,18 @@ private fun ErrorScreen(message: String, onBack: () -> Unit) {
 @Composable
 private fun QuizSessionBadges(uiState: QuizUIState) {
     val showOffline = !uiState.sessionNetworkAvailable
-    val showPractice = uiState.sessionPracticeMode && uiState.challengeId.isNullOrBlank()
-    if (!showOffline && !showPractice) return
+    if (!showOffline) return
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (showOffline) {
-            SessionModeBadge(
-                label = "Офлайн",
-                containerColor = LocalBrainRacerExtendedColors.current.statusOrange.copy(alpha = 0.18f),
-                contentColor = LocalBrainRacerExtendedColors.current.statusOrange
-            )
-        }
-        if (showPractice) {
-            SessionModeBadge(
-                label = "Тренировка",
-                containerColor = LocalBrainRacerExtendedColors.current.detailBlue.copy(alpha = 0.18f),
-                contentColor = LocalBrainRacerExtendedColors.current.detailBlue
-            )
-        }
+        SessionModeBadge(
+            label = "Офлайн",
+            containerColor = LocalBrainRacerExtendedColors.current.statusOrange.copy(alpha = 0.18f),
+            contentColor = LocalBrainRacerExtendedColors.current.statusOrange
+        )
     }
 }
 
@@ -745,7 +734,6 @@ private fun ActionZone(
 
 private fun nonScoringResultsMessage(reason: QuizNonScoringReason?): String {
     val detail = when (reason) {
-        QuizNonScoringReason.PRACTICE -> "Режим тренировки."
         QuizNonScoringReason.OFFLINE -> "Нет сети или данные взяты только из кэша устройства."
         QuizNonScoringReason.NOT_SIGNED_IN -> "Войдите в аккаунт, чтобы сохранять прогресс."
         null -> ""
@@ -884,11 +872,14 @@ private fun ResultsScreen(
                 }
             }
 
-            if (uiState.xpEarned > 0) {
+            val showXpCard = uiState.xpEarned > 0 ||
+                    (uiState.duelXpDeferred && uiState.xpBreakdown != null && !uiState.isNonScoringSession)
+            if (showXpCard) {
                 XpCard(
                     uiState = uiState,
                     xpProgressAnimated = xpProgressAnimated,
-                    isReferenceOnly = uiState.isNonScoringSession
+                    isReferenceOnly = uiState.isNonScoringSession,
+                    duelXpDeferred = uiState.duelXpDeferred && uiState.xpEarned == 0
                 )
             }
 
@@ -994,7 +985,8 @@ private fun LevelUpBanner(newLevel: Int) {
 private fun XpCard(
     uiState: QuizUIState,
     xpProgressAnimated: Float,
-    isReferenceOnly: Boolean = false
+    isReferenceOnly: Boolean = false,
+    duelXpDeferred: Boolean = false
 ) {
     val breakdown    = uiState.xpBreakdown
     val currentLevel = uiState.newLevel
@@ -1011,21 +1003,33 @@ private fun XpCard(
                 Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (isReferenceOnly) "XP (справочно)" else "Заработано XP",
+                        when {
+                            isReferenceOnly -> "XP (справочно)"
+                            duelXpDeferred -> "Опыт за дуэль"
+                            else -> "Заработано XP"
+                        },
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    if (isReferenceOnly) {
-                        Text(
-                            "Не сохраняется в профиле",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    when {
+                        isReferenceOnly ->
+                            Text(
+                                "Не сохраняется в профиль",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        duelXpDeferred ->
+                            Text(
+                                "В профиль начисляется только победителю после завершения вызова. Учитываются дневной лимит и повторы с тем же соперником и квизом.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                     }
                 }
                 Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)) {
-                    Text("+${uiState.xpEarned} XP",
+                    Text(
+                        if (duelXpDeferred) "—" else "+${uiState.xpEarned} XP",
                         modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                 }
