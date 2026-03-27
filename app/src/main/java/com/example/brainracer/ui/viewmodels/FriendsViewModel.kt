@@ -312,6 +312,44 @@ class FriendsViewModel: ViewModel() {
         }
     }
 
+    fun setPreselectedChallengeQuiz(quizId: String?) {
+        if (quizId.isNullOrBlank()) {
+            _uiState.update {
+                it.copy(
+                    preselectChallengeQuizId = null,
+                    preselectChallengeQuizTitle = null,
+                    preselectChallengeQuizLoading = false
+                )
+            }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    preselectChallengeQuizId = quizId,
+                    preselectChallengeQuizTitle = null,
+                    preselectChallengeQuizLoading = true
+                )
+            }
+            when (val r = quizRepository.getQuiz(quizId)) {
+                is Result.Success ->
+                    _uiState.update {
+                        it.copy(
+                            preselectChallengeQuizTitle = r.data.title,
+                            preselectChallengeQuizLoading = false
+                        )
+                    }
+                is Result.Error ->
+                    _uiState.update {
+                        it.copy(
+                            preselectChallengeQuizTitle = "Викторина",
+                            preselectChallengeQuizLoading = false
+                        )
+                    }
+            }
+        }
+    }
+
     fun loadChallengePickerQuizzes() {
         viewModelScope.launch {
             _uiState.update { it.copy(challengePickerLoading = true) }

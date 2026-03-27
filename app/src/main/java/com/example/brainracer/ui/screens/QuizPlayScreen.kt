@@ -82,14 +82,15 @@ fun QuizPlayScreen(
     challengeId: String? = null,
     challengeIntroAlreadyShown: Boolean = false,
     challengeIntroCancelToHome: Boolean = false,
+    forceNonScoring: Boolean = false,
     quizViewModel: QuizViewModel = viewModel()
 ) {
     val uiState by quizViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    LaunchedEffect(quizId, challengeId) {
+    LaunchedEffect(quizId, challengeId, forceNonScoring) {
         val online = isNetworkLikelyAvailable(context.applicationContext)
-        quizViewModel.loadQuiz(quizId, challengeId, online)
+        quizViewModel.loadQuiz(quizId, challengeId, online, forceNonScoring)
     }
 
     var challengeIntroAcknowledged by rememberSaveable(quizId, challengeId, challengeIntroAlreadyShown) {
@@ -737,12 +738,16 @@ private fun ActionZone(
 // ══════════════════════════════════════════════════════════════════════════════
 
 private fun nonScoringResultsMessage(reason: QuizNonScoringReason?): String {
-    val detail = when (reason) {
-        QuizNonScoringReason.OFFLINE -> "Нет сети или данные взяты только из кэша устройства."
-        QuizNonScoringReason.NOT_SIGNED_IN -> "Войдите в аккаунт, чтобы сохранять прогресс."
-        null -> ""
+    return when (reason) {
+        QuizNonScoringReason.PRACTICE_REPLAY ->
+            "Повторное прохождение: опыт и статистика не начисляются, результат в облако не сохраняется."
+        QuizNonScoringReason.OFFLINE ->
+            "Результат не учитывается в рейтинге и статистике и не сохраняется. Нет сети или данные взяты только из кэша устройства."
+        QuizNonScoringReason.NOT_SIGNED_IN ->
+            "Результат не учитывается в рейтинге и статистике и не сохраняется. Войдите в аккаунт, чтобы сохранять прогресс."
+        null ->
+            "Результат не учитывается в рейтинге и статистике и не сохраняется."
     }
-    return "Результат не учитывается в рейтинге и статистике и не сохраняется. $detail".trim()
 }
 
 @Composable

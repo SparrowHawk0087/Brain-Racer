@@ -41,8 +41,10 @@ class QuizViewModel : ViewModel() {
     private var questionStartTime = 0L
 
     private var networkAvailableAtStart = true
+    private var forceNonScoringSession = false
 
     private fun sessionCountsTowardProgress(): Boolean {
+        if (forceNonScoringSession) return false
         val hasUser = currentUserId != null
         if (!hasUser) return false
         if (!networkAvailableAtStart) return false
@@ -50,6 +52,7 @@ class QuizViewModel : ViewModel() {
     }
 
     private fun nonScoringReasonForSession(): QuizNonScoringReason? {
+        if (forceNonScoringSession) return QuizNonScoringReason.PRACTICE_REPLAY
         if (sessionCountsTowardProgress()) return null
         if (currentUserId == null) return QuizNonScoringReason.NOT_SIGNED_IN
         if (!networkAvailableAtStart) return QuizNonScoringReason.OFFLINE
@@ -61,18 +64,21 @@ class QuizViewModel : ViewModel() {
     fun loadQuiz(
         quizId: String,
         challengeId: String? = null,
-        networkAvailableAtStart: Boolean = true
+        networkAvailableAtStart: Boolean = true,
+        forceNonScoring: Boolean = false
     ) {
         val prior = _uiState.value
         val challengeMatches = prior.challengeId == challengeId ||
                 (prior.challengeId.isNullOrBlank() && challengeId.isNullOrBlank())
         if (currentQuiz?.id == quizId && challengeMatches &&
             prior.sessionNetworkAvailable == networkAvailableAtStart &&
+            forceNonScoringSession == forceNonScoring &&
             (prior.showResults || prior.isQuizCompleted || prior.question.isNotEmpty())
         ) {
             return
         }
 
+        forceNonScoringSession = forceNonScoring
         this.networkAvailableAtStart = networkAvailableAtStart
 
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -379,7 +385,7 @@ class QuizViewModel : ViewModel() {
         userAnswers.clear()
         totalTimeSpent = 0
         _uiState.value = QuizUIState()
-        loadQuiz(id, cid, online)
+        loadQuiz(id, cid, online, forceNonScoringSession)
     }
 
     fun closeResults() {

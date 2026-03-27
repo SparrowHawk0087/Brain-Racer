@@ -50,7 +50,9 @@ fun FriendsScreen(
     onChallengesClick: () -> Unit = {},
     onQuizzesClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
-    currentRoute: String = "friends"
+    currentRoute: String = "friends",
+    /** Из превью викторины: после загрузки названия — нажатие на карточку друга шлёт вызов */
+    preselectChallengeQuizIdArg: String? = null
 ) {
     // Подписываемся на единое состояние ViewModel.
     // Каждый раз, когда ViewModel обновляет _uiState, Compose автоматически
@@ -60,6 +62,10 @@ fun FriendsScreen(
 
     var challengeTargetFriend by remember { mutableStateOf<User?>(null) }
     val challengeSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    LaunchedEffect(preselectChallengeQuizIdArg) {
+        viewModel.setPreselectedChallengeQuiz(preselectChallengeQuizIdArg)
+    }
 
     LaunchedEffect(uiState.challengeSentMessage) {
         uiState.challengeSentMessage?.let { msg ->
@@ -142,6 +148,28 @@ fun FriendsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            val preId = uiState.preselectChallengeQuizId
+            if (preId != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                    tonalElevation = 1.dp
+                ) {
+                    Text(
+                        text = when {
+                            uiState.preselectChallengeQuizLoading ->
+                                "Загрузка викторины… Нажмите на друга, чтобы бросить вызов."
+                            else ->
+                                "Нажмите на друга — вызов в «${uiState.preselectChallengeQuizTitle ?: "…"}»"
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
 
             // ── Поле поиска ────────────────────────────────────────────────
             OutlinedTextField(
@@ -247,6 +275,17 @@ fun FriendsScreen(
                                 onChallengeFriend = { challengeTargetFriend = it },
                                 onOpenProfile = { friend ->
                                     navController.navigate("profile/${friend.id}")
+                                },
+                                quickChallengeFromQuiz = preId != null,
+                                quickChallengeReady = preId != null &&
+                                    !uiState.preselectChallengeQuizLoading &&
+                                    !uiState.preselectChallengeQuizTitle.isNullOrBlank(),
+                                onQuickChallenge = { friend ->
+                                    val qid = uiState.preselectChallengeQuizId
+                                    val title = uiState.preselectChallengeQuizTitle
+                                    if (qid != null && title != null) {
+                                        viewModel.sendChallenge(friend.id, qid, title)
+                                    }
                                 }
                             )
                             1 -> IncomingRequestsTab(
@@ -422,12 +461,16 @@ private fun FriendsTab(
     friends: List<User>,
     onDelete: (User) -> Unit,
     onChallengeFriend: (User) -> Unit,
-    onOpenProfile: (User) -> Unit
+    onOpenProfile: (User) -> Unit,
+    quickChallengeFromQuiz: Boolean = false,
+    quickChallengeReady: Boolean = false,
+    onQuickChallenge: (User) -> Unit = {}
 ) {
     if (friends.isEmpty()) {
         EmptyState(message = "Пока нет друзей. Найдите людей через поиск выше.")
         return
     }
+    val quickMode = quickChallengeFromQuiz
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -437,7 +480,10 @@ private fun FriendsTab(
                 friend = friend,
                 onDelete = { onDelete(friend) },
                 onChallenge = { onChallengeFriend(friend) },
-                onOpenProfile = { onOpenProfile(friend) }
+                onOpenProfile = { onOpenProfile(friend) },
+                quickChallengeMode = quickMode,
+                quickChallengeReady = quickChallengeReady,
+                onQuickChallenge = { onQuickChallenge(friend) }
             )
         }
     }
@@ -448,7 +494,10 @@ private fun FriendCard(
     friend: User,
     onDelete: () -> Unit,
     onChallenge: () -> Unit,
-    onOpenProfile: () -> Unit
+    onOpenProfile: () -> Unit,
+    quickChallengeMode: Boolean = false,
+    quickChallengeReady: Boolean = false,
+    onQuickChallenge: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -464,10 +513,15 @@ private fun FriendCard(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val mainClick = when {
+                quickChallengeMode && quickChallengeReady -> onQuickChallenge
+                quickChallengeMode -> ({ })
+                else -> onOpenProfile
+            }
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(onClick = onOpenProfile),
+                    .clickable(onClick = mainClick, enabled = !quickChallengeMode || quickChallengeReady),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AvatarCircle(
@@ -486,29 +540,38 @@ private fun FriendCard(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = friend.rank.displayName,
+                        text = when {
+                            quickChallengeMode && quickChallengeReady ->
+                                "Нажмите, чтобы бросить вызов"
+                            quickChallengeMode ->
+                                "Подождите…"
+                            else ->
+                                friend.rank.displayName
+                        },
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            val duelShape = RoundedCornerShape(12.dp)
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(duelShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
-                    .clickable(onClick = onChallenge),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Sports,
-                    contentDescription = "Вызвать на дуэль",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp)
-                )
+            if (!quickChallengeMode) {
+                val duelShape = RoundedCornerShape(12.dp)
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(duelShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
+                        .clickable(onClick = onChallenge),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Sports,
+                        contentDescription = "Вызвать на дуэль",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
             }
-            Spacer(modifier = Modifier.width(4.dp))
             IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Icons.Default.PersonRemove,

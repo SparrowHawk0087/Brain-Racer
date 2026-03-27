@@ -1,6 +1,8 @@
 package com.example.brainracer.ui.components
 
 import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,7 +32,6 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Sports
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,7 +43,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -94,7 +94,7 @@ private fun difficultyLabel(d: QuizDifficulty): String = when (d) {
 fun QuizDetailScreen(
     quizId: String,
     navController: NavController,
-    onNavigateToPlay: (quizId: String) -> Unit = { }
+    onNavigateToPlay: (quizId: String, practiceReplay: Boolean) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -104,7 +104,6 @@ fun QuizDetailScreen(
 
     var quiz by remember { mutableStateOf<Quiz?>(null) }
     var isLoading by remember { mutableStateOf(true) }
-    var showFriendDialog by remember { mutableStateOf(false) }
     var soloAlreadyCompleted by remember { mutableStateOf(false) }
     var soloCheckDone by remember { mutableStateOf(false) }
 
@@ -211,8 +210,23 @@ fun QuizDetailScreen(
                             quizTitle = q.title,
                             totalTimesTaken = q.stats.timesTaken,
                             soloAlreadyCompleted = soloCheckDone && soloAlreadyCompleted,
-                            onStart = { onNavigateToPlay(quizId) },
-                            onChallenge = { showFriendDialog = true },
+                            onStart = {
+                                val replay = soloCheckDone && soloAlreadyCompleted
+                                onNavigateToPlay(quizId, replay)
+                            },
+                            onChallenge = {
+                                if (currentUserId.isBlank()) {
+                                    Toast.makeText(
+                                        context,
+                                        "Войдите в аккаунт, чтобы бросать вызовы",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    navController.navigate(
+                                        "friends/$currentUserId?preselectQuizId=${Uri.encode(quizId)}"
+                                    )
+                                }
+                            },
                             onShare = {
                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
@@ -233,42 +247,6 @@ fun QuizDetailScreen(
         }
     }
 
-    // ── Диалог выбора друга для вызова ───────────────────────────────────────
-    if (showFriendDialog) {
-        AlertDialog(
-            onDismissRequest = { showFriendDialog = false },
-            containerColor = LocalBrainRacerExtendedColors.current.detailSurface,
-            shape = RoundedCornerShape(20.dp),
-            title = {
-                Text(
-                    "Бросить вызов",
-                    color = LocalBrainRacerExtendedColors.current.detailTextPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(
-                    "Выберите друга, которому хотите бросить вызов в викторине «${quiz?.title}».\n\nФункция доступна на экране «Друзья» → выберите друга → «Вызвать».",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    lineHeight = 21.sp
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showFriendDialog = false
-                    navController.navigate("friends/$currentUserId")
-                }) {
-                    Text("Перейти к друзьям", color = LocalBrainRacerExtendedColors.current.detailAccentPurple, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showFriendDialog = false }) {
-                    Text("Отмена", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        )
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -492,7 +470,7 @@ private fun QuizActionsSection(
     ) {
         if (soloAlreadyCompleted) {
             Text(
-                "Вы уже прошли эту викторину в соло. Опыт за повторное прохождение не начисляется. Можно сыграть в вызове с другом.",
+                "Вы уже прошли эту викторину в соло. «Пройти снова» — для тренировки: опыт и статистика не начисляются. Вызов другу — как обычно.",
                 fontSize = 13.sp,
                 lineHeight = 19.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -509,20 +487,18 @@ private fun QuizActionsSection(
         // Начать викторину
         Button(
             onClick = onStart,
-            enabled = !soloAlreadyCompleted,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = LocalBrainRacerExtendedColors.current.detailAccentPurple,
-                disabledContainerColor = LocalBrainRacerExtendedColors.current.detailSurfaceAlt
+                containerColor = LocalBrainRacerExtendedColors.current.detailAccentPurple
             )
         ) {
             Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                if (soloAlreadyCompleted) "Уже пройдена" else "Начать викторину",
+                if (soloAlreadyCompleted) "Пройти снова" else "Начать викторину",
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 16.sp
             )

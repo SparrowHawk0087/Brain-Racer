@@ -8,7 +8,9 @@ enum class QuizNonScoringReason {
     /** Нет подключения при старте сессии */
     OFFLINE,
     /** Нет вошедшего пользователя */
-    NOT_SIGNED_IN
+    NOT_SIGNED_IN,
+    /** Викторина уже пройдена в соло — повтор без опыта и без записи в статистику */
+    PRACTICE_REPLAY
 }
 
 /**
