@@ -1,0 +1,27 @@
+name: Generate Changelog
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Generate changelog
+        uses: orhun/git-cliff-action@v2
+        with:
+          config: cliff.toml
+          args: --verbose
+      
+      - name: Commit changelog
+        run: |
+          git config user.name 'github-actions'
+          git config user.email 'github-actions@github.com'
+          git add CHANGELOG.md
+          git commit -m "docs: update changelog for ${{ github.event.release.tag_name }}" || exit 0
+          git push
