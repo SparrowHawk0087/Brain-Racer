@@ -28,6 +28,8 @@ import com.example.brainracer.data.utils.Result
 import com.example.brainracer.ui.components.BottomBar
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.utils.QuizItem
+import com.example.brainracer.ui.utils.customAuthorCaption
+import com.example.brainracer.ui.utils.toQuizItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -51,18 +53,7 @@ fun QuizListScreen(
         withContext(Dispatchers.IO) {
             when (val r = repo.getPopularQuizzes(limit = 80)) {
                 is Result.Success -> {
-                    quizzes = r.data.map { quiz ->
-                        QuizItem(
-                            id = quiz.id,
-                            title = quiz.title,
-                            category = quiz.categoryId,
-                            questionCount = quiz.questions.size,
-                            difficulty = quiz.difficulty.name,
-                            description = quiz.description,
-                            rating = quiz.stats.averageRating,
-                            playCount = quiz.stats.timesTaken
-                        )
-                    }
+                    quizzes = r.data.map { it.toQuizItem() }
                     error = null
                 }
                 is Result.Error -> {
@@ -155,7 +146,7 @@ private fun QuizListRowCard(quiz: QuizItem, colorIndex: Int, onClick: () -> Unit
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(86.dp)
+            .heightIn(min = 86.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
@@ -192,6 +183,16 @@ private fun QuizListRowCard(quiz: QuizItem, colorIndex: Int, onClick: () -> Unit
                     Text(quiz.category, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                     Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("${quiz.questionCount} вопр.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                quiz.customAuthorCaption()?.let { cap ->
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        cap,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
             Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))

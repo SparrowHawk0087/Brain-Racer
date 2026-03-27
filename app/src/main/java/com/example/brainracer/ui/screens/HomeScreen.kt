@@ -37,6 +37,7 @@ import com.example.brainracer.ui.components.BottomBar
 import com.example.brainracer.ui.components.ChallengeFriendQuizSheetContent
 import com.example.brainracer.ui.utils.HOME_CATEGORY_CUSTOM
 import com.example.brainracer.ui.utils.QuizItem
+import com.example.brainracer.ui.utils.customAuthorCaption
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import com.example.brainracer.ui.viewmodels.HomeViewModel
@@ -669,6 +670,16 @@ private fun QuizRowCard(quiz: QuizItem, colorIndex: Int, onClick: () -> Unit) {
                     Text(quiz.category, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                     Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("${quiz.questionCount} вопр.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                quiz.customAuthorCaption()?.let { cap ->
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        cap,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
             Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))

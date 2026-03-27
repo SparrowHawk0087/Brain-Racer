@@ -46,8 +46,10 @@ class QuizRepositoryImpl: QuizRepository {
     override suspend fun getQuiz(quizId: String): Result<Quiz> = try {
         val document = quizzesCollection.document(quizId).get().await()
         if (document.exists()) {
-            val quiz = document.toObject(Quiz::class.java)
-            Result.success(mergeQuizPlayStats(quiz ?: throw Exception("Quiz data is null")))
+            val parsed = document.toObject(Quiz::class.java)
+                ?: throw Exception("Quiz data is null")
+            val quiz = if (parsed.id.isBlank()) parsed.copy(id = document.id) else parsed
+            Result.success(mergeQuizPlayStats(quiz))
         } else {
             Result.error(Exception("Quiz not found"))
         }
@@ -114,16 +116,39 @@ class QuizRepositoryImpl: QuizRepository {
         Result.error(e)
     }
     // Получение квизов, созданных конкретным юзером
-    override suspend fun getQuizzesByUser(userId: String): Result<List<Quiz>> = try {
-        val res = quizzesCollection
-            .whereEqualTo("createdBy",userId)
-            .orderBy("createdAt",Query.Direction.DESCENDING)
-            .get()
-            .await()
-        val quizzes = res.documents.mapNotNull { it.toObject(Quiz::class.java)}
-        Result.success(quizzes)
-    } catch (e: Exception) {
-        Result.error(e)
+    override suspend fun getQuizzesByUser(userId: String): Result<List<Quiz>> {
+        if (userId.isBlank()) return Result.success(emptyList())
+        return try {
+            try {
+                val res = quizzesCollection
+                    .whereEqualTo("createdBy", userId)
+                    .orderBy("createdAt", Query.Direction.DESCENDING)
+                    .get()
+                    .await()
+                Result.success(res.documents.mapNotNull { it.toObject(Quiz::class.java) })
+            } catch (e: FirebaseFirestoreException) {
+                if (e.code == FirebaseFirestoreException.Code.FAILED_PRECONDITION) {
+                    Log.w(
+                        "QuizRepository",
+                        "getQuizzesByUser: нет индекса createdBy+createdAt — запасной запрос без orderBy",
+                        e
+                    )
+                    val res = quizzesCollection
+                        .whereEqualTo("createdBy", userId)
+                        .limit(100)
+                        .get()
+                        .await()
+                    val list = res.documents
+                        .mapNotNull { it.toObject(Quiz::class.java) }
+                        .sortedByDescending { it.createdAt.toDate().time }
+                    Result.success(list)
+                } else {
+                    Result.error(e)
+                }
+            }
+        } catch (e: Exception) {
+            Result.error(e)
+        }
     }
 
     // Создание квиза

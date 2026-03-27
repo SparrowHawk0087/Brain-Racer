@@ -25,12 +25,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Sports
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,6 +44,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -72,6 +75,7 @@ import com.example.brainracer.data.local.QuizOfflineCache
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.data.utils.Result
+import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
 import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.QuizDifficulty
 import com.example.brainracer.ui.theme.BrainRacerColorTokens
@@ -112,6 +116,8 @@ fun QuizDetailScreen(
     var soloAlreadyCompleted by remember { mutableStateOf(false) }
     var soloCheckDone by remember { mutableStateOf(false) }
     var mySavedPlayCount by remember { mutableIntStateOf(0) }
+    var showDeleteQuizDialog by remember { mutableStateOf(false) }
+    var isDeletingQuiz by remember { mutableStateOf(false) }
 
     // Загружаем квиз
     LaunchedEffect(quizId) {
@@ -182,6 +188,67 @@ fun QuizDetailScreen(
         onDispose { lifecycle.removeObserver(observer) }
     }
 
+    val isQuizOwner = currentUserId.isNotBlank() && quiz?.createdBy == currentUserId
+
+    if (showDeleteQuizDialog && quiz != null) {
+        val qDel = quiz!!
+        AlertDialog(
+            onDismissRequest = { if (!isDeletingQuiz) showDeleteQuizDialog = false },
+            title = { Text("Удалить викторину?") },
+            text = {
+                Text(
+                    "«${qDel.title}» будет удалена безвозвратно.",
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            isDeletingQuiz = true
+                            when (val r = quizRepository.deleteQuiz(qDel.id)) {
+                                is Result.Success -> {
+                                    QuizOfflineCache.remove(qDel.id)
+                                    ProfileAfterQuizRefresh.notify(currentUserId)
+                                    Toast.makeText(context, "Викторина удалена", Toast.LENGTH_SHORT).show()
+                                    showDeleteQuizDialog = false
+                                    navController.popBackStack()
+                                }
+                                is Result.Error -> {
+                                    Toast.makeText(
+                                        context,
+                                        r.exception.message ?: "Не удалось удалить",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                            isDeletingQuiz = false
+                        }
+                    },
+                    enabled = !isDeletingQuiz,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    if (isDeletingQuiz) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Text("Удалить")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteQuizDialog = false },
+                    enabled = !isDeletingQuiz
+                ) { Text("Отмена") }
+            }
+        )
+    }
+
     Scaffold(
         containerColor = LocalBrainRacerExtendedColors.current.detailBackground,
         topBar = {
@@ -250,6 +317,8 @@ fun QuizDetailScreen(
                             mySavedPlayCount = mySavedPlayCount,
                             signedIn = currentUserId.isNotBlank(),
                             soloAlreadyCompleted = soloCheckDone && soloAlreadyCompleted,
+                            isOwner = isQuizOwner,
+                            onRequestDelete = { showDeleteQuizDialog = true },
                             onStart = {
                                 val replay = soloCheckDone && soloAlreadyCompleted
                                 onNavigateToPlay(quizId, replay)
@@ -374,6 +443,16 @@ private fun QuizInfoSection(quiz: Quiz) {
             lineHeight = 30.sp
         )
 
+        if (quiz.id.startsWith("quiz_custom_") && quiz.creatorNickname.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Автор: ${quiz.creatorNickname}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
         Spacer(Modifier.height(14.dp))
 
         // Бейджи
@@ -492,6 +571,8 @@ private fun QuizActionsSection(
     mySavedPlayCount: Int,
     signedIn: Boolean,
     soloAlreadyCompleted: Boolean,
+    isOwner: Boolean,
+    onRequestDelete: () -> Unit,
     onStart: () -> Unit,
     onChallenge: () -> Unit,
     onShare: () -> Unit
@@ -578,6 +659,24 @@ private fun QuizActionsSection(
                 "Поделиться",
                 fontSize = 14.sp
             )
+        }
+
+        if (isOwner) {
+            OutlinedButton(
+                onClick = onRequestDelete,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+            ) {
+                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Удалить викторину", fontSize = 14.sp)
+            }
         }
     }
 }

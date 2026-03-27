@@ -20,6 +20,7 @@ import com.example.brainracer.domain.entities.QuestionType
 import com.example.brainracer.ui.utils.HOME_CATEGORY_CUSTOM
 import com.example.brainracer.ui.utils.HomeUiState
 import com.example.brainracer.ui.utils.QuizItem
+import com.example.brainracer.ui.utils.toQuizItem
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessaging
@@ -158,18 +159,7 @@ class HomeViewModel : ViewModel() {
 
         when (val result = quizRepository.getPopularQuizzes(limit = 100)) {
             is Result.Success -> {
-                val items = result.data.map { quiz ->
-                    QuizItem(
-                        id            = quiz.id,
-                        title         = quiz.title,
-                        category      = quiz.categoryId,
-                        questionCount = quiz.questions.size,
-                        difficulty    = quiz.difficulty.name,
-                        description   = quiz.description,
-                        rating        = quiz.stats.averageRating,
-                        playCount     = quiz.stats.timesTaken
-                    )
-                }
+                val items = result.data.map { it.toQuizItem() }
                 allQuizzes = items
                 loadCustomQuizzesIntoCache()
                 val filtered = quizzesForSelectedCategory(_uiState.value.selectedCategory)
@@ -211,18 +201,7 @@ class HomeViewModel : ViewModel() {
     private suspend fun loadCustomQuizzesIntoCache() {
         when (val r = quizRepository.getPublicCustomQuizzes(limit = 50)) {
             is Result.Success -> {
-                customQuizzesCache = r.data.map { quiz ->
-                    QuizItem(
-                        id            = quiz.id,
-                        title         = quiz.title,
-                        category      = quiz.categoryId,
-                        questionCount = quiz.questions.size,
-                        difficulty    = quiz.difficulty.name,
-                        description   = quiz.description,
-                        rating        = quiz.stats.averageRating,
-                        playCount     = quiz.stats.timesTaken
-                    )
-                }
+                customQuizzesCache = r.data.map { it.toQuizItem() }
             }
             is Result.Error -> {
                 customQuizzesCache = emptyList()
@@ -349,18 +328,7 @@ class HomeViewModel : ViewModel() {
                 else -> emptyList()
             }
             val quizzes = when (val r = quizRepository.getPopularQuizzes(limit = 80)) {
-                is Result.Success -> r.data.map { quiz ->
-                    QuizItem(
-                        id            = quiz.id,
-                        title         = quiz.title,
-                        category      = quiz.categoryId,
-                        questionCount = quiz.questions.size,
-                        difficulty    = quiz.difficulty.name,
-                        description   = quiz.description,
-                        rating        = quiz.stats.averageRating,
-                        playCount     = quiz.stats.timesTaken
-                    )
-                }
+                is Result.Success -> r.data.map { it.toQuizItem() }
                 is Result.Error -> emptyList()
             }
             val quizList = quizzes.ifEmpty { allQuizzes }

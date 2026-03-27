@@ -1,6 +1,7 @@
 package com.example.brainracer.ui.utils
 
 import androidx.compose.runtime.Stable
+import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.UserStats
 import java.text.SimpleDateFormat
 import java.util.*
@@ -85,7 +86,9 @@ data class ProfileUIState(
     val achievementsCount: Int = 0,
     val friendsCount: Int = 0,
     val bio: String = "",
-    val interests: List<String> = emptyList()
+    val interests: List<String> = emptyList(),
+    /** id викторины, для которой идёт удаление (свой профиль). */
+    val deletingQuizId: String? = null
 )
 
 @Stable
@@ -98,6 +101,23 @@ data class QuizItem(
     val description: String,
     val rating: Double,
     val playCount: Int,
+    val authorNickname: String = "",
+)
+
+/** UI-строка «Автор: …» только для кастомных викторин с сохранённым ником. */
+fun QuizItem.customAuthorCaption(): String? =
+    if (id.startsWith("quiz_custom_") && authorNickname.isNotBlank()) "Автор: $authorNickname" else null
+
+fun Quiz.toQuizItem(): QuizItem = QuizItem(
+    id = id,
+    title = title,
+    category = categoryId,
+    questionCount = questions.size,
+    difficulty = difficulty.name,
+    description = description,
+    rating = stats.averageRating,
+    playCount = stats.timesTaken,
+    authorNickname = creatorNickname
 )
 
 object ProfileAchievements {

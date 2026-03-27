@@ -35,6 +35,8 @@ import com.example.brainracer.domain.entities.QuizDifficulty
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.utils.HOME_CATEGORY_CUSTOM
 import com.example.brainracer.ui.utils.QuizItem
+import com.example.brainracer.ui.utils.customAuthorCaption
+import com.example.brainracer.ui.utils.toQuizItem
 import kotlinx.coroutines.delay
 
 private val allCategories = listOf(
@@ -77,18 +79,7 @@ fun SearchScreen(
     }
 
     fun mapQuizRows(data: List<com.example.brainracer.domain.entities.Quiz>): List<QuizItem> =
-        data.map { quiz ->
-            QuizItem(
-                id            = quiz.id,
-                title         = quiz.title,
-                category      = quiz.categoryId,
-                questionCount = quiz.questions.size,
-                difficulty    = quiz.difficulty.name,
-                description   = quiz.description,
-                rating        = quiz.stats.averageRating,
-                playCount     = quiz.stats.timesTaken
-            )
-        }
+        data.map { it.toQuizItem() }
 
     /**
      * Режим только кастомных: вкладка «Кастомные» или вход с `customOnly=true` пока выбрано «Все».
@@ -469,6 +460,16 @@ private fun SearchResultCard(
                     }
                     // Вопросы
                     Text("${quiz.questionCount} вопр.", fontSize = 11.sp, color = cs.onSurfaceVariant)
+                }
+                quiz.customAuthorCaption()?.let { cap ->
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        cap,
+                        fontSize = 11.sp,
+                        color = cs.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
 

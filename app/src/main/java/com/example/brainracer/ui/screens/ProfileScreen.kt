@@ -56,6 +56,7 @@ import com.example.brainracer.ui.utils.PassedQuizUi
 import com.example.brainracer.ui.utils.ProfileGoalBadges
 import com.example.brainracer.ui.utils.ProfileUtils
 import com.example.brainracer.ui.utils.QuizItem
+import com.example.brainracer.ui.utils.customAuthorCaption
 import com.example.brainracer.ui.utils.TopicStatUi
 import com.example.brainracer.ui.theme.BrainRacerTheme
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
@@ -87,6 +88,7 @@ fun ProfileScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var quizPendingDelete by remember { mutableStateOf<QuizItem?>(null) }
     var selectedTab by remember { mutableIntStateOf(0) }
     var createdHistoryExpanded by remember { mutableStateOf(true) }
     var passedHistoryExpanded by remember { mutableStateOf(true) }
@@ -308,6 +310,57 @@ fun ProfileScreen(
         }
     }
 
+    quizPendingDelete?.let { pending ->
+        val deletingThis = uiState.deletingQuizId == pending.id
+        AlertDialog(
+            onDismissRequest = { if (!deletingThis) quizPendingDelete = null },
+            title = { Text("Удалить викторину?") },
+            text = {
+                Text(
+                    "«${pending.title}» будет удалена безвозвратно.",
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        profileViewModel.deleteCreatedQuiz(pending.id, userId) { ok, err ->
+                            quizPendingDelete = null
+                            if (ok) {
+                                Toast.makeText(context, "Викторина удалена", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    err ?: "Не удалось удалить",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    },
+                    enabled = !deletingThis,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    if (deletingThis) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Text("Удалить")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { quizPendingDelete = null },
+                    enabled = !deletingThis
+                ) { Text("Отмена") }
+            }
+        )
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets.systemBars,
         containerColor = MaterialTheme.colorScheme.background,
@@ -463,7 +516,10 @@ fun ProfileScreen(
                                         quiz = quiz,
                                         colorIndex = index,
                                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
-                                        onClick = { navController.navigate("quiz_detail/${quiz.id}") }
+                                        onClick = { navController.navigate("quiz_detail/${quiz.id}") },
+                                        showDeleteButton = isOwnProfile,
+                                        isDeleting = uiState.deletingQuizId == quiz.id,
+                                        onDeleteClick = { quizPendingDelete = quiz }
                                     )
                                 }
                             }
@@ -984,50 +1040,88 @@ private fun CreatedQuizRow(
     quiz: QuizItem,
     colorIndex: Int,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    showDeleteButton: Boolean = false,
+    isDeleting: Boolean = false,
+    onDeleteClick: () -> Unit = {}
 ) {
     val cardGradients = LocalBrainRacerExtendedColors.current.cardGradients
     val gradient = cardGradients[colorIndex % cardGradients.size]
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(86.dp)
+            .heightIn(min = 86.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
     ) {
         Row(
-            Modifier.fillMaxSize().padding(13.dp),
+            Modifier.fillMaxWidth().padding(13.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
+            Row(
                 modifier = Modifier
-                    .size(54.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(Brush.linearGradient(gradient, Offset.Zero, Offset(400f, 400f))),
-                contentAlignment = Alignment.Center
+                    .weight(1f)
+                    .clickable(onClick = onClick),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Quiz, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(26.dp))
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(Brush.linearGradient(gradient, Offset.Zero, Offset(400f, 400f))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Quiz, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(26.dp))
+                }
+                Spacer(Modifier.width(13.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        quiz.title,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(quiz.category, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${quiz.questionCount} вопр.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    quiz.customAuthorCaption()?.let { cap ->
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            cap,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
             }
-            Spacer(Modifier.width(13.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    quiz.title,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(quiz.category, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                    Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("${quiz.questionCount} вопр.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (showDeleteButton) {
+                IconButton(
+                    onClick = onDeleteClick,
+                    enabled = !isDeleting
+                ) {
+                    if (isDeleting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.DeleteOutline,
+                            contentDescription = "Удалить викторину",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
-            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
         }
     }
 }

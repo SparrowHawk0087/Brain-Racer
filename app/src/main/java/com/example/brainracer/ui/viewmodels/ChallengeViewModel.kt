@@ -13,6 +13,7 @@ import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.domain.entities.ChallengeStatus
 import com.example.brainracer.domain.entities.User
 import com.example.brainracer.ui.utils.QuizItem
+import com.example.brainracer.ui.utils.toQuizItem
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -216,18 +217,7 @@ class ChallengeViewModel : ViewModel() {
                 else -> emptyList()
             }
             val quizzes = when (val r = quizRepository.getPopularQuizzes(limit = 80)) {
-                is Result.Success -> r.data.map { quiz ->
-                    QuizItem(
-                        id            = quiz.id,
-                        title         = quiz.title,
-                        category      = quiz.categoryId,
-                        questionCount = quiz.questions.size,
-                        difficulty    = quiz.difficulty.name,
-                        description   = quiz.description,
-                        rating        = quiz.stats.averageRating,
-                        playCount     = quiz.stats.timesTaken
-                    )
-                }
+                is Result.Success -> r.data.map { it.toQuizItem() }
                 is Result.Error -> emptyList()
             }
             _uiState.update {

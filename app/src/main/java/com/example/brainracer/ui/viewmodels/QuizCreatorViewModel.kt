@@ -6,8 +6,10 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
+import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.data.utils.ImageOptimizerUtil
 import com.example.brainracer.data.utils.Result
+import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
 import com.example.brainracer.domain.entities.Question
 import com.example.brainracer.domain.entities.QuestionType
 import com.example.brainracer.domain.entities.Quiz
@@ -161,6 +163,7 @@ class QuizCreatorViewModel : ViewModel() {
     val uiState: StateFlow<QuizCreatorUiState> = _uiState.asStateFlow()
 
     private val quizRepository = QuizRepositoryImpl()
+    private val userRepository = UserRepositoryImpl()
     private val auth           = FirebaseAuth.getInstance()
     private val firestore      = FirebaseFirestore.getInstance()
     private val storage        = FirebaseStorage.getInstance()
@@ -437,6 +440,10 @@ class QuizCreatorViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val quizId = "quiz_custom_${UUID.randomUUID().toString().take(8)}"
+                val creatorNick = when (val u = userRepository.getUser(userId)) {
+                    is Result.Success -> u.data.nickname.trim().takeIf { it.isNotBlank() }
+                    else -> null
+                } ?: auth.currentUser?.displayName?.trim()?.takeIf { it.isNotBlank() }.orEmpty()
                 val quiz = Quiz(
                     id              = quizId,
                     title           = draft.title,
@@ -445,6 +452,7 @@ class QuizCreatorViewModel : ViewModel() {
                     difficulty      = draft.difficulty,
                     isPublic        = true,
                     createdBy       = userId,
+                    creatorNickname = creatorNick,
                     imageUrl        = draft.coverUrl ?: "",
                     timePerQuestion = draft.timePerQuestion,
                     createdAt       = Timestamp.now(),
@@ -470,6 +478,7 @@ class QuizCreatorViewModel : ViewModel() {
                             firestore.collection("users").document(userId)
                                 .collection("drafts").document(draft.id).delete().await()
                         } catch (_: Exception) {}
+                        ProfileAfterQuizRefresh.notify(userId)
                         _uiState.update { it.copy(isPublishing = false, publishSuccess = true, currentDraft = QuizDraft()) }
                         loadDrafts()
                         onSuccess()
