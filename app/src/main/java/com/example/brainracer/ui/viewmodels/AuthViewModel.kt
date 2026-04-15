@@ -5,17 +5,20 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.domain.entities.User
+import com.example.brainracer.domain.entities.normalizeNicknameForStorage
 import com.example.brainracer.data.utils.Result
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.UserProfileChangeRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -26,6 +29,9 @@ class AuthViewModel : ViewModel() {
     val user: StateFlow<com.google.firebase.auth.FirebaseUser?> = _user
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
+
+    private val _deleteAccountError = MutableStateFlow<String?>(null)
+    val deleteAccountError: StateFlow<String?> = _deleteAccountError.asStateFlow()
 
     fun signIn(email: String, password: String) {
         viewModelScope.launch {
@@ -44,38 +50,74 @@ class AuthViewModel : ViewModel() {
             try {
                 val authResult = auth.createUserWithEmailAndPassword(email, password).await()
                 val firebaseUser = authResult.user
+                val trimmedNick = username.trim()
+                val normalized = normalizeNicknameForStorage(trimmedNick)
 
-                // Обновляем профиль в Firebase Auth
-                firebaseUser?.let { user ->
-                    val profile = UserProfileChangeRequest.Builder()
-                        .setDisplayName(username)
-                        .build()
-                    user.updateProfile(profile).await()
+                suspend fun deleteNewAuthUserAndFail(message: String) {
+                    _error.value = message
+                    try {
+                        firebaseUser?.delete()?.await()
+                    } catch (deleteEx: Exception) {
+                        Log.e("AuthViewModel", "Failed to delete Firebase user after nick check", deleteEx)
+                    }
+                    _user.value = null
                 }
 
-                // Создаём пользователя в Firestore
-                if (firebaseUser != null) {
-                    val user = User(
-                        id = firebaseUser.uid,
-                        email = email,
-                        nickname = username,
-                        createdAt = Timestamp.now(),
-                        lastLogin = Timestamp.now()
-                    )
+                if (firebaseUser == null) return@launch
 
-                    val result = userRepository.createUser(user)
-                    if (result is Result.Success) {
-                        _user.value = auth.currentUser
-                    } else if (result is Result.Error) {
-                        _error.value =
-                            "Не удалось создать профиль: ${result.exception.message ?: "ошибка сервера"}"
-                        try {
-                            firebaseUser.delete().await()
-                        } catch (deleteEx: Exception) {
-                            Log.e("AuthViewModel", "Failed to delete Firebase user", deleteEx)
-                        }
-                        _user.value = null
+                if (normalized.isBlank()) {
+                    deleteNewAuthUserAndFail("Введите никнейм")
+                    return@launch
+                }
+
+                if (trimmedNick.all { it.isDigit() }) {
+                    deleteNewAuthUserAndFail("Никнейм не может состоять только из цифр")
+                    return@launch
+                }
+
+                when (val nickCount = userRepository.countUsersWithNicknameNormalized(normalized)) {
+                    is Result.Error -> {
+                        deleteNewAuthUserAndFail(
+                            "Не удалось проверить никнейм: ${nickCount.exception.message ?: "ошибка"}"
+                        )
+                        return@launch
                     }
+                    is Result.Success -> {
+                        if (nickCount.data > 0) {
+                            deleteNewAuthUserAndFail("Этот никнейм уже занят")
+                            return@launch
+                        }
+                    }
+                }
+
+                // Обновляем профиль в Firebase Auth
+                val profile = UserProfileChangeRequest.Builder()
+                    .setDisplayName(trimmedNick)
+                    .build()
+                firebaseUser.updateProfile(profile).await()
+
+                // Создаём пользователя в Firestore
+                val user = User(
+                    id = firebaseUser.uid,
+                    email = email,
+                    nickname = trimmedNick,
+                    nicknameNormalized = normalized,
+                    createdAt = Timestamp.now(),
+                    lastLogin = Timestamp.now()
+                )
+
+                val result = userRepository.createUser(user)
+                if (result is Result.Success) {
+                    _user.value = auth.currentUser
+                } else if (result is Result.Error) {
+                    _error.value =
+                        "Не удалось создать профиль: ${result.exception.message ?: "ошибка сервера"}"
+                    try {
+                        firebaseUser.delete().await()
+                    } catch (deleteEx: Exception) {
+                        Log.e("AuthViewModel", "Failed to delete Firebase user", deleteEx)
+                    }
+                    _user.value = null
                 }
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing up", e)
@@ -105,13 +147,30 @@ class AuthViewModel : ViewModel() {
 
     fun deleteAccount() {
         viewModelScope.launch {
+            _deleteAccountError.value = null
             try {
                 auth.currentUser?.delete()?.await()
                 _user.value = auth.currentUser
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error deleting account", e)
+                _deleteAccountError.value = userFacingDeleteAccountMessage(e)
             }
         }
+    }
+
+    fun clearDeleteAccountError() {
+        _deleteAccountError.value = null
+    }
+
+    private fun userFacingDeleteAccountMessage(e: Exception): String = when (e) {
+        is FirebaseAuthRecentLoginRequiredException ->
+            "Сессия устарела. Выйдите из аккаунта и войдите снова, затем повторите удаление."
+        is FirebaseAuthException -> when (e.errorCode) {
+            "ERROR_REQUIRES_RECENT_LOGIN" ->
+                "Сессия устарела. Выйдите из аккаунта и войдите снова, затем повторите удаление."
+            else -> userFacingAuthMessage(e)
+        }
+        else -> userFacingAuthMessage(e)
     }
 
     fun checkAuthStatus() {

@@ -61,6 +61,37 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
+    override suspend fun countUsersWithNicknameNormalized(
+        normalized: String,
+        excludeUserId: String?
+    ): Result<Int> = try {
+        if (normalized.isBlank()) {
+            Result.success(0)
+        } else {
+            val snap = usersCollection
+                .whereEqualTo("nickname_normalized", normalized)
+                .get()
+                .await()
+            val n = if (excludeUserId != null) {
+                snap.documents.count { it.id != excludeUserId }
+            } else {
+                snap.documents.size
+            }
+            Result.success(n)
+        }
+    } catch (e: Exception) {
+        Result.error(e)
+    }
+
+    override suspend fun mergeNicknameNormalized(userId: String, normalized: String): Result<Unit> = try {
+        usersCollection.document(userId)
+            .set(mapOf("nickname_normalized" to normalized), SetOptions.merge())
+            .await()
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.error(e)
+    }
+
     // ── Создать пользователя ──────────────────────────────────────────────
     override suspend fun createUser(user: User): Result<Unit> = try {
         usersCollection.document(user.id).set(user).await()

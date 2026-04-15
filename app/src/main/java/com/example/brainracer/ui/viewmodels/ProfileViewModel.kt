@@ -10,6 +10,7 @@ import com.example.brainracer.data.utils.ImageOptimizerUtil
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.domain.entities.LevelSystem
 import com.example.brainracer.domain.entities.User as DomainUser
+import com.example.brainracer.domain.entities.normalizeNicknameForStorage
 import com.example.brainracer.ui.utils.PassedQuizUi
 import com.example.brainracer.ui.utils.ProfileAchievements
 import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
@@ -19,6 +20,7 @@ import com.example.brainracer.ui.utils.QuizItem
 import com.example.brainracer.ui.utils.toQuizItem
 import com.example.brainracer.ui.utils.TopicStatUi
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
@@ -306,15 +309,47 @@ class ProfileViewModel : ViewModel() {
     }
 
     fun updateUsername(userId: String, newUsername: String) {
+        val trimmed = newUsername.trim()
+        val normalized = normalizeNicknameForStorage(trimmed)
+        if (trimmed.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Введите никнейм") }
+            return
+        }
         viewModelScope.launch {
+            when (val nickCount = userRepository.countUsersWithNicknameNormalized(normalized, userId)) {
+                is Result.Error -> {
+                    _uiState.update {
+                        it.copy(errorMessage = "Не удалось проверить никнейм: ${nickCount.exception.message}")
+                    }
+                    return@launch
+                }
+                is Result.Success -> {
+                    if (nickCount.data > 0) {
+                        _uiState.update { it.copy(errorMessage = "Этот никнейм уже занят") }
+                        return@launch
+                    }
+                }
+            }
             when (val userResult = userRepository.getUser(userId)) {
                 is Result.Success -> {
                     val u = userResult.data
-                    val updatedUser = u.copy(nickname = newUsername)
+                    val updatedUser = u.copy(
+                        nickname = trimmed,
+                        nicknameNormalized = normalized
+                    )
 
                     when (val updateResult = userRepository.updateUser(updatedUser)) {
                         is Result.Success -> {
-                            _uiState.update { it.copy(username = newUsername) }
+                            auth.currentUser?.let { fu ->
+                                try {
+                                    fu.updateProfile(
+                                        UserProfileChangeRequest.Builder()
+                                            .setDisplayName(trimmed)
+                                            .build()
+                                    ).await()
+                                } catch (_: Exception) { }
+                            }
+                            _uiState.update { it.copy(username = trimmed) }
                         }
                         is Result.Error -> {
                             _uiState.update {

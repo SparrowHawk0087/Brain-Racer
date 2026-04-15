@@ -123,7 +123,7 @@ fun ForgotPasswordScreen(
 
             AuthStyledTextField(
                 value = email,
-                onValueChange = { email = it },
+                onValueChange = { email = sanitizeEmailDisallowCyrillicLocalPart(it) },
                 label = "Электронная почта",
                 placeholder = "Введите email",
                 isError = email.isNotBlank() && !isEmailValid && emailValidationMessage.isNotEmpty(),
