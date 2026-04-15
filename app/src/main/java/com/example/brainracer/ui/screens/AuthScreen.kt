@@ -158,14 +158,23 @@ fun AuthScreen(
                     onValueChange = { username = it },
                     label = "Имя пользователя",
                     placeholder = "Придумайте никнейм",
-                    isError = username.contains(" ") || username.isEmpty(),
+                    isError = !isValidUsername(username),
                     supportingText = {
-                        if (username.contains(" ") || username.isEmpty()) {
-                            Text(
-                                "Никнейм не может быть пустым или содержать пробелы",
-                                fontSize = 12.sp,
-                                color = colorScheme.onSurfaceVariant
-                            )
+                        when {
+                            username.contains(" ") || username.isEmpty() -> {
+                                Text(
+                                    "Никнейм не может быть пустым или содержать пробелы",
+                                    fontSize = 12.sp,
+                                    color = colorScheme.onSurfaceVariant
+                                )
+                            }
+                            username.isNotBlank() && username.all { it.isDigit() } -> {
+                                Text(
+                                    "Никнейм не может состоять только из цифр",
+                                    fontSize = 12.sp,
+                                    color = colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 )
@@ -174,7 +183,7 @@ fun AuthScreen(
 
             AuthStyledTextField(
                 value = email,
-                onValueChange = { email = it },
+                onValueChange = { email = sanitizeEmailDisallowCyrillicLocalPart(it) },
                 label = "Электронная почта",
                 placeholder = "Введите email",
                 isError = email.isNotBlank() && !isEmailValid && emailValidationMessage.isNotEmpty(),
@@ -379,6 +388,18 @@ suspend fun validateEmailMessageSuspend(email: String): String {
     }
 }
 
+private val emailLocalPartCyrillicRegex = Regex("\\p{IsCyrillic}")
+
+/** Убирает кириллицу только в локальной части (до первого @); домен не меняется. */
+internal fun sanitizeEmailDisallowCyrillicLocalPart(input: String): String {
+    val at = input.indexOf('@')
+    if (at < 0) {
+        return emailLocalPartCyrillicRegex.replace(input, "")
+    }
+    val local = emailLocalPartCyrillicRegex.replace(input.substring(0, at), "")
+    return local + input.substring(at)
+}
+
 fun isValidEmailSyntax(email: String): Boolean {
     val emailPattern = Regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")
     return emailPattern.matches(email)
@@ -401,7 +422,9 @@ fun isValidPassword(password: String): Boolean {
 }
 
 fun isValidUsername(username: String): Boolean {
-    return username.isNotBlank() && !username.contains(" ")
+    return username.isNotBlank()
+        && !username.contains(" ")
+        && !username.all { it.isDigit() }
 }
 
 @Preview

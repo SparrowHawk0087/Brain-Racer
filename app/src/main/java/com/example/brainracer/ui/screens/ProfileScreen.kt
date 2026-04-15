@@ -83,6 +83,7 @@ fun ProfileScreen(
     isOwnProfile: Boolean = true
 ) {
     val user by authViewModel.user.collectAsState()
+    val deleteAccountError by authViewModel.deleteAccountError.collectAsState()
     val uiState by profileViewModel.uiState.collectAsState()
     val friendsUiState by friendsViewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -127,6 +128,13 @@ fun ProfileScreen(
         if (user == null && isOwnProfile) {
             Toast.makeText(context, "Сессия завершена или аккаунт удалён", Toast.LENGTH_SHORT).show()
             onNavigateToAuth()
+        }
+    }
+
+    LaunchedEffect(deleteAccountError) {
+        deleteAccountError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            authViewModel.clearDeleteAccountError()
         }
     }
 

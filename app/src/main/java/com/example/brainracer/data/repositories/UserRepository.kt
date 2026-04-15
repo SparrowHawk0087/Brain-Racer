@@ -10,6 +10,10 @@ interface UserRepository {
     suspend fun getUser(userId: String): Result<User>
     suspend fun createUser(user: User): Result<Unit>
     suspend fun updateUser(user: User): Result<Unit>
+    /** Число пользователей с данным нормализованным ником (поле `nickname_normalized`). */
+    suspend fun countUsersWithNicknameNormalized(normalized: String, excludeUserId: String? = null): Result<Int>
+    /** Дозаписать `nickname_normalized` у существующего документа (миграция). */
+    suspend fun mergeNicknameNormalized(userId: String, normalized: String): Result<Unit>
     /** Соло: зачёт попытки + XP (один раз на quizId). Возвращает фактически начисленный XP. */
     suspend fun applySoloQuizCompletion(
         userId: String,

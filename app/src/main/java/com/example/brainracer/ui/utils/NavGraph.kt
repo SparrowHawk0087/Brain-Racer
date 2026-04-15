@@ -1,9 +1,15 @@
 package com.example.brainracer.ui.utils
 
+import android.os.Build
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -27,15 +33,23 @@ import com.example.brainracer.ui.screens.QuizCreatorScreen
 import com.example.brainracer.ui.screens.QuizPlayScreen
 import com.example.brainracer.ui.screens.SearchScreen
 import com.example.brainracer.ui.screens.SettingsScreen
+import com.example.brainracer.ui.components.NicknameEnforcementOverlay
 import com.example.brainracer.ui.components.bottomBarSelectedKey
 import com.example.brainracer.ui.viewmodels.AuthViewModel
+import com.example.brainracer.ui.viewmodels.NicknameEnforcementState
+import com.example.brainracer.ui.viewmodels.NicknameEnforcementViewModel
 
 @Composable
 fun NavGraph(
     authViewModel: AuthViewModel = viewModel(),
+    nicknameEnforcementViewModel: NicknameEnforcementViewModel = viewModel(),
 ) {
     val navController = rememberNavController()
     val user by authViewModel.user.collectAsState()
+    val enforcementState by nicknameEnforcementViewModel.state.collectAsState()
+    val nicknameLockExplanation by nicknameEnforcementViewModel.lockExplanation.collectAsState()
+    val nicknameSubmitError by nicknameEnforcementViewModel.submitError.collectAsState()
+    val nicknameSaving by nicknameEnforcementViewModel.isSaving.collectAsState()
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: ""
@@ -93,6 +107,29 @@ fun NavGraph(
         }
     }
 
+    LaunchedEffect(user?.uid, currentRoute) {
+        val uid = user?.uid
+        if (uid.isNullOrBlank()) {
+            nicknameEnforcementViewModel.reset()
+        } else {
+            nicknameEnforcementViewModel.refreshAsync(uid)
+        }
+    }
+
+    val nicknameLocked = user != null && enforcementState == NicknameEnforcementState.Locked
+
+    Box(Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(
+                if (nicknameLocked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    Modifier.blur(20.dp)
+                } else {
+                    Modifier
+                }
+            )
+    ) {
     NavHost(
         navController    = navController,
         startDestination = if (user != null) "home/${user?.uid}" else "auth"
@@ -351,5 +388,16 @@ fun NavGraph(
                 isOwnProfile         = isOwnProfile
             )
         }
+    }
+    }
+
+    NicknameEnforcementOverlay(
+        visible = nicknameLocked,
+        explanationText = nicknameLockExplanation,
+        submitError = nicknameSubmitError,
+        isSaving = nicknameSaving,
+        onClearError = { nicknameEnforcementViewModel.clearSubmitError() },
+        onSubmit = { nick -> nicknameEnforcementViewModel.submitNewNickname(nick) { } }
+    )
     }
 }
