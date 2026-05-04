@@ -301,3 +301,19 @@ private fun BottomBarItem(
         }
     }
 }
+
+@Preview(showBackground = true, heightDp = 120, backgroundColor = 0xFF0F0F1A)
+@Composable
+private fun BottomBarPreviewHome() {
+    BrainRacerTheme {
+        BottomBar(showBar = true, currentRoute = "home/user1")
+    }
+}
+
+@Preview(showBackground = true, heightDp = 120, backgroundColor = 0xFF0F0F1A)
+@Composable
+private fun BottomBarPreviewQuizzes() {
+    BrainRacerTheme {
+        BottomBar(showBar = true, currentRoute = "quizzes")
+    }
+}
