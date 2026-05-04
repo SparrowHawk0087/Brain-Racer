@@ -16,6 +16,7 @@ import com.example.brainracer.ui.utils.QuizNonScoringReason
 import com.example.brainracer.ui.utils.QuizUIState
 import com.example.brainracer.ui.utils.XpBreakdown
 import com.google.firebase.auth.FirebaseAuth
+import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,6 +40,9 @@ class QuizViewModel : ViewModel() {
 
     private var totalTimeSpent = 0
     private var questionStartTime = 0L
+    private var currentSessionId: String = UUID.randomUUID().toString()
+    private var finalizationInFlight: Boolean = false
+    private val finalizedSessionIds = mutableSetOf<String>()
 
     private var networkAvailableAtStart = true
     private var forceNonScoringSession = false
@@ -110,6 +114,8 @@ class QuizViewModel : ViewModel() {
         this.networkAvailableAtStart = networkAvailableAtStart
 
         currentQuiz = quiz
+        currentSessionId = UUID.randomUUID().toString()
+        finalizationInFlight = false
         userAnswers.clear()
         totalTimeSpent = 0
 
@@ -248,8 +254,15 @@ class QuizViewModel : ViewModel() {
     }
 
     private fun saveQuizResults() {
+        val sessionId = currentSessionId
+        if (sessionId in finalizedSessionIds || finalizationInFlight) return
+        finalizationInFlight = true
         viewModelScope.launch {
-            val quiz = currentQuiz ?: return@launch
+            val quiz = currentQuiz
+            if (quiz == null) {
+                finalizationInFlight = false
+                return@launch
+            }
             val userId = currentUserId
             val xpBefore = userId?.let { uid ->
                 when (val r = userRepository.getUser(uid)) {
@@ -259,7 +272,18 @@ class QuizViewModel : ViewModel() {
             } ?: 0
 
             val persist = sessionCountsTowardProgress()
-            finishWithXp(quiz, xpBefore, persistResults = persist, userId = userId)
+            try {
+                finishWithXp(
+                    quiz = quiz,
+                    xpBefore = xpBefore,
+                    persistResults = persist,
+                    userId = userId,
+                    sessionId = sessionId
+                )
+                finalizedSessionIds += sessionId
+            } finally {
+                finalizationInFlight = false
+            }
         }
     }
 
@@ -267,7 +291,8 @@ class QuizViewModel : ViewModel() {
         quiz: Quiz,
         xpBefore: Int,
         persistResults: Boolean,
-        userId: String? = null
+        userId: String? = null,
+        sessionId: String
     ) {
         val totalQ = quiz.questions.size
         val correct = userAnswers.count { it.isCorrect }
@@ -313,6 +338,7 @@ class QuizViewModel : ViewModel() {
                 quizRepository.recordUserQuizSessionFinished(
                     userId,
                     quiz.id,
+                    sessionId,
                     savedResultToQuizResults = false
                 )
             }
@@ -381,6 +407,7 @@ class QuizViewModel : ViewModel() {
                 quizRepository.recordUserQuizSessionFinished(
                     userId,
                     quiz.id,
+                    sessionId,
                     savedResultToQuizResults = true
                 )
                 ProfileAfterQuizRefresh.notify(userId)
