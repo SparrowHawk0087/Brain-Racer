@@ -2,10 +2,14 @@ package com.example.brainracer.ui.screens
 
 import android.content.Intent
 import android.widget.Toast
+import com.example.brainracer.R
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,28 +18,34 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.google.firebase.auth.FirebaseAuth
 import com.example.brainracer.domain.entities.User
 import com.example.brainracer.ui.components.BottomBar
 import com.example.brainracer.ui.components.ChallengeFriendQuizSheetContent
+import com.example.brainracer.ui.components.bottomBarOcclusionBlockClicks
+import com.example.brainracer.ui.components.bottomBarOcclusionEffect
+import com.example.brainracer.ui.components.bottomBarSafePadding
+import com.example.brainracer.ui.components.pressClickable
 import com.example.brainracer.ui.utils.FriendRequestUi
 import com.example.brainracer.ui.utils.OutgoingRequestUi
 import com.example.brainracer.ui.viewmodels.FriendsViewModel
-
 // ─────────────────────────────────────────────────────────────────────────────
 //  Главный composable-экран
 // ─────────────────────────────────────────────────────────────────────────────
@@ -45,6 +55,7 @@ import com.example.brainracer.ui.viewmodels.FriendsViewModel
 fun FriendsScreen(
     navController: NavController,
     viewModel: FriendsViewModel = viewModel(),
+    viewedUserId: String = "",
     onHomeClick: () -> Unit = {},
     onLeaderboardClick: () -> Unit = {},
     onChallengesClick: () -> Unit = {},
@@ -59,9 +70,13 @@ fun FriendsScreen(
     // перерисует только те части дерева, которые читают изменившиеся поля.
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val myUserId = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+    val targetUserId = viewedUserId.ifBlank { myUserId }
+    val isOwnFriendsList = targetUserId == myUserId
 
     var challengeTargetFriend by remember { mutableStateOf<User?>(null) }
     val challengeSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var searchBarVisible by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(preselectChallengeQuizIdArg) {
         viewModel.setPreselectedChallengeQuiz(preselectChallengeQuizIdArg)
@@ -79,7 +94,11 @@ fun FriendsScreen(
     // так мы избегаем лишних emit-ов в ViewModel при каждом нажатии клавиши.
     var searchQuery by remember { mutableStateOf(uiState.searchQuery) }
 
-    val tabs = listOf("Мои друзья", "Входящие", "Исходящие")
+    val tabs = if (isOwnFriendsList) listOf("Мои друзья", "Входящие", "Исходящие") else listOf("Друзья")
+
+    LaunchedEffect(targetUserId) {
+        viewModel.loadForUser(targetUserId)
+    }
 
     // Фильтрация на стороне UI (ViewModel уже возвращает полные списки).
     val filteredFriends = uiState.friends.filter {
@@ -122,11 +141,63 @@ fun FriendsScreen(
                         fontSize = 22.sp
                     )
                 },
+                navigationIcon = {
+                    IconButton(
+                        onClick = {
+                            val popped = navController.popBackStack()
+                            if (!popped) {
+                                navController.navigate("profile/$targetUserId")
+                            }
+                        }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surface),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.arrow_back_btn),
+                                contentDescription = "Назад к профилю",
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = Color.Transparent,
                     titleContentColor = MaterialTheme.colorScheme.onSurface
                 ),
-                modifier = Modifier.windowInsetsPadding(WindowInsets.systemBars)
+                actions = {
+                    IconButton(onClick = {
+                        searchBarVisible = !searchBarVisible
+                        if (!searchBarVisible) {
+                            searchQuery = ""
+                            viewModel.searchUsers("")
+                        }
+                    }) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surface),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.person_search),
+                                contentDescription = "Показать поиск",
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .clip(RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp))
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .background(MaterialTheme.colorScheme.background)
             )
         },
         bottomBar = {
@@ -146,7 +217,10 @@ fun FriendsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(
+                    top = paddingValues.calculateTopPadding(),
+                    bottom = bottomBarSafePadding(paddingValues, extraBottom = 8.dp)
+                )
         ) {
             val preId = uiState.preselectChallengeQuizId
             if (preId != null) {
@@ -172,50 +246,56 @@ fun FriendsScreen(
             }
 
             // ── Поле поиска ────────────────────────────────────────────────
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { query ->
-                    searchQuery = query
-                    // Передаём запрос в ViewModel, чтобы она обновила
-                    // searchResults (поиск по Firestore выполняется там).
-                    viewModel.searchUsers(query)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("Найти пользователей…") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Поиск",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                trailingIcon = {
-                    AnimatedVisibility(
-                        visible = searchQuery.isNotEmpty(),
-                        enter = fadeIn(),
-                        exit = fadeOut()
-                    ) {
-                        IconButton(onClick = {
-                            searchQuery = ""
-                            viewModel.searchUsers("")
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.Clear,
-                                contentDescription = "Очистить",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+            AnimatedVisibility(
+                visible = searchBarVisible || searchQuery.isNotBlank(),
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { query ->
+                        searchQuery = query
+                        // Передаём запрос в ViewModel, чтобы она обновила
+                        // searchResults (поиск по Firestore выполняется там).
+                        viewModel.searchUsers(query)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    placeholder = { Text("Найти пользователей…") },
+                    leadingIcon = {
+                        Icon(
+                            painter = painterResource(id = R.drawable.search_btn),
+                            contentDescription = "Поиск",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    trailingIcon = {
+                        AnimatedVisibility(
+                            visible = searchQuery.isNotEmpty(),
+                            enter = fadeIn(),
+                            exit = fadeOut()
+                        ) {
+                            IconButton(onClick = {
+                                searchQuery = ""
+                                viewModel.searchUsers("")
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Очистить",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
-                    }
-                },
-                shape = RoundedCornerShape(14.dp),
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                    },
+                    shape = RoundedCornerShape(14.dp),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                    )
                 )
-            )
+            }
 
             // ── Результаты поиска (показываем поверх вкладок) ──────────────
             if (uiState.isSearching && uiState.searchResults.isNotEmpty()) {
@@ -227,18 +307,22 @@ fun FriendsScreen(
             } else {
 
                 // ── Вкладки ────────────────────────────────────────────────
-                var selectedTab by remember { mutableIntStateOf(0) }
+                var selectedTab by remember(targetUserId) { mutableIntStateOf(0) }
 
                 // Показываем badge с количеством входящих заявок
                 val incomingBadge = uiState.incomingRequests.size
 
                 TabRow(
                     selectedTabIndex = selectedTab,
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = MaterialTheme.colorScheme.background,
                     contentColor = MaterialTheme.colorScheme.primary,
                     indicator = { tabPositions ->
                         TabRowDefaults.Indicator(
-                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                            modifier = Modifier
+                                .tabIndicatorOffset(tabPositions[selectedTab])
+                                .padding(horizontal = 14.dp)
+                                .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)),
+                            height = 3.dp,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -249,7 +333,7 @@ fun FriendsScreen(
                             onClick = { selectedTab = index },
                             text = {
                                 // На вкладке «Входящие» показываем счётчик
-                                if (index == 1 && incomingBadge > 0) {
+                                if (isOwnFriendsList && index == 1 && incomingBadge > 0) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(title, fontSize = 13.sp)
                                         Spacer(modifier = Modifier.width(4.dp))
@@ -276,14 +360,14 @@ fun FriendsScreen(
                             0 -> FriendsTab(
                                 friends = filteredFriends,
                                 onDelete = { friend -> viewModel.removeFriend(friend.id) },
-                                onChallengeFriend = { challengeTargetFriend = it },
+                                onChallengeFriend = { if (isOwnFriendsList) challengeTargetFriend = it },
                                 onOpenProfile = { friend ->
                                     navController.navigate("profile/${friend.id}")
                                 },
                                 quickChallengeFromQuiz = preId != null,
                                 quickChallengeReady = preId != null &&
-                                    !uiState.preselectChallengeQuizLoading &&
-                                    !uiState.preselectChallengeQuizTitle.isNullOrBlank(),
+                                        !uiState.preselectChallengeQuizLoading &&
+                                        !uiState.preselectChallengeQuizTitle.isNullOrBlank(),
                                 onQuickChallenge = { friend ->
                                     val qid = uiState.preselectChallengeQuizId
                                     val title = uiState.preselectChallengeQuizTitle
@@ -292,7 +376,7 @@ fun FriendsScreen(
                                     }
                                 }
                             )
-                            1 -> IncomingRequestsTab(
+                            1 -> if (isOwnFriendsList) IncomingRequestsTab(
                                 requests = filteredIncoming,
                                 onAccept = { req ->
                                     viewModel.acceptFriendRequest(req.id, req.senderId)
@@ -304,7 +388,7 @@ fun FriendsScreen(
                                     navController.navigate("profile/$senderId")
                                 }
                             )
-                            2 -> OutgoingRequestsTab(
+                            2 -> if (isOwnFriendsList) OutgoingRequestsTab(
                                 requests = filteredOutgoing,
                                 onCancel = { req ->
                                     viewModel.cancelOutgoingRequest(req.id)
@@ -318,10 +402,7 @@ fun FriendsScreen(
                 }
 
                 // ── Кнопка «Пригласить» ────────────────────────────────────
-                Surface(
-                    shadowElevation = 8.dp,
-                    color = MaterialTheme.colorScheme.surface
-                ) {
+                if (isOwnFriendsList) {
                     Button(
                         onClick = {
                             val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -348,14 +429,20 @@ fun FriendsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .shadow(14.dp, RoundedCornerShape(14.dp))
                             .height(52.dp),
                         shape = RoundedCornerShape(14.dp),
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 10.dp,
+                            pressedElevation = 14.dp,
+                            hoveredElevation = 12.dp
+                        ),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.PersonAdd,
+                            painter = painterResource(id = R.drawable.person_add),
                             contentDescription = null,
                             modifier = Modifier.size(20.dp)
                         )
@@ -444,7 +531,7 @@ private fun SearchResultsList(
                     }
                     IconButton(onClick = { onSendRequest(user) }) {
                         Icon(
-                            imageVector = Icons.Default.PersonAdd,
+                            painter = painterResource(id = R.drawable.person_add),
                             contentDescription = "Добавить в друзья",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(22.dp)
@@ -479,6 +566,26 @@ private fun FriendsTab(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        if (!quickMode) {
+            item {
+                FriendRankingCard(friends = friends)
+            }
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Все друзья",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 24.sp
+                    )
+                }
+            }
+        }
         items(friends, key = { it.id }) { friend ->
             FriendCard(
                 friend = friend,
@@ -504,8 +611,11 @@ private fun FriendCard(
     onQuickChallenge: () -> Unit = {}
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier
+            .bottomBarOcclusionEffect()
+            .bottomBarOcclusionBlockClicks()
+            .fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
@@ -525,7 +635,7 @@ private fun FriendCard(
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(onClick = mainClick, enabled = !quickChallengeMode || quickChallengeReady),
+                    .pressClickable(onClick = mainClick, enabled = !quickChallengeMode || quickChallengeReady),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AvatarCircle(
@@ -550,7 +660,7 @@ private fun FriendCard(
                             quickChallengeMode ->
                                 "Подождите…"
                             else ->
-                                friend.rank.displayName
+                                "${friend.rank.displayName} · ${friend.stats.totalPoints} очков"
                         },
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -563,12 +673,12 @@ private fun FriendCard(
                     modifier = Modifier
                         .size(44.dp)
                         .clip(duelShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
-                        .clickable(onClick = onChallenge),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+                        .pressClickable(onClick = onChallenge),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Sports,
+                        painter = painterResource(id = R.drawable.cognition),
                         contentDescription = "Вызвать на дуэль",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(22.dp)
@@ -576,13 +686,118 @@ private fun FriendCard(
                 }
                 Spacer(modifier = Modifier.width(4.dp))
             }
-            IconButton(onClick = onDelete) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.error.copy(alpha = 0.14f))
+                    .pressClickable(onClick = onDelete),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
-                    imageVector = Icons.Default.PersonRemove,
+                    painter = painterResource(id = R.drawable.person_remove),
                     contentDescription = "Удалить из друзей",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(22.dp)
+                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.95f),
+                    modifier = Modifier.size(20.dp)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FriendRankingCard(
+    friends: List<User>
+) {
+    val sorted = remember(friends) {
+        friends.sortedByDescending { it.stats.totalPoints }.take(3)
+    }
+    val maxPoints = remember(sorted) {
+        sorted.maxOfOrNull { it.stats.totalPoints }?.coerceAtLeast(1) ?: 1
+    }
+    if (sorted.isEmpty()) return
+
+    val extBarColors = listOf(
+        MaterialTheme.colorScheme.primary,
+        MaterialTheme.colorScheme.secondary,
+        MaterialTheme.colorScheme.tertiary
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), RoundedCornerShape(20.dp))
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Рейтинг друзей",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        sorted.forEachIndexed { index, user ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = when (index) {
+                        0 -> "🥇"
+                        1 -> "🥈"
+                        else -> "🥉"
+                    },
+                    fontSize = 16.sp
+                )
+                Spacer(Modifier.width(8.dp))
+                AvatarCircle(
+                    initials = user.nickname.take(2).uppercase(),
+                    color = extBarColors[index % extBarColors.size].copy(alpha = 0.9f),
+                    size = 34
+                )
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = user.nickname,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${user.stats.totalPoints} очков",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .width(76.dp)
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth((user.stats.totalPoints.toFloat() / maxPoints).coerceIn(0.08f, 1f))
+                            .clip(RoundedCornerShape(50))
+                            .background(extBarColors[index % extBarColors.size])
+                    )
+                }
             }
         }
     }
@@ -626,7 +841,10 @@ private fun IncomingRequestCard(
     onOpenProfile: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .bottomBarOcclusionEffect()
+            .bottomBarOcclusionBlockClicks()
+            .fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -637,7 +855,7 @@ private fun IncomingRequestCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onOpenProfile),
+                    .pressClickable(onClick = onOpenProfile),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AvatarCircle(
@@ -738,7 +956,10 @@ private fun OutgoingRequestCard(
     onOpenProfile: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .bottomBarOcclusionEffect()
+            .bottomBarOcclusionBlockClicks()
+            .fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -754,7 +975,7 @@ private fun OutgoingRequestCard(
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(onClick = onOpenProfile),
+                    .pressClickable(onClick = onOpenProfile),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AvatarCircle(
