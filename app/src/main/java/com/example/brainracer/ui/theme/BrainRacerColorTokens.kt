@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Color
 
 /**
  * Единый источник цветовых hex для Brain Racer.
- * Экраны не дублируют значения — используют [MaterialTheme.colorScheme] и [LocalBrainRacerExtendedColors].
+ * Экраны не дублируют значения.
  */
 object BrainRacerColorTokens {
 
@@ -12,8 +12,8 @@ object BrainRacerColorTokens {
     val AccentSecondary: Color = Color(0xFF764BA2)
     val OnAccent: Color = Color.White
 
-    /** Таббар / вторичный текст на тёмном фоне (неактивные иконки). */
-    val TabInactiveDark: Color = Color(0xFF5A5878)
+    /** Вторичный текст на тёмном фоне (неактивные иконки). */
+    val TabInactiveDark: Color = Color(0xFF8B8AAE)
 
     /** Статусы вызовов: ожидание, ничья. */
     val StatusOrange: Color = Color(0xFFFFA726)
@@ -55,7 +55,7 @@ object BrainRacerColorTokens {
         val InversePrimary: Color = Color(0xFF667EEA)
     }
 
-    /** Градиенты карточек викторин (как на Home). */
+    /** Градиенты карточек викторин (как на HomeScreen). */
     val CardGradientsDark: List<List<Color>> = listOf(
         listOf(Color(0xFF667EEA), Color(0xFF764BA2)),
         listOf(Color(0xFFf093fb), Color(0xFFf5576c)),
