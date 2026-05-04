@@ -212,3 +212,92 @@ fun BottomBar(
         }
     }
 }
+
+@Composable
+private fun BottomBarItem(
+    label: String,
+    icon: ImageVector? = null,
+    iconRes: Int? = null,
+    selected: Boolean,
+    activeColor: Color,
+    inactiveColor: Color,
+    pillColor: Color,
+    pillBorderColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    showUnreadDot: Boolean = false,
+    unreadDotColor: Color = MaterialTheme.colorScheme.error
+) {
+    val tint by animateColorAsState(
+        targetValue = if (selected) activeColor else inactiveColor,
+        animationSpec = tween(durationMillis = 220),
+        label = "bottomBarTint"
+    )
+    val selectedPillColor by animateColorAsState(
+        targetValue = if (selected) pillColor else Color.Transparent,
+        animationSpec = tween(durationMillis = 260),
+        label = "bottomBarPill"
+    )
+    val selectedPillBorderColor by animateColorAsState(
+        targetValue = if (selected) pillBorderColor else Color.Transparent,
+        animationSpec = tween(durationMillis = 260),
+        label = "bottomBarPillBorder"
+    )
+    val interactionSource = remember { MutableInteractionSource() }
+
+    Box(
+        modifier = modifier
+            .padding(horizontal = 1.dp, vertical = 1.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(selectedPillColor)
+            .border(1.dp, selectedPillBorderColor, RoundedCornerShape(18.dp))
+            .pressClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                pressedScale = 0.965f,
+                onClick = onClick
+            )
+            .padding(vertical = 7.dp, horizontal = 1.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box {
+                if (iconRes != null) {
+                    Icon(
+                        painter = painterResource(id = iconRes),
+                        contentDescription = label,
+                        tint = tint,
+                        modifier = Modifier.size(21.dp)
+                    )
+                } else if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = tint,
+                        modifier = Modifier.size(21.dp)
+                    )
+                }
+                if (showUnreadDot) {
+                    Box(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .size(8.dp)
+                            .offset(x = 2.dp, y = (-2).dp)
+                            .background(unreadDotColor, CircleShape)
+                    )
+                }
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = label,
+                color = tint,
+                fontSize = 9.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
