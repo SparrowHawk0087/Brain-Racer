@@ -6,11 +6,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Quiz
-import androidx.compose.material.icons.filled.Search
+import com.example.brainracer.R
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -26,6 +29,9 @@ import androidx.navigation.NavController
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.ui.components.BottomBar
+import com.example.brainracer.ui.components.bottomBarOcclusionBlockClicks
+import com.example.brainracer.ui.components.bottomBarOcclusionEffect
+import com.example.brainracer.ui.components.bottomBarSafePadding
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.utils.QuizItem
 import com.example.brainracer.ui.utils.customAuthorCaption
@@ -48,6 +54,13 @@ fun QuizListScreen(
     var quizzes by remember { mutableStateOf<List<QuizItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    val quizListState = rememberLazyListState()
+    val bottomReflexShift by remember {
+        derivedStateOf {
+            ((quizListState.firstVisibleItemIndex * 4f) +
+                    quizListState.firstVisibleItemScrollOffset * 0.012f).coerceIn(0f, 18f)
+        }
+    }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -79,11 +92,14 @@ fun QuizListScreen(
                 },
                 actions = {
                     IconButton(onClick = { navController.navigate("search?category=Все&customOnly=false") }) {
-                        Icon(Icons.Default.Search, contentDescription = "Поиск", tint = MaterialTheme.colorScheme.onSurface)
+                        Icon(painter = painterResource(id = R.drawable.search_btn), contentDescription = "Поиск", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp))
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .background(MaterialTheme.colorScheme.background)
             )
         },
         bottomBar = {
@@ -94,14 +110,15 @@ fun QuizListScreen(
                 onLeaderboardClick = onLeaderboardClick,
                 onChallengesClick = onChallengesClick,
                 onQuizzesClick = onQuizzesClick,
-                onProfileClick = onProfileClick
+                onProfileClick = onProfileClick,
+                reflexShift = bottomReflexShift
             )
         }
     ) { padding ->
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(top = padding.calculateTopPadding())
                 .background(MaterialTheme.colorScheme.background)
         ) {
             when {
@@ -121,8 +138,10 @@ fun QuizListScreen(
                     }
                 }
                 else -> {
+                    val quizListBottomInset = bottomBarSafePadding(padding)
                     LazyColumn(
-                        contentPadding = PaddingValues(16.dp),
+                        state = quizListState,
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = quizListBottomInset),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         itemsIndexed(quizzes, key = { _, q -> q.id }) { index, quiz ->
@@ -145,6 +164,8 @@ private fun QuizListRowCard(quiz: QuizItem, colorIndex: Int, onClick: () -> Unit
     val gradient = cardGradients[colorIndex % cardGradients.size]
     Box(
         modifier = Modifier
+            .bottomBarOcclusionEffect()
+            .bottomBarOcclusionBlockClicks()
             .fillMaxWidth()
             .heightIn(min = 86.dp)
             .clip(RoundedCornerShape(16.dp))
@@ -163,7 +184,12 @@ private fun QuizListRowCard(quiz: QuizItem, colorIndex: Int, onClick: () -> Unit
                     .background(Brush.linearGradient(gradient, Offset.Zero, Offset(400f, 400f))),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Quiz, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(26.dp))
+                Icon(
+                    imageVector = Icons.Default.Quiz,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(26.dp)
+                )
             }
             Spacer(Modifier.width(13.dp))
             Column(modifier = Modifier.weight(1f)) {
