@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,6 +35,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -46,9 +48,19 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.brainracer.R
 import com.example.brainracer.ui.theme.BrainRacerTheme
+import com.example.brainracer.ui.theme.BrainRacerColorTokens
 import com.example.brainracer.ui.viewmodels.AuthViewModel
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.xbill.DNS.Lookup
 import org.xbill.DNS.SimpleResolver
@@ -72,20 +84,35 @@ fun AuthScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
+    var usernameTouched by rememberSaveable { mutableStateOf(false) }
     var isLogin by remember { mutableStateOf(true) }
     var isPasswordVisible by rememberSaveable { mutableStateOf(false) }
     val error by authViewModel.error.collectAsState()
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
+    val appNameBrush = remember {
+        Brush.horizontalGradient(
+            listOf(
+                BrainRacerColorTokens.Accent,
+                BrainRacerColorTokens.AccentSecondary
+            )
+        )
+    }
     var isLoading by remember { mutableStateOf(false) }
+    val credentialManager = remember(context) { CredentialManager.create(context) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     var emailValidationMessage by remember { mutableStateOf("") }
     var isCheckingEmail by remember { mutableStateOf(false) }
     val isUsernameValid = isValidUsername(username)
+    val showUsernameError = !isLogin && usernameTouched && !isUsernameValid
 
     LaunchedEffect(isLogin) {
         emailValidationMessage = ""
         isCheckingEmail = false
+        if (isLogin) {
+            usernameTouched = false
+        }
     }
 
     LaunchedEffect(email) {
@@ -126,7 +153,7 @@ fun AuthScreen(
                     .size(48.dp)
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    painter = painterResource(id = R.drawable.arrow_back_btn),
                     contentDescription = "Назад",
                     tint = colorScheme.onBackground
                 )
@@ -142,6 +169,17 @@ fun AuthScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
+                text = stringResource(R.string.app_name),
+                style = TextStyle(brush = appNameBrush),
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 34.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(18.dp))
+
+            Text(
                 text = if (isLogin) "С возвращением" else "Регистрация",
                 color = colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
@@ -155,25 +193,30 @@ fun AuthScreen(
             if (!isLogin) {
                 AuthStyledTextField(
                     value = username,
-                    onValueChange = { username = it },
+                    onValueChange = {
+                        username = it
+                        usernameTouched = true
+                    },
                     label = "Имя пользователя",
                     placeholder = "Придумайте никнейм",
-                    isError = !isValidUsername(username),
+                    isError = showUsernameError,
                     supportingText = {
-                        when {
-                            username.contains(" ") || username.isEmpty() -> {
-                                Text(
-                                    "Никнейм не может быть пустым или содержать пробелы",
-                                    fontSize = 12.sp,
-                                    color = colorScheme.onSurfaceVariant
-                                )
-                            }
-                            username.isNotBlank() && username.all { it.isDigit() } -> {
-                                Text(
-                                    "Никнейм не может состоять только из цифр",
-                                    fontSize = 12.sp,
-                                    color = colorScheme.onSurfaceVariant
-                                )
+                        if (showUsernameError) {
+                            when {
+                                username.contains(" ") || username.isEmpty() -> {
+                                    Text(
+                                        "Никнейм не может быть пустым или содержать пробелы",
+                                        fontSize = 12.sp,
+                                        color = colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                username.isNotBlank() && username.all { it.isDigit() } -> {
+                                    Text(
+                                        "Никнейм не может состоять только из цифр",
+                                        fontSize = 12.sp,
+                                        color = colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
@@ -282,6 +325,7 @@ fun AuthScreen(
                         }
                     } else {
                         if (username.isNotBlank() && email.isNotBlank() && password.isNotBlank()) {
+                            usernameTouched = true
                             isLoading = true
                             authViewModel.signUp(email, password, username)
                         }
@@ -297,12 +341,86 @@ fun AuthScreen(
             if (isLogin) {
                 Spacer(Modifier.height(14.dp))
                 AuthGoogleButton(
+                    enabled = !isLoading,
                     onClick = {
-                        Toast.makeText(
-                            context,
-                            "Вход через Google появится в следующих обновлениях",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        val webClientId = runCatching { context.getString(R.string.default_web_client_id) }
+                            .getOrNull()
+                            .orEmpty()
+                        if (webClientId.isBlank()) {
+                            Toast.makeText(
+                                context,
+                                "Google Sign-In не настроен: отсутствует default_web_client_id",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            return@AuthGoogleButton
+                        }
+
+                        isLoading = true
+                        scope.launch {
+                            try {
+                                val googleIdOption = GetGoogleIdOption.Builder()
+                                    .setServerClientId(webClientId)
+                                    .setFilterByAuthorizedAccounts(false)
+                                    .setAutoSelectEnabled(false)
+                                    .build()
+                                val request = GetCredentialRequest.Builder()
+                                    .addCredentialOption(googleIdOption)
+                                    .build()
+
+                                val result = credentialManager.getCredential(
+                                    context = context,
+                                    request = request
+                                )
+                                val credential = result.credential
+                                if (credential is CustomCredential &&
+                                    credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                                ) {
+                                    val googleCredential = GoogleIdTokenCredential
+                                        .createFrom(credential.data)
+                                    val idToken = googleCredential.idToken
+                                    if (idToken.isBlank()) {
+                                        isLoading = false
+                                        Toast.makeText(
+                                            context,
+                                            "Не удалось получить токен Google",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    } else {
+                                        authViewModel.signInWithGoogle(idToken)
+                                    }
+                                } else {
+                                    isLoading = false
+                                    Toast.makeText(
+                                        context,
+                                        "Получен неподдерживаемый тип учетных данных",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            } catch (_: GetCredentialCancellationException) {
+                                isLoading = false
+                            } catch (_: GoogleIdTokenParsingException) {
+                                isLoading = false
+                                Toast.makeText(
+                                    context,
+                                    "Ошибка разбора Google токена",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            } catch (e: GetCredentialException) {
+                                isLoading = false
+                                Toast.makeText(
+                                    context,
+                                    "Ошибка Credential Manager: ${e.message ?: "неизвестная ошибка"}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            } catch (e: Exception) {
+                                isLoading = false
+                                Toast.makeText(
+                                    context,
+                                    "Ошибка входа через Google",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
                     }
                 )
             }
@@ -423,8 +541,8 @@ fun isValidPassword(password: String): Boolean {
 
 fun isValidUsername(username: String): Boolean {
     return username.isNotBlank()
-        && !username.contains(" ")
-        && !username.all { it.isDigit() }
+            && !username.contains(" ")
+            && !username.all { it.isDigit() }
 }
 
 @Preview
