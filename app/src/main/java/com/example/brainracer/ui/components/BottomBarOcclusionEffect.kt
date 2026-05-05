@@ -103,3 +103,40 @@ fun Modifier.bottomBarOcclusionEffect(
         base
     }
 }
+
+/**
+ * Блокирует клики, когда сработал тот же порог, что и у [bottomBarOcclusionEffect]
+ * (по умолчанию — когда ≥ половины элемента в зоне над BottomBar).
+ */
+fun Modifier.bottomBarOcclusionBlockClicks(
+    occlusionHeight: Dp = 92.dp,
+    effectStartOverlapFraction: Float = 0.5f
+): Modifier = composed {
+    val density = LocalDensity.current
+    val view = LocalView.current
+    val screenHeightPx = view.height.toFloat()
+    val occlusionHeightPx = with(density) { occlusionHeight.toPx() }
+    var overlapRatio by remember { mutableFloatStateOf(0f) }
+
+    val base = this.onGloballyPositioned { coords ->
+        overlapRatio = computeBottomBarOverlapRatio(
+            topYWindowPx = coords.positionInWindow().y,
+            heightPx = coords.size.height,
+            screenHeightPx = screenHeightPx,
+            occlusionHeightPx = occlusionHeightPx
+        )
+    }
+
+    if (effectStrengthFromOverlap(overlapRatio, effectStartOverlapFraction) > 0f) {
+        base.pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    event.changes.forEach { it.consume() }
+                }
+            }
+        }
+    } else {
+        base
+    }
+}
