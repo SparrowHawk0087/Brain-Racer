@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -31,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -39,6 +41,11 @@ import com.example.brainracer.domain.entities.Challenge
 import com.example.brainracer.domain.entities.ChallengeStatus
 import com.example.brainracer.ui.components.BottomBar
 import com.example.brainracer.ui.components.ChallengeFriendQuizSheetContent
+import com.example.brainracer.ui.components.bottomBarOcclusionBlockClicks
+import com.example.brainracer.ui.components.bottomBarOcclusionEffect
+import com.example.brainracer.ui.components.bottomBarSafePadding
+import com.example.brainracer.ui.components.pressClickable
+import com.example.brainracer.ui.components.pressScale
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.viewmodels.ChallengeViewModel
 import kotlinx.coroutines.launch
@@ -120,20 +127,34 @@ fun ChallengesScreen(
                         fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurface)
                 },
                 actions = {
-                    TextButton(onClick = { showChallengeSheet = true }) {
+                    TextButton(
+                        onClick = { showChallengeSheet = true },
+                        modifier = Modifier.pressScale(),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
                         Icon(
-                            Icons.Default.Sports,
-                            contentDescription = null,
-                            tint     = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
+                            painter = androidx.compose.ui.res.painterResource(id = com.example.brainracer.R.drawable.cognition),
+                            contentDescription = "Новый вызов",
+                            tint     = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text("Вызов", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Вызов",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            softWrap = false
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .background(MaterialTheme.colorScheme.background)
             )
         },
         bottomBar = {
@@ -149,7 +170,12 @@ fun ChallengesScreen(
             )
         }
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
+        val challengesBottomInset = bottomBarSafePadding(padding)
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(top = padding.calculateTopPadding())
+        ) {
 
             // ── Вкладки ───────────────────────────────────────────────────
             TabRow(
@@ -206,7 +232,8 @@ fun ChallengesScreen(
                         challenges    = uiState.incomingChallenges,
                         currentUserId = currentUserId,
                         onAccept      = { vm.acceptChallenge(it.id) },
-                        onDecline     = { vm.declineChallenge(it.id) }
+                        onDecline     = { vm.declineChallenge(it.id) },
+                        bottomInset   = challengesBottomInset
                     )
                     page == 1 -> {
                         val outgoingPending = uiState.outgoingChallenges
@@ -228,7 +255,8 @@ fun ChallengesScreen(
                             },
                             onViewRound     = { challenge ->
                                 navController.navigate("challenge_review/${challenge.id}")
-                            }
+                            },
+                            bottomInset = challengesBottomInset
                         )
                     }
                     else -> HistoryTab(
@@ -236,7 +264,8 @@ fun ChallengesScreen(
                         currentUserId = currentUserId,
                         onViewRound   = { challenge ->
                             navController.navigate("challenge_review/${challenge.id}")
-                        }
+                        },
+                        bottomInset = challengesBottomInset
                     )
                 }
             }
@@ -253,14 +282,15 @@ private fun IncomingTab(
     challenges: List<Challenge>,
     currentUserId: String,
     onAccept: (Challenge) -> Unit,
-    onDecline: (Challenge) -> Unit
+    onDecline: (Challenge) -> Unit,
+    bottomInset: Dp
 ) {
     if (challenges.isEmpty()) {
         EmptyState("Нет входящих вызовов", "Когда друг бросит вызов — он появится здесь")
         return
     }
     LazyColumn(
-        contentPadding      = PaddingValues(16.dp),
+        contentPadding      = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomInset),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(challenges, key = { it.id }) { ch ->
@@ -280,7 +310,7 @@ private fun IncomingChallengeCard(
     onDecline: () -> Unit
 ) {
     Card(
-        modifier  = Modifier.fillMaxWidth(),
+        modifier  = Modifier.bottomBarOcclusionEffect().bottomBarOcclusionBlockClicks().fillMaxWidth(),
         shape     = RoundedCornerShape(18.dp),
         colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(0.dp)
@@ -315,28 +345,90 @@ private fun IncomingChallengeCard(
                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // Кнопки
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onAccept,
-                    modifier = Modifier.weight(1f),
-                    shape  = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = LocalBrainRacerExtendedColors.current.detailGreen)
-                ) {
-                    Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Принять", fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimary)
-                }
-                OutlinedButton(
-                    onClick = onDecline,
-                    modifier = Modifier.weight(1f),
-                    shape  = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error)
-                ) {
-                    Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Отклонить", fontSize = 13.sp)
+            // Кнопки: на узких экранах/большом шрифте уходим в колонку,
+            // чтобы текст не переносился и кнопки не "ломались".
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val compactActions = maxWidth < 360.dp
+                if (compactActions) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onAccept,
+                            modifier = Modifier.fillMaxWidth().pressScale(),
+                            shape  = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = LocalBrainRacerExtendedColors.current.detailGreen)
+                        ) {
+                            Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Принять",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                softWrap = false
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = onDecline,
+                            modifier = Modifier.fillMaxWidth().pressScale(pressedScale = 0.992f),
+                            shape  = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                        ) {
+                            Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Отклонить",
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                softWrap = false
+                            )
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onAccept,
+                            modifier = Modifier.weight(1f).pressScale(),
+                            shape  = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = LocalBrainRacerExtendedColors.current.detailGreen)
+                        ) {
+                            Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "Принять",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                softWrap = false
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = onDecline,
+                            modifier = Modifier.weight(1f).pressScale(pressedScale = 0.992f),
+                            shape  = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                        ) {
+                            Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "Отклонить",
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                softWrap = false
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -353,7 +445,8 @@ private fun ActiveTab(
     currentUserId: String,
     onCancelPending: (Challenge) -> Unit,
     onPlay: (Challenge) -> Unit,
-    onViewRound: (Challenge) -> Unit
+    onViewRound: (Challenge) -> Unit,
+    bottomInset: Dp
 ) {
     if (challenges.isEmpty()) {
         EmptyState("Нет активных вызовов", "Примите входящий вызов или бросьте вызов другу")
@@ -372,7 +465,7 @@ private fun ActiveTab(
         )
 
     LazyColumn(
-        contentPadding      = PaddingValues(16.dp),
+        contentPadding      = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomInset),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (pendingOutgoing.isNotEmpty()) {
@@ -428,7 +521,7 @@ private fun ActiveChallengeCard(
     val bothPlayed     = myResult != null && opponentResult != null
 
     Card(
-        modifier  = Modifier.fillMaxWidth(),
+        modifier  = Modifier.bottomBarOcclusionEffect().bottomBarOcclusionBlockClicks().fillMaxWidth(),
         shape     = RoundedCornerShape(18.dp),
         colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(0.dp),
@@ -447,43 +540,77 @@ private fun ActiveChallengeCard(
                 }
             }
 
-            // Статусы игроков (счёт скрыт до завершения обоих)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PlayerStatusChip(
-                    label  = "Вы",
-                    played = iAlreadyPlayed,
-                    score  = if (bothPlayed) myResult?.score else null
-                )
-                PlayerStatusChip(
-                    label  = opponentName.split(" ").first(),
-                    played = opponentResult != null,
-                    score  = if (bothPlayed) opponentResult?.score else null
-                )
+            // Статусы игроков: на узких экранах/большом шрифте показываем вертикально.
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val compactStatuses = maxWidth < 340.dp
+                if (compactStatuses) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        PlayerStatusChip(
+                            label  = "Вы",
+                            played = iAlreadyPlayed,
+                            score  = if (bothPlayed) myResult?.score else null,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        PlayerStatusChip(
+                            label  = opponentName.split(" ").first(),
+                            played = opponentResult != null,
+                            score  = if (bothPlayed) opponentResult?.score else null,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PlayerStatusChip(
+                            label  = "Вы",
+                            played = iAlreadyPlayed,
+                            score  = if (bothPlayed) myResult?.score else null
+                        )
+                        PlayerStatusChip(
+                            label  = opponentName.split(" ").first(),
+                            played = opponentResult != null,
+                            score  = if (bothPlayed) opponentResult?.score else null
+                        )
+                    }
+                }
             }
 
             // Кнопки
             if (!iAlreadyPlayed) {
                 Button(
                     onClick  = onPlay,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().pressScale(),
                     shape    = RoundedCornerShape(10.dp),
                     colors   = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Пройти викторину", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Пройти викторину",
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false
+                    )
                 }
             } else if (bothPlayed) {
                 OutlinedButton(
                     onClick  = onViewRound,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().pressScale(),
                     shape    = RoundedCornerShape(10.dp),
                     colors   = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
                     border   = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                 ) {
                     Icon(Icons.Default.Analytics, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Просмотр раунда")
+                    Text(
+                        "Просмотр раунда",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false
+                    )
                 }
             } else {
                 Surface(
@@ -511,8 +638,14 @@ private fun ActiveChallengeCard(
 }
 
 @Composable
-private fun PlayerStatusChip(label: String, played: Boolean, score: Int?) {
+private fun PlayerStatusChip(
+    label: String,
+    played: Boolean,
+    score: Int?,
+    modifier: Modifier = Modifier
+) {
     Surface(
+        modifier = modifier,
         shape  = RoundedCornerShape(8.dp),
         color  = if (played) LocalBrainRacerExtendedColors.current.detailGreen.copy(.12f) else MaterialTheme.colorScheme.outline
     ) {
@@ -531,7 +664,10 @@ private fun PlayerStatusChip(label: String, played: Boolean, score: Int?) {
                 text = if (score != null) "$label: $score" else label,
                 fontSize = 12.sp,
                 color    = if (played) LocalBrainRacerExtendedColors.current.detailGreen else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
             )
         }
     }
@@ -545,7 +681,8 @@ private fun PlayerStatusChip(label: String, played: Boolean, score: Int?) {
 private fun HistoryTab(
     completed: List<Challenge>,
     currentUserId: String,
-    onViewRound: (Challenge) -> Unit
+    onViewRound: (Challenge) -> Unit,
+    bottomInset: Dp
 ) {
     if (completed.isEmpty()) {
         EmptyState("Нет завершённых вызовов", "Завершённые дуэли появятся здесь")
@@ -553,7 +690,7 @@ private fun HistoryTab(
     }
 
     LazyColumn(
-        contentPadding      = PaddingValues(16.dp),
+        contentPadding      = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomInset),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(completed, key = { it.id }) { ch ->
@@ -569,7 +706,7 @@ private fun HistoryTab(
 @Composable
 private fun OutgoingPendingCard(challenge: Challenge, onCancel: () -> Unit) {
     Card(
-        modifier  = Modifier.fillMaxWidth(),
+        modifier  = Modifier.bottomBarOcclusionEffect().bottomBarOcclusionBlockClicks().fillMaxWidth(),
         shape     = RoundedCornerShape(16.dp),
         colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(0.dp)
@@ -615,41 +752,126 @@ private fun CompletedChallengeCard(
         else   -> "Поражение" to MaterialTheme.colorScheme.error
     }
 
-    Card(
-        modifier  = Modifier.fillMaxWidth().clickable { onViewRound() },
-        shape     = RoundedCornerShape(16.dp),
-        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(0.dp),
-        border    = CardDefaults.outlinedCardBorder()
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+    BoxWithConstraints {
+        val compact = maxWidth < 360.dp
+        Card(
+            modifier = Modifier
+                .bottomBarOcclusionEffect()
+                .bottomBarOcclusionBlockClicks()
+                .fillMaxWidth()
+                .pressClickable { onViewRound() },
+            shape     = RoundedCornerShape(16.dp),
+            colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(0.dp),
+            border    = CardDefaults.outlinedCardBorder()
         ) {
-            AvatarCircle(opponentName.take(2).uppercase(), MaterialTheme.colorScheme.primary, 42)
-            Column(modifier = Modifier.weight(1f)) {
-                Text("vs $opponentName", fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
-                Text(challenge.quizTitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    formatTimestamp(challenge.completedAt?.seconds?.times(1000) ?: 0L),
-                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("$myScore : $opponentScore", fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
-                Surface(shape = RoundedCornerShape(6.dp), color = resultColor.copy(.15f)) {
-                    Text(resultLabel,
-                        modifier   = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        fontSize   = 11.sp, fontWeight = FontWeight.SemiBold, color = resultColor)
+        if (compact) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    AvatarCircle(opponentName.take(2).uppercase(), MaterialTheme.colorScheme.primary, 42)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "vs $opponentName",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            challenge.quizTitle,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            formatTimestamp(challenge.completedAt?.seconds?.times(1000) ?: 0L),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "$myScore : $opponentScore",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Surface(shape = RoundedCornerShape(6.dp), color = resultColor.copy(.15f)) {
+                        Text(
+                            resultLabel,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = resultColor
+                        )
+                    }
                 }
             }
-            Icon(Icons.AutoMirrored.Filled.ArrowForward, null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                AvatarCircle(opponentName.take(2).uppercase(), MaterialTheme.colorScheme.primary, 42)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "vs $opponentName",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        challenge.quizTitle,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        formatTimestamp(challenge.completedAt?.seconds?.times(1000) ?: 0L),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("$myScore : $opponentScore", fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Surface(shape = RoundedCornerShape(6.dp), color = resultColor.copy(.15f)) {
+                        Text(
+                            resultLabel,
+                            modifier   = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            fontSize   = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = resultColor
+                        )
+                    }
+                }
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+            }
         }
+    }
     }
 }
 
@@ -668,7 +890,12 @@ private fun EmptyState(title: String, subtitle: String) {
         Column(horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(Modifier.size(72.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface), Alignment.Center) {
-                Icon(Icons.Default.Sports, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
+                Icon(
+                    painter = androidx.compose.ui.res.painterResource(id = com.example.brainracer.R.drawable.cognition),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(32.dp)
+                )
             }
             Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
