@@ -4,9 +4,12 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.UserRepositoryImpl
+import com.example.brainracer.data.repositories.UserRepositoryImpl.Companion.NICKNAME_TAKEN_ERROR_CODE
 import com.example.brainracer.domain.entities.User
 import com.example.brainracer.domain.entities.normalizeNicknameForStorage
 import com.example.brainracer.data.utils.Result
+import com.example.brainracer.ui.utils.ModerationResult
+import com.example.brainracer.ui.utils.QuizModeration
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
@@ -15,6 +18,7 @@ import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +44,21 @@ class AuthViewModel : ViewModel() {
                 _user.value = auth.currentUser
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing in", e)
+                _error.value = userFacingAuthMessage(e)
+            }
+        }
+    }
+
+    fun signInWithGoogle(idToken: String) {
+        viewModelScope.launch {
+            try {
+                val credential = GoogleAuthProvider.getCredential(idToken, null)
+                val authResult = auth.signInWithCredential(credential).await()
+                val firebaseUser = authResult.user ?: throw IllegalStateException("Google user is null")
+                ensureFirestoreUserForGoogle(firebaseUser)
+                _user.value = firebaseUser
+            } catch (e: Exception) {
+                Log.e("AuthViewModel", "Error signing in with Google", e)
                 _error.value = userFacingAuthMessage(e)
             }
         }
@@ -73,6 +92,15 @@ class AuthViewModel : ViewModel() {
                 if (trimmedNick.all { it.isDigit() }) {
                     deleteNewAuthUserAndFail("Никнейм не может состоять только из цифр")
                     return@launch
+                }
+                when (val nameModeration = QuizModeration.validateUsername(trimmedNick)) {
+                    is ModerationResult.Blocked -> {
+                        deleteNewAuthUserAndFail(
+                            "Никнейм отклонен: [${nameModeration.violation.category.localizedLabel()}] ${nameModeration.violation.reason}"
+                        )
+                        return@launch
+                    }
+                    ModerationResult.Allowed -> Unit
                 }
 
                 when (val nickCount = userRepository.countUsersWithNicknameNormalized(normalized)) {
@@ -110,8 +138,11 @@ class AuthViewModel : ViewModel() {
                 if (result is Result.Success) {
                     _user.value = auth.currentUser
                 } else if (result is Result.Error) {
-                    _error.value =
+                    _error.value = if (result.exception.message == NICKNAME_TAKEN_ERROR_CODE) {
+                        "Этот никнейм уже занят"
+                    } else {
                         "Не удалось создать профиль: ${result.exception.message ?: "ошибка сервера"}"
+                    }
                     try {
                         firebaseUser.delete().await()
                     } catch (deleteEx: Exception) {
@@ -149,7 +180,21 @@ class AuthViewModel : ViewModel() {
         viewModelScope.launch {
             _deleteAccountError.value = null
             try {
-                auth.currentUser?.delete()?.await()
+                val currentUser = auth.currentUser
+                if (currentUser == null) {
+                    _user.value = null
+                    return@launch
+                }
+                val uid = currentUser.uid
+                when (val cleanup = userRepository.deleteUserAccountData(uid)) {
+                    is Result.Error -> {
+                        _deleteAccountError.value =
+                            "Не удалось удалить данные профиля: ${cleanup.exception.message ?: "ошибка"}"
+                        return@launch
+                    }
+                    is Result.Success -> Unit
+                }
+                currentUser.delete().await()
                 _user.value = auth.currentUser
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error deleting account", e)
@@ -210,5 +255,77 @@ class AuthViewModel : ViewModel() {
                 _user.value = null
             }
         }
+    }
+
+    private suspend fun ensureFirestoreUserForGoogle(firebaseUser: com.google.firebase.auth.FirebaseUser) {
+        when (val existing = userRepository.getUser(firebaseUser.uid)) {
+            is Result.Success -> {
+                val user = existing.data
+                val fallbackNormalized = normalizeNicknameForStorage(user.nickname)
+                val updatedUser = user.copy(
+                    email = firebaseUser.email ?: user.email,
+                    avatarUrl = firebaseUser.photoUrl?.toString() ?: user.avatarUrl,
+                    nicknameNormalized = user.nicknameNormalized.ifBlank { fallbackNormalized },
+                    lastLogin = Timestamp.now()
+                )
+                when (val updateResult = userRepository.updateUser(updatedUser)) {
+                    is Result.Error -> throw updateResult.exception
+                    is Result.Success -> Unit
+                }
+            }
+            is Result.Error -> {
+                val isUserMissing = existing.exception.message
+                    ?.contains("User not found", ignoreCase = true) == true
+                if (!isUserMissing) throw existing.exception
+
+                val fallbackNickname = buildGoogleNickname(firebaseUser)
+                val candidates = listOf(
+                    fallbackNickname,
+                    "${fallbackNickname}_${firebaseUser.uid.take(4)}"
+                ).distinct()
+                var created = false
+                var lastError: Exception? = null
+                for (candidate in candidates) {
+                    val normalized = normalizeNicknameForStorage(candidate)
+                    val user = User(
+                        id = firebaseUser.uid,
+                        email = firebaseUser.email.orEmpty(),
+                        nickname = candidate,
+                        nicknameNormalized = normalized,
+                        avatarUrl = firebaseUser.photoUrl?.toString(),
+                        createdAt = Timestamp.now(),
+                        lastLogin = Timestamp.now()
+                    )
+                    when (val createResult = userRepository.createUser(user)) {
+                        is Result.Success -> {
+                            created = true
+                            break
+                        }
+                        is Result.Error -> {
+                            lastError = createResult.exception
+                            if (createResult.exception.message != NICKNAME_TAKEN_ERROR_CODE) {
+                                throw createResult.exception
+                            }
+                        }
+                    }
+                }
+                if (!created) {
+                    throw (lastError ?: IllegalStateException("Не удалось создать профиль Google"))
+                }
+            }
+        }
+    }
+
+    private fun buildGoogleNickname(firebaseUser: com.google.firebase.auth.FirebaseUser): String {
+        val rawBase = firebaseUser.displayName
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: firebaseUser.email?.substringBefore('@').orEmpty()
+        val sanitized = rawBase
+            .replace("\\s+".toRegex(), "_")
+            .replace("[^\\p{L}\\p{N}_-]".toRegex(), "")
+            .ifBlank { "Игрок" }
+            .take(24)
+        return if (sanitized.all { it.isDigit() }) "Игрок_${firebaseUser.uid.take(4)}" else sanitized
     }
 }
