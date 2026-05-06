@@ -1,11 +1,20 @@
 package com.example.brainracer.ui.screens
 
+import android.graphics.drawable.Drawable
 import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.*
@@ -20,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,17 +40,25 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.brainracer.R
 import com.example.brainracer.domain.entities.Challenge
 import com.example.brainracer.domain.entities.ChallengeStatus
 import com.example.brainracer.domain.entities.UserStats
 import com.example.brainracer.ui.components.BottomBar
 import com.example.brainracer.ui.components.ChallengeFriendQuizSheetContent
+import com.example.brainracer.ui.components.bottomBarOcclusionBlockClicks
+import com.example.brainracer.ui.components.bottomBarOcclusionEffect
+import com.example.brainracer.ui.components.bottomBarSafePadding
+import com.example.brainracer.ui.components.pressClickable
+import com.example.brainracer.ui.components.pressScale
+import com.example.brainracer.ui.components.rememberFabVisibilityOnScroll
 import com.example.brainracer.ui.utils.HOME_CATEGORY_CUSTOM
 import com.example.brainracer.ui.utils.QuizItem
 import com.example.brainracer.ui.utils.customAuthorCaption
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import com.example.brainracer.ui.viewmodels.HomeViewModel
+import java.util.Calendar
 
 private data class Banner(
     val id: Int,
@@ -120,6 +138,20 @@ fun HomeScreen(
     }
 
     val tabQuizzes = uiState.quizzes.take(5)
+    val hotQuizzes = remember(uiState.quizzes) {
+        uiState.quizzes
+            .sortedByDescending { it.playCount }
+            .take(3)
+    }
+    val greetingUi = remember { getGreetingUi() }
+    val homeListState = rememberLazyListState()
+    val fabVisible = rememberFabVisibilityOnScroll(homeListState)
+    val bottomReflexShift by remember {
+        derivedStateOf {
+            ((homeListState.firstVisibleItemIndex * 4f) +
+                    homeListState.firstVisibleItemScrollOffset * 0.012f).coerceIn(0f, 18f)
+        }
+    }
 
     if (showChallengeSheet) {
         ModalBottomSheet(
@@ -171,54 +203,84 @@ fun HomeScreen(
                 onLeaderboardClick           = onLeaderboardClick,
                 onChallengesClick            = onChallengesClick,
                 onQuizzesClick               = onQuizzesClick,
-                onProfileClick               = onProfileClick
+                onProfileClick               = onProfileClick,
+                reflexShift                  = bottomReflexShift
             )
         },
         floatingActionButton = {
-            Button(
-                onClick = { navController.navigate("quiz_creator") },
-                modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .padding(end = 4.dp, bottom = 4.dp),
-                shape = RoundedCornerShape(percent = 50),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+            AnimatedVisibility(
+                visible = fabVisible,
+                enter = fadeIn(tween(220)) + slideInVertically(
+                    initialOffsetY = { it / 2 },
+                    animationSpec = tween(220)
                 ),
-                elevation = ButtonDefaults.buttonElevation(
-                    defaultElevation = 6.dp,
-                    pressedElevation = 10.dp,
-                    hoveredElevation = 8.dp
-                ),
-                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 14.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(22.dp)
+                exit = fadeOut(tween(180)) + slideOutVertically(
+                    targetOffsetY = { it / 2 },
+                    animationSpec = tween(180)
                 )
-                Spacer(Modifier.width(10.dp))
-                Text("Создать", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            ) {
+                Button(
+                    onClick = { navController.navigate("quiz_creator") },
+                    modifier = Modifier
+                        .pressScale()
+                        .height(46.dp)
+                        .padding(end = 4.dp, bottom = 4.dp),
+                    shape = RoundedCornerShape(percent = 30),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 4.dp,
+                        pressedElevation = 7.dp,
+                        hoveredElevation = 6.dp
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.add_btn),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Создать", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
             }
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
+        val homeBottomInset = bottomBarSafePadding(
+            paddingValues = padding,
+            extraBottom = 10.dp,
+            minBottom = 152.dp
+        )
+        val fabReservedBottomInset = 78.dp
         LazyColumn(
-            modifier            = Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.background),
-            contentPadding      = PaddingValues(top = 20.dp, bottom = 152.dp),
+            state               = homeListState,
+            modifier            = Modifier
+                .fillMaxSize()
+                .padding(top = padding.calculateTopPadding())
+                .background(MaterialTheme.colorScheme.background),
+            contentPadding      = PaddingValues(top = 20.dp, bottom = homeBottomInset + fabReservedBottomInset),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item { UserStatRow(uiState.userStats, uiState.userLevel, uiState.levelProgress) }
-            item { WelcomeRow(uiState.userName.ifBlank { "Гость" }) }
+            item {
+                WelcomeRow(
+                    userName = uiState.userName.ifBlank { "Гость" },
+                    greeting = greetingUi.greeting,
+                    emoji = greetingUi.emoji,
+                    onClick = onProfileClick
+                )
+            }
             item { BannerCarousel(homeBanners) }
 
             if (tabs.isNotEmpty()) {
                 item { CategoryTabs(tabs, selectedTabIndex) { selectedTabIndex = it } }
             }
 
-            val hot = tabQuizzes.take(2)
-            if (hot.isNotEmpty()) {
-                item { HotQuizzesSection(hot) { id -> navController.navigate("quiz_detail/$id") } }
+            if (hotQuizzes.isNotEmpty()) {
+                item { HotQuizzesSection(hotQuizzes) { id -> navController.navigate("quiz_detail/$id") } }
             }
 
             item {
@@ -283,7 +345,11 @@ private fun HomeTopBar(
     )
 
     Surface(color = MaterialTheme.colorScheme.background) {
-        Column {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -320,11 +386,11 @@ private fun HomeTopBar(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     IconButton(onClick = onSearchClick) {
-                        Icon(Icons.Outlined.Search, null, tint = MaterialTheme.colorScheme.onSurface.copy(0.7f))
+                        Icon(painter = painterResource(id = R.drawable.search_btn), null, tint = MaterialTheme.colorScheme.onSurface.copy(0.7f))
                     }
                     IconButton(onClick = onNotificationsClick) {
                         Box {
-                            Icon(Icons.Outlined.Notifications, null, tint = MaterialTheme.colorScheme.onSurface.copy(0.7f))
+                            Icon(painter = painterResource(id = R.drawable.bell_btn), null, tint = MaterialTheme.colorScheme.onSurface.copy(0.7f))
                             if (unreadNotificationsCount > 0) {
                                 Box(
                                     Modifier.size(8.dp).align(Alignment.TopEnd)
@@ -335,7 +401,7 @@ private fun HomeTopBar(
                         }
                     }
                     IconButton(onClick = onSignOut) {
-                        Icon(Icons.Default.Logout, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(painter = painterResource(id = R.drawable.logout), null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -398,18 +464,21 @@ private fun UserStatRow(
 // ══════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun WelcomeRow(userName: String) {
+private fun WelcomeRow(userName: String, greeting: String, emoji: String, onClick: () -> Unit) {
     val ext = LocalBrainRacerExtendedColors.current
     val g = ext.cardGradients
     val avatarStops = listOf(g[0][0], g[1][0])
     Row(
-        modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        modifier              = Modifier
+            .fillMaxWidth()
+            .pressClickable(onClick = onClick)
+            .padding(horizontal = 20.dp),
         verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column {
-            Text("Добрый день,", color = MaterialTheme.colorScheme.onSurface.copy(0.6f), fontSize = 14.sp)
-            Text("$userName! 🚀", fontWeight = FontWeight.Bold, fontSize = 24.sp, color = MaterialTheme.colorScheme.onSurface)
+            Text(greeting, color = MaterialTheme.colorScheme.onSurface.copy(0.6f), fontSize = 14.sp)
+            Text("$userName! $emoji", fontWeight = FontWeight.Bold, fontSize = 24.sp, color = MaterialTheme.colorScheme.onSurface)
         }
         Box(
             modifier = Modifier.size(54.dp).clip(CircleShape)
@@ -421,6 +490,20 @@ private fun WelcomeRow(userName: String) {
                 fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary
             )
         }
+    }
+}
+
+private data class GreetingUi(
+    val greeting: String,
+    val emoji: String
+)
+
+private fun getGreetingUi(): GreetingUi {
+    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    return when (hour) {
+        in 5..11 -> GreetingUi("Доброе утро,", "🌅")
+        in 12..17 -> GreetingUi("Добрый день,", "☀️")
+        else -> GreetingUi("Добрый вечер,", "🌙")
     }
 }
 
@@ -522,42 +605,93 @@ private fun HotQuizzesSection(quizzes: List<QuizItem>, onQuizClick: (String) -> 
             Text("Популярное", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
         }
         Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            quizzes.forEachIndexed { i, quiz ->
-                val gradient = cardGradients[i % cardGradients.size]
-                Box(
-                    modifier = Modifier.weight(1f).height(118.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(Brush.linearGradient(gradient, Offset.Zero, Offset(600f, 600f)))
-                        .clickable { onQuizClick(quiz.id) }
-                        .padding(14.dp)
+        BoxWithConstraints {
+            val useHorizontalLayout = maxWidth < 360.dp
+
+            if (useHorizontalLayout) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(end = 4.dp)
                 ) {
-                    Column(
-                        verticalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Surface(shape = RoundedCornerShape(8.dp), color = Color.White.copy(0.2f)) {
-                            Text("HOT",
-                                modifier   = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                color      = Color.White, fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold)
-                        }
-                        Column {
-                            Text(quiz.category, color = Color.White.copy(0.8f), fontSize = 11.sp)
-                            Text(
-                                quiz.title,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                lineHeight = 15.sp,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text("${quiz.questionCount} вопросов", color = Color.White.copy(0.72f),
-                                fontSize = 11.sp)
-                        }
+                    items(count = quizzes.size, key = { quizzes[it].id }) { i ->
+                        val quiz = quizzes[i]
+                        HotQuizCard(
+                            quiz = quiz,
+                            gradient = cardGradients[i % cardGradients.size],
+                            modifier = Modifier.width(162.dp),
+                            onQuizClick = onQuizClick
+                        )
                     }
                 }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    quizzes.forEachIndexed { i, quiz ->
+                        HotQuizCard(
+                            quiz = quiz,
+                            gradient = cardGradients[i % cardGradients.size],
+                            modifier = Modifier.weight(1f),
+                            onQuizClick = onQuizClick
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HotQuizCard(
+    quiz: QuizItem,
+    gradient: List<Color>,
+    modifier: Modifier = Modifier,
+    onQuizClick: (String) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .bottomBarOcclusionEffect()
+            .bottomBarOcclusionBlockClicks()
+            .then(modifier)
+            .height(136.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(Brush.linearGradient(gradient, Offset.Zero, Offset(600f, 600f)))
+            .pressClickable { onQuizClick(quiz.id) }
+            .padding(horizontal = 12.dp, vertical = 11.dp)
+    ) {
+        Column(
+            verticalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Surface(shape = RoundedCornerShape(8.dp), color = Color.White.copy(0.2f)) {
+                Text(
+                    "HOT",
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+            Column {
+                Text(
+                    quiz.category,
+                    color = Color.White.copy(0.78f),
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    quiz.title,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.5.sp,
+                    lineHeight = 14.sp,
+                    maxLines = 4,
+                    overflow = TextOverflow.Clip
+                )
+                Text(
+                    "${quiz.questionCount} вопросов",
+                    color = Color.White.copy(0.72f),
+                    fontSize = 10.sp
+                )
             }
         }
     }
@@ -576,12 +710,20 @@ private fun AllQuizzesSection(
 ) {
     Column {
         Row(
-            modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .bottomBarOcclusionEffect()
+                .bottomBarOcclusionBlockClicks(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment     = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(listTitle, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
-            TextButton(onClick = { onShowAll(currentCategory) }) {
+            TextButton(
+                onClick = { onShowAll(currentCategory) },
+                modifier = Modifier.pressScale(),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
                 Text("Смотреть все", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
             }
         }
@@ -635,12 +777,14 @@ private fun QuizRowCard(quiz: QuizItem, colorIndex: Int, onClick: () -> Unit) {
     val gradient = cardGradients[colorIndex % cardGradients.size]
     Box(
         modifier = Modifier
+            .bottomBarOcclusionEffect()
+            .bottomBarOcclusionBlockClicks()
             .fillMaxWidth()
             .heightIn(min = 88.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
-            .clickable { onClick() }
+            .pressClickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 12.dp),
@@ -717,27 +861,32 @@ private fun RecentChallengesSection(
     var tabIndex by remember { mutableIntStateOf(0) }
     val tabLabels = listOf("Активные", "Завершённые")
     val listShown = if (tabIndex == 0) activeChallenges else finishedChallenges
+    val listPreview = listShown.take(5)
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            "⚔️ Последние вызовы",
-            modifier = Modifier.padding(horizontal = 20.dp),
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(Modifier.height(8.dp))
         Row(
-            modifier              = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment     = Alignment.CenterVertically
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .bottomBarOcclusionEffect()
+                .bottomBarOcclusionBlockClicks(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Text(
+                "⚔️ Последние вызовы",
+                modifier = Modifier.padding(start = 8.dp),
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
             TextButton(
                 onClick = onNewChallenge,
+                modifier = Modifier.pressScale(),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Icon(
-                    Icons.Default.Sports,
+                    painter = painterResource(id = R.drawable.cognition),
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp)
@@ -745,44 +894,61 @@ private fun RecentChallengesSection(
                 Spacer(Modifier.width(6.dp))
                 Text("Вызов", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
             }
-            TextButton(
-                onClick = onViewAll,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Text("Все вызовы", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
-            }
         }
+        Spacer(Modifier.height(2.dp))
+        /*Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(
+            onClick = onViewAll,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text("Все вызовы", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+        }
+    }*/
         Spacer(Modifier.height(4.dp))
 
-        TabRow(
-            modifier         = Modifier.padding(horizontal = 20.dp),
-            selectedTabIndex = tabIndex,
-            containerColor   = MaterialTheme.colorScheme.background,
-            contentColor     = MaterialTheme.colorScheme.primary,
-            indicator = { positions ->
-                if (tabIndex < positions.size) {
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(positions[tabIndex]),
-                        color    = MaterialTheme.colorScheme.primary,
-                        height   = 2.dp
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .bottomBarOcclusionEffect()
+                .bottomBarOcclusionBlockClicks()
+        ) {
+            TabRow(
+                modifier         = Modifier.fillMaxWidth(),
+                selectedTabIndex = tabIndex,
+                containerColor   = MaterialTheme.colorScheme.background,
+                contentColor     = MaterialTheme.colorScheme.primary,
+                indicator = { positions ->
+                    if (tabIndex < positions.size) {
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(positions[tabIndex]),
+                            color    = MaterialTheme.colorScheme.primary,
+                            height   = 2.dp
+                        )
+                    }
+                },
+                divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outline) }
+            ) {
+                tabLabels.forEachIndexed { i, title ->
+                    Tab(
+                        selected = tabIndex == i,
+                        onClick  = { tabIndex = i },
+                        text     = { Text(title, fontSize = 13.sp, maxLines = 1) },
+                        selectedContentColor   = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            },
-            divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outline) }
-        ) {
-            tabLabels.forEachIndexed { i, title ->
-                Tab(
-                    selected = tabIndex == i,
-                    onClick  = { tabIndex = i },
-                    text     = { Text(title, fontSize = 13.sp, maxLines = 1) },
-                    selectedContentColor   = MaterialTheme.colorScheme.primary,
-                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
         Spacer(Modifier.height(10.dp))
 
-        if (listShown.isEmpty()) {
+        if (listPreview.isEmpty()) {
             val (title, subtitle) = if (tabIndex == 0) {
                 "Нет активных вызовов" to "Примите вызов или бросьте вызов другу во вкладке друзей"
             } else {
@@ -810,7 +976,7 @@ private fun RecentChallengesSection(
                             colors      = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             shape       = RoundedCornerShape(12.dp)
                         ) {
-                            Icon(Icons.Default.Sports, null, Modifier.size(18.dp), Color.White)
+                            Icon(painter = painterResource(id = R.drawable.cognition), null, Modifier.size(18.dp), Color.White)
                             Spacer(Modifier.width(8.dp))
                             Text("Бросить вызов", color = Color.White, fontSize = 14.sp)
                         }
@@ -824,7 +990,7 @@ private fun RecentChallengesSection(
             modifier            = Modifier.padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            listShown.forEach { ch ->
+            listPreview.forEach { ch ->
                 HomeChallengeRow(
                     ch            = ch,
                     currentUserId = currentUserId,
@@ -875,12 +1041,14 @@ private fun HomeChallengeRow(
     val isFinishedRow = ch.status == ChallengeStatus.COMPLETED
     Box(
         modifier = Modifier
+            .bottomBarOcclusionEffect()
+            .bottomBarOcclusionBlockClicks()
             .fillMaxWidth()
             .alpha(if (isFinishedRow) 0.82f else 1f)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, statusColor.copy(0.3f), RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
+            .pressClickable(onClick = onClick)
     ) {
         Row(
             modifier              = Modifier.fillMaxWidth().padding(14.dp),
