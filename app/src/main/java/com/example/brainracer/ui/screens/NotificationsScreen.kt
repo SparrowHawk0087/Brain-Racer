@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Sports
@@ -65,7 +64,7 @@ fun NotificationsScreen(
     val challengesList = remember(uiState.items, hidden) {
         uiState.items.filter {
             it.type == AppNotificationType.CHALLENGE &&
-                (it.challengeId == null || it.challengeId !in hidden)
+                    (it.challengeId == null || it.challengeId !in hidden)
         }
     }
     val hasUnreadGeneral = remember(generalList) { generalList.any { !it.read } }
@@ -84,10 +83,17 @@ fun NotificationsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MaterialTheme.colorScheme.onSurface)
+                        Icon(
+                            painter = androidx.compose.ui.res.painterResource(id = com.example.brainracer.R.drawable.arrow_back_btn),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                modifier = Modifier
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .background(MaterialTheme.colorScheme.background)
             )
         }
     ) { padding ->
@@ -235,7 +241,12 @@ private fun NotificationCard(
                         Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(0.2f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Sports, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
+                        Icon(
+                            painter = androidx.compose.ui.res.painterResource(id = com.example.brainracer.R.drawable.cognition),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(26.dp)
+                        )
                     }
                 else ->
                     Box(
