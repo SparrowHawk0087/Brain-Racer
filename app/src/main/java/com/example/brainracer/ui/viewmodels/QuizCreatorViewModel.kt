@@ -10,6 +10,8 @@ import com.example.brainracer.data.repositories.UserRepositoryImpl
 import com.example.brainracer.data.utils.ImageOptimizerUtil
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
+import com.example.brainracer.ui.utils.ModerationResult
+import com.example.brainracer.ui.utils.QuizModeration
 import com.example.brainracer.domain.entities.Question
 import com.example.brainracer.domain.entities.QuestionType
 import com.example.brainracer.domain.entities.Quiz
@@ -146,6 +148,7 @@ val quizTemplates = listOf(
 data class QuizCreatorUiState(
     val currentDraft: QuizDraft       = QuizDraft(),
     val drafts: List<QuizDraft>       = emptyList(),
+    val editingQuizId: String?        = null,
     val isLoading: Boolean            = false,
     val isSaving: Boolean             = false,
     val isPublishing: Boolean         = false,
@@ -179,6 +182,65 @@ class QuizCreatorViewModel : ViewModel() {
     }
 
     init { loadDrafts() }
+
+    fun loadQuizForEdit(quizId: String) {
+        if (quizId.isBlank()) return
+        if (_uiState.value.editingQuizId == quizId) return
+        _uiState.update { it.copy(isLoading = true, error = null) }
+        viewModelScope.launch {
+            when (val res = quizRepository.getQuiz(quizId)) {
+                is Result.Success -> {
+                    val quiz = res.data
+                    if (quiz.createdBy != userId) {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                error = "Редактировать может только автор викторины"
+                            )
+                        }
+                        return@launch
+                    }
+                    val draft = QuizDraft(
+                        id = quiz.id,
+                        title = quiz.title,
+                        description = quiz.description,
+                        categoryId = quiz.categoryId,
+                        difficulty = quiz.difficulty,
+                        coverUrl = quiz.imageUrl.takeIf { it.isNotBlank() },
+                        timePerQuestion = quiz.timePerQuestion,
+                        questions = quiz.questions.map { q ->
+                            DraftQuestion(
+                                id = q.id.ifBlank { UUID.randomUUID().toString() },
+                                text = q.questionText,
+                                options = if (q.options.size >= 2) q.options else listOf("", "", "", ""),
+                                correctIndex = q.correctAnswerIndex.coerceIn(0, (q.options.lastIndex).coerceAtLeast(0)),
+                                points = q.points,
+                                timeLimit = q.timeLimit,
+                                imageUrl = q.imageUrl ?: q.gifUrl,
+                                isGif = !q.gifUrl.isNullOrBlank()
+                            )
+                        }.ifEmpty { listOf(DraftQuestion(timeLimit = quiz.timePerQuestion)) }
+                    )
+                    _uiState.update {
+                        it.copy(
+                            currentDraft = draft,
+                            editingQuizId = quiz.id,
+                            isLoading = false,
+                            publishSuccess = false
+                        )
+                    }
+                }
+                is Result.Error -> {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "Не удалось загрузить викторину для редактирования: ${res.exception.message}"
+                        )
+                    }
+                }
+            }
+        }
+    }
 
     // ── Редактирование мета-данных викторины ──────────────────────────────
 
@@ -416,7 +478,7 @@ class QuizCreatorViewModel : ViewModel() {
                 difficulty      = template.difficulty,
                 timePerQuestion = template.timePerQuestion,
                 questions       = questions
-            ))
+            ), editingQuizId = null)
         }
     }
 
@@ -435,28 +497,46 @@ class QuizCreatorViewModel : ViewModel() {
             _uiState.update { it.copy(error = "Заполните вопрос ${invalidQ + 1} и все варианты ответов") }
             return
         }
+        when (val moderation = QuizModeration.validateQuizDraft(draft)) {
+            is ModerationResult.Blocked -> {
+                _uiState.update {
+                    it.copy(
+                        error = "Публикация заблокирована: [${moderation.violation.category.localizedLabel()}] запрещённый контент в ${moderation.violation.location} (${moderation.violation.reason})"
+                    )
+                }
+                return
+            }
+            ModerationResult.Allowed -> Unit
+        }
 
         _uiState.update { it.copy(isPublishing = true) }
         viewModelScope.launch {
             try {
-                val quizId = "quiz_custom_${UUID.randomUUID().toString().take(8)}"
+                val editingId = _uiState.value.editingQuizId
+                val existingQuiz = if (!editingId.isNullOrBlank()) {
+                    when (val q = quizRepository.getQuiz(editingId)) {
+                        is Result.Success -> q.data
+                        is Result.Error -> null
+                    }
+                } else null
+                val quizId = existingQuiz?.id ?: "quiz_custom_${UUID.randomUUID().toString().take(8)}"
                 val creatorNick = when (val u = userRepository.getUser(userId)) {
                     is Result.Success -> u.data.nickname.trim().takeIf { it.isNotBlank() }
                     else -> null
-                } ?: auth.currentUser?.displayName?.trim()?.takeIf { it.isNotBlank() }.orEmpty()
+                } ?: existingQuiz?.creatorNickname ?: auth.currentUser?.displayName?.trim()?.takeIf { it.isNotBlank() }.orEmpty()
                 val quiz = Quiz(
                     id              = quizId,
                     title           = draft.title,
                     description     = draft.description,
                     categoryId      = draft.categoryId,
                     difficulty      = draft.difficulty,
-                    isPublic        = true,
-                    createdBy       = userId,
+                    isPublic        = existingQuiz?.isPublic ?: true,
+                    createdBy       = existingQuiz?.createdBy ?: userId,
                     creatorNickname = creatorNick,
                     imageUrl        = draft.coverUrl ?: "",
                     timePerQuestion = draft.timePerQuestion,
-                    createdAt       = Timestamp.now(),
-                    stats           = QuizStats(),
+                    createdAt       = existingQuiz?.createdAt ?: Timestamp.now(),
+                    stats           = existingQuiz?.stats ?: QuizStats(),
                     questions       = draft.questions.mapIndexed { i, q ->
                         Question(
                             id                 = q.id,
@@ -471,7 +551,7 @@ class QuizCreatorViewModel : ViewModel() {
                         )
                     }
                 )
-                when (val r = quizRepository.createQuiz(quiz)) {
+                when (val r = if (existingQuiz != null) quizRepository.updateQuiz(quiz) else quizRepository.createQuiz(quiz)) {
                     is Result.Success -> {
                         // Удаляем черновик после публикации
                         try {
@@ -479,12 +559,24 @@ class QuizCreatorViewModel : ViewModel() {
                                 .collection("drafts").document(draft.id).delete().await()
                         } catch (_: Exception) {}
                         ProfileAfterQuizRefresh.notify(userId)
-                        _uiState.update { it.copy(isPublishing = false, publishSuccess = true, currentDraft = QuizDraft()) }
+                        _uiState.update {
+                            it.copy(
+                                isPublishing = false,
+                                publishSuccess = true,
+                                currentDraft = QuizDraft(),
+                                editingQuizId = null
+                            )
+                        }
                         loadDrafts()
                         onSuccess()
                     }
                     is Result.Error -> {
-                        _uiState.update { it.copy(isPublishing = false, error = "Ошибка публикации: ${r.exception.message}") }
+                        _uiState.update {
+                            it.copy(
+                                isPublishing = false,
+                                error = "Ошибка ${if (existingQuiz != null) "обновления" else "публикации"}: ${r.exception.message}"
+                            )
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -496,7 +588,7 @@ class QuizCreatorViewModel : ViewModel() {
     // ── Новый черновик ────────────────────────────────────────────────────
 
     fun newDraft() {
-        _uiState.update { it.copy(currentDraft = QuizDraft(), publishSuccess = false) }
+        _uiState.update { it.copy(currentDraft = QuizDraft(), publishSuccess = false, editingQuizId = null) }
     }
 
     fun clearError() {
