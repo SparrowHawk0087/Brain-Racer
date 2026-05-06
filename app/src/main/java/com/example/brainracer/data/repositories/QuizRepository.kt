@@ -28,7 +28,14 @@ interface QuizRepository {
     suspend fun countSavedResultsForUserAndQuiz(userId: String, quizId: String): Result<Int>
     /** Все завершённые сессии (соло/дуэль, с записью и без), см. users/.../quiz_play_counts. */
     suspend fun getUserQuizPlayCount(userId: String, quizId: String): Result<Int>
-    suspend fun recordUserQuizSessionFinished(userId: String, quizId: String, savedResultToQuizResults: Boolean): Result<Unit>
+    /* Фиксация завершения сессии прохождения
+    Одна и та же sessionId учитывается в счетчике только один раз */
+    suspend fun recordUserQuizSessionFinished(
+        userId: String,
+        quizId: String,
+        sessionId: String,
+        savedResultToQuizResults: Boolean
+    ): Result<Unit>
     suspend fun getPopularQuizzes(limit: Int = 10): Result<List<Quiz>>
     /** Публичные викторины с id `quiz_custom_*` (пользовательский конструктор). */
     suspend fun getPublicCustomQuizzes(limit: Int = 50): Result<List<Quiz>>

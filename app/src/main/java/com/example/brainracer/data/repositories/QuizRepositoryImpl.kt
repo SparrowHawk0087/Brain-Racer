@@ -387,27 +387,40 @@ class QuizRepositoryImpl: QuizRepository {
     override suspend fun recordUserQuizSessionFinished(
         userId: String,
         quizId: String,
+        sessionId: String,
         savedResultToQuizResults: Boolean
     ): Result<Unit> = try {
-        if (userId.isBlank() || quizId.isBlank()) {
+        if (userId.isBlank() || quizId.isBlank() || sessionId.isBlank()) {
             Result.success(Unit)
         } else {
-        val ref = usersCollection.document(userId).collection("quiz_play_counts").document(quizId)
-        val snap = ref.get().await()
-        val resultsCount = when (val c = countSavedResultsForUserAndQuiz(userId, quizId)) {
-            is Result.Success -> c.data
-            else -> 0
-        }
-        if (!snap.exists()) {
-            val initial = if (savedResultToQuizResults) resultsCount else resultsCount + 1
-            ref.set(
-                mapOf("count" to initial.coerceAtLeast(1).toLong()),
-                SetOptions.merge()
-            ).await()
-        } else {
-            ref.update("count", FieldValue.increment(1)).await()
-        }
-        Result.success(Unit)
+            val userRef = usersCollection.document(userId)
+            val countRef = userRef.collection("quiz_play_counts").document(quizId)
+            val sessionRef = userRef.collection("quiz_sessions").document(sessionId)
+            firestore.runTransaction { tx ->
+                val sessionSnap = tx.get(sessionRef)
+                if (sessionSnap.exists()) {
+                    return@runTransaction null
+                }
+
+                val countSnap = tx.get(countRef)
+                if (!countSnap.exists()) {
+                    tx.set(countRef, mapOf("count" to 1L), SetOptions.merge())
+                } else {
+                    tx.update(countRef, "count", FieldValue.increment(1))
+                }
+
+                tx.set(
+                    sessionRef,
+                    mapOf(
+                        "quizId" to quizId,
+                        "savedResultToQuizResults" to savedResultToQuizResults,
+                        "finishedAt" to FieldValue.serverTimestamp()
+                    ),
+                    SetOptions.merge()
+                )
+                null
+            }.await()
+            Result.success(Unit)
         }
     } catch (e: Exception) {
         Result.error(e)
