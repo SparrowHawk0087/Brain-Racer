@@ -4,6 +4,7 @@ package com.example.brainracer.ui.screens
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -23,7 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalContext
@@ -46,6 +47,7 @@ import com.example.brainracer.data.utils.isNetworkLikelyAvailable
 import com.example.brainracer.domain.entities.LevelSystem
 import com.example.brainracer.ui.theme.BrainRacerColorTokens
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
+import com.example.brainracer.ui.utils.AppMotionConfig
 import com.example.brainracer.ui.utils.QuizNonScoringReason
 import com.example.brainracer.ui.utils.QuizUIState
 import com.example.brainracer.ui.viewmodels.QuizViewModel
@@ -170,7 +172,7 @@ private fun ChallengeDuelIntroScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Icon(
-                Icons.Default.Sports,
+                painter = androidx.compose.ui.res.painterResource(id = com.example.brainracer.R.drawable.cognition),
                 contentDescription = null,
                 tint     = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(56.dp)
@@ -332,6 +334,9 @@ private fun QuestionScreen(
     onNext: () -> Unit,
     onTimeout: () -> Unit
 ) {
+    val config = LocalConfiguration.current
+    val isCompactHeight = config.screenHeightDp < 760
+    val isCompactWidth = config.screenWidthDp < 390
     val timeLimit = uiState.currentQuestionTimeLimit
 
     // ── Таймер вопроса ────────────────────────────────────────────────────
@@ -408,8 +413,12 @@ private fun QuestionScreen(
                                 modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, null,
-                                    tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
+                                Icon(
+                                    painter = androidx.compose.ui.res.painterResource(id = com.example.brainracer.R.drawable.arrow_back_btn),
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
                     }
@@ -426,7 +435,10 @@ private fun QuestionScreen(
                             color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                modifier = Modifier
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .background(MaterialTheme.colorScheme.background)
             )
         }
     ) { padding ->
@@ -434,10 +446,10 @@ private fun QuestionScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = if (isCompactWidth) 12.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (isCompactHeight) 8.dp else 12.dp)
         ) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(if (isCompactHeight) 2.dp else 4.dp))
 
             QuizSessionBadges(uiState)
 
@@ -470,7 +482,7 @@ private fun QuestionScreen(
                 elevation = CardDefaults.cardElevation(0.dp)
             ) {
                 Row(
-                    modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp),
+                    modifier              = Modifier.fillMaxWidth().padding(horizontal = if (isCompactWidth) 12.dp else 16.dp, vertical = if (isCompactHeight) 9.dp else 11.dp),
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -511,28 +523,36 @@ private fun QuestionScreen(
                 label = "questionContent",
                 modifier = Modifier.weight(1f)
             ) { (questionText, options) ->
+                val questionScrollState = rememberScrollState()
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier            = Modifier.fillMaxSize()
+                    verticalArrangement = Arrangement.spacedBy(if (isCompactHeight) 8.dp else 10.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(questionScrollState)
                 ) {
                     // Текст вопроса
                     Card(
                         modifier  = Modifier.fillMaxWidth(),
-                        shape     = RoundedCornerShape(20.dp),
+                        shape     = RoundedCornerShape(if (isCompactHeight || isCompactWidth) 16.dp else 20.dp),
                         colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         elevation = CardDefaults.cardElevation(0.dp)
                     ) {
                         Box(
-                            modifier         = Modifier.fillMaxWidth().padding(22.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = if (isCompactHeight || isCompactWidth) 14.dp else 22.dp,
+                                    vertical = if (isCompactHeight || isCompactWidth) 14.dp else 22.dp
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text       = questionText,
-                                fontSize   = 18.sp,
+                                fontSize   = if (isCompactHeight || isCompactWidth) 14.sp else 16.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color      = MaterialTheme.colorScheme.onSurface,
                                 textAlign  = TextAlign.Center,
-                                lineHeight = 26.sp
+                                lineHeight = if (isCompactHeight || isCompactWidth) 20.sp else 23.sp
                             )
                         }
                     }
@@ -545,7 +565,8 @@ private fun QuestionScreen(
                             text        = option,
                             state       = answerOptionState(uiState, index),
                             isSubmitted = uiState.isAnswerSubmitted,
-                            onClick     = { onSelect(index) }
+                            onClick     = { onSelect(index) },
+                            compact = isCompactHeight || isCompactWidth
                         )
                     }
                 }
@@ -556,10 +577,11 @@ private fun QuestionScreen(
                 uiState              = uiState,
                 autoAdvanceProgress  = autoAdvanceProgress,
                 onSubmit             = onSubmit,
-                onNext               = onNext
+                onNext               = onNext,
+                compact = isCompactHeight || isCompactWidth
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(if (isCompactHeight) 6.dp else 12.dp))
         }
     }
 }
@@ -586,7 +608,8 @@ private fun AnswerOption(
     text: String,
     state: AnswerState,
     isSubmitted: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    compact: Boolean = false
 ) {
     val bgColor     = when (state) {
         AnswerState.SELECTED -> MaterialTheme.colorScheme.primary.copy(alpha = .20f)
@@ -622,28 +645,29 @@ private fun AnswerOption(
             .background(bgColor)
             .border(1.dp, borderColor, RoundedCornerShape(14.dp))
             .clickable(enabled = !isSubmitted) { onClick() }
-            .padding(horizontal = 14.dp, vertical = 13.dp)
+            .padding(horizontal = if (compact) 12.dp else 14.dp, vertical = if (compact) 10.dp else 13.dp)
     ) {
         Row(
             verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
-                modifier = Modifier.size(28.dp).clip(CircleShape)
+                modifier = Modifier.size(if (compact) 24.dp else 28.dp).clip(CircleShape)
                     .background(borderColor.copy(alpha = .15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(letter, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = borderColor)
+                Text(letter, fontSize = if (compact) 11.sp else 12.sp, fontWeight = FontWeight.Bold, color = borderColor)
             }
             Text(
                 text       = text,
-                fontSize   = 15.sp,
+                fontSize   = if (compact) 14.sp else 15.sp,
                 fontWeight = FontWeight.Medium,
                 color      = textColor,
+                lineHeight = if (compact) 20.sp else 22.sp,
                 modifier   = Modifier.weight(1f)
             )
             if (trailingIcon != null) {
-                Icon(trailingIcon, null, tint = borderColor, modifier = Modifier.size(20.dp))
+                Icon(trailingIcon, null, tint = borderColor, modifier = Modifier.size(if (compact) 18.dp else 20.dp))
             }
         }
     }
@@ -656,7 +680,8 @@ private fun ActionZone(
     uiState: QuizUIState,
     autoAdvanceProgress: Float,
     onSubmit: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    compact: Boolean = false
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (!uiState.isAnswerSubmitted) {
@@ -667,12 +692,12 @@ private fun ActionZone(
                     .clip(RoundedCornerShape(14.dp))
                     .background(if (uiState.selectedAnswerIndex != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
                     .clickable(enabled = uiState.selectedAnswerIndex != null) { onSubmit() }
-                    .padding(vertical = 16.dp),
+                    .padding(vertical = if (compact) 13.dp else 16.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     "Ответить",
-                    fontSize   = 15.sp,
+                    fontSize   = if (compact) 14.sp else 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     color      = if (uiState.selectedAnswerIndex != null) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -714,7 +739,7 @@ private fun ActionZone(
                     .clip(RoundedCornerShape(14.dp))
                     .background(MaterialTheme.colorScheme.primary)
                     .clickable { onNext() }
-                    .padding(vertical = 16.dp),
+                    .padding(vertical = if (compact) 13.dp else 16.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Row(
@@ -723,7 +748,7 @@ private fun ActionZone(
                 ) {
                     Text(
                         if (isLast) "Завершить" else "Следующий вопрос →",
-                        fontSize   = 15.sp,
+                        fontSize   = if (compact) 14.sp else 15.sp,
                         fontWeight = FontWeight.SemiBold,
                         color      = Color.White
                     )
@@ -778,6 +803,8 @@ private fun ResultsScreen(
     challengeId: String? = null,
     onOpenChallengeSummary: (() -> Unit)? = null
 ) {
+    val expandMotion = AppMotionConfig.expand
+    val isCompactWidth = LocalConfiguration.current.screenWidthDp < 390
     val accuracyPct = if (uiState.totalQuestions > 0)
         (uiState.correctAnswers * 100) / uiState.totalQuestions else 0
 
@@ -804,8 +831,9 @@ private fun ResultsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.statusBars)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 24.dp),
+                .padding(horizontal = if (isCompactWidth) 14.dp else 20.dp, vertical = if (isCompactWidth) 18.dp else 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -815,26 +843,31 @@ private fun ResultsScreen(
 
             AnimatedVisibility(
                 visible = showLevelUpBanner,
-                enter   = fadeIn(tween(400)) + expandVertically(tween(400))
+                enter = fadeIn(tween(280)) + expandVertically(
+                    animationSpec = spring(
+                        dampingRatio = expandMotion.enterDampingRatio,
+                        stiffness = expandMotion.enterStiffness
+                    )
+                )
             ) {
                 LevelUpBanner(newLevel = uiState.newLevel)
             }
 
             Box(
                 modifier = Modifier
-                    .size(110.dp)
+                    .size(if (isCompactWidth) 94.dp else 110.dp)
                     .clip(CircleShape)
                     .background(level.color.copy(alpha = 0.15f))
                     .border(2.dp, level.color.copy(alpha = 0.4f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(level.icon, null, modifier = Modifier.size(54.dp), tint = level.color)
+                Icon(level.icon, null, modifier = Modifier.size(if (isCompactWidth) 46.dp else 54.dp), tint = level.color)
             }
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(level.label, fontWeight = FontWeight.Bold, fontSize = 28.sp, color = level.color)
+                Text(level.label, fontWeight = FontWeight.Bold, fontSize = if (isCompactWidth) 24.sp else 28.sp, color = level.color, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(4.dp))
-                Text(level.subtitle, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                Text(level.subtitle, fontSize = if (isCompactWidth) 13.sp else 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             }
 
             Card(
@@ -844,22 +877,22 @@ private fun ResultsScreen(
                 modifier  = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.padding(if (isCompactWidth) 16.dp else 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                    verticalArrangement = Arrangement.spacedBy(if (isCompactWidth) 14.dp else 18.dp)
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("${uiState.score}", fontWeight = FontWeight.Bold,
-                            fontSize = 52.sp, color = MaterialTheme.colorScheme.primary)
-                        Text("игровых очков", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            fontSize = if (isCompactWidth) 44.sp else 52.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("игровых очков", fontSize = if (isCompactWidth) 12.sp else 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Точность", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("$accuracyPct%", fontSize = 15.sp,
+                            Text("Точность", fontSize = if (isCompactWidth) 12.sp else 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("$accuracyPct%", fontSize = if (isCompactWidth) 14.sp else 15.sp,
                                 fontWeight = FontWeight.Bold, color = level.color)
                         }
                         LinearProgressIndicator(
@@ -872,11 +905,11 @@ private fun ResultsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        ResultStat("${uiState.correctAnswers}",  "правильно", LocalBrainRacerExtendedColors.current.detailGreen)
-                        Box(Modifier.width(1.dp).height(40.dp).background(MaterialTheme.colorScheme.outline))
-                        ResultStat("${uiState.incorrectAnswers}", "неверно",  MaterialTheme.colorScheme.error)
-                        Box(Modifier.width(1.dp).height(40.dp).background(MaterialTheme.colorScheme.outline))
-                        ResultStat("${uiState.totalQuestions}",  "всего",    MaterialTheme.colorScheme.onSurfaceVariant)
+                        ResultStat("${uiState.correctAnswers}",  "правильно", LocalBrainRacerExtendedColors.current.detailGreen, compact = isCompactWidth)
+                        Box(Modifier.width(1.dp).height(if (isCompactWidth) 34.dp else 40.dp).background(MaterialTheme.colorScheme.outline))
+                        ResultStat("${uiState.incorrectAnswers}", "неверно",  MaterialTheme.colorScheme.error, compact = isCompactWidth)
+                        Box(Modifier.width(1.dp).height(if (isCompactWidth) 34.dp else 40.dp).background(MaterialTheme.colorScheme.outline))
+                        ResultStat("${uiState.totalQuestions}",  "всего",    MaterialTheme.colorScheme.onSurfaceVariant, compact = isCompactWidth)
                     }
                 }
             }
@@ -888,20 +921,21 @@ private fun ResultsScreen(
                     uiState = uiState,
                     xpProgressAnimated = xpProgressAnimated,
                     isReferenceOnly = uiState.isNonScoringSession,
-                    duelXpDeferred = uiState.duelXpDeferred && uiState.xpEarned == 0
+                    duelXpDeferred = uiState.duelXpDeferred && uiState.xpEarned == 0,
+                    compact = isCompactWidth
                 )
             }
 
             if (allowRestart) {
                 Button(
                     onClick  = onRestart,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    modifier = Modifier.fillMaxWidth().height(if (isCompactWidth) 48.dp else 52.dp),
                     shape    = RoundedCornerShape(14.dp),
                     colors   = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Пройти снова", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Пройти снова", fontWeight = FontWeight.SemiBold, fontSize = if (isCompactWidth) 14.sp else 15.sp)
                 }
             } else {
                 Text(
@@ -916,13 +950,13 @@ private fun ResultsScreen(
             if (!challengeId.isNullOrBlank() && onOpenChallengeSummary != null) {
                 Button(
                     onClick  = onOpenChallengeSummary,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    modifier = Modifier.fillMaxWidth().height(if (isCompactWidth) 48.dp else 52.dp),
                     shape    = RoundedCornerShape(14.dp),
                     colors   = ButtonDefaults.buttonColors(containerColor = LocalBrainRacerExtendedColors.current.detailGreen)
                 ) {
                     Icon(Icons.Default.EmojiEvents, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Итоги вызова", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Итоги вызова", fontWeight = FontWeight.SemiBold, fontSize = if (isCompactWidth) 14.sp else 15.sp)
                 }
             }
 
@@ -930,27 +964,27 @@ private fun ResultsScreen(
             if (uiState.reviewQuestions.isNotEmpty()) {
                 OutlinedButton(
                     onClick  = onShowReview,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    modifier = Modifier.fillMaxWidth().height(if (isCompactWidth) 48.dp else 52.dp),
                     shape    = RoundedCornerShape(14.dp),
                     colors   = ButtonDefaults.outlinedButtonColors(contentColor = LocalBrainRacerExtendedColors.current.detailGreen),
                     border   = androidx.compose.foundation.BorderStroke(1.5.dp, LocalBrainRacerExtendedColors.current.detailGreen)
                 ) {
                     Icon(Icons.Default.Checklist, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Разбор ответов", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Разбор ответов", fontWeight = FontWeight.SemiBold, fontSize = if (isCompactWidth) 14.sp else 15.sp)
                 }
             }
 
             OutlinedButton(
                 onClick  = onBack,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
+                modifier = Modifier.fillMaxWidth().height(if (isCompactWidth) 46.dp else 48.dp),
                 shape    = RoundedCornerShape(14.dp),
                 colors   = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
                 border   = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Icon(Icons.Default.Home, null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("На главную", fontSize = 14.sp)
+                Text("На главную", fontSize = if (isCompactWidth) 13.sp else 14.sp)
             }
 
             Spacer(Modifier.height(16.dp))
@@ -995,7 +1029,8 @@ private fun XpCard(
     uiState: QuizUIState,
     xpProgressAnimated: Float,
     isReferenceOnly: Boolean = false,
-    duelXpDeferred: Boolean = false
+    duelXpDeferred: Boolean = false,
+    compact: Boolean = false
 ) {
     val breakdown    = uiState.xpBreakdown
     val currentLevel = uiState.newLevel
@@ -1006,7 +1041,7 @@ private fun XpCard(
         elevation = CardDefaults.cardElevation(0.dp),
         modifier  = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(modifier = Modifier.padding(if (compact) 16.dp else 20.dp), verticalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -1018,20 +1053,20 @@ private fun XpCard(
                             else -> "Заработано XP"
                         },
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
+                        fontSize = if (compact) 14.sp else 15.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     when {
                         isReferenceOnly ->
                             Text(
                                 "Не сохраняется в профиль",
-                                fontSize = 12.sp,
+                                fontSize = if (compact) 11.sp else 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         duelXpDeferred ->
                             Text(
                                 "В профиль начисляется только победителю после завершения вызова. Учитываются дневной лимит и повторы с тем же соперником и квизом.",
-                                fontSize = 12.sp,
+                                fontSize = if (compact) 11.sp else 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                     }
@@ -1040,21 +1075,21 @@ private fun XpCard(
                     Text(
                         if (duelXpDeferred) "—" else "+${uiState.xpEarned} XP",
                         modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                        fontWeight = FontWeight.Bold, fontSize = if (compact) 13.sp else 14.sp, color = MaterialTheme.colorScheme.primary)
                 }
             }
 
             if (breakdown != null) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    XpRow("Базовые", breakdown.baseXp, MaterialTheme.colorScheme.onSurfaceVariant)
+                    XpRow("Базовые", breakdown.baseXp, MaterialTheme.colorScheme.onSurfaceVariant, compact = compact)
                     if (breakdown.speedBonusXp > 0)
-                        XpRow("Бонус скорости ⚡", breakdown.speedBonusXp, LocalBrainRacerExtendedColors.current.detailGreen)
+                        XpRow("Бонус скорости ⚡", breakdown.speedBonusXp, LocalBrainRacerExtendedColors.current.detailGreen, compact = compact)
                     if (breakdown.accuracyBonusXp > 0)
-                        XpRow("Бонус точности 🎯", breakdown.accuracyBonusXp, BrainRacerColorTokens.QuizXpBonusAccent)
+                        XpRow("Бонус точности 🎯", breakdown.accuracyBonusXp, BrainRacerColorTokens.QuizXpBonusAccent, compact = compact)
                     if (!breakdown.difficultyLabel.startsWith("×1.0")) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Множитель сложности", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(breakdown.difficultyLabel, fontSize = 13.sp,
+                            Text("Множитель сложности", fontSize = if (compact) 12.sp else 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(breakdown.difficultyLabel, fontSize = if (compact) 12.sp else 13.sp,
                                 fontWeight = FontWeight.Medium, color = LocalBrainRacerExtendedColors.current.difficultyExpert)
                         }
                     }
@@ -1064,9 +1099,9 @@ private fun XpCard(
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Уровень $currentLevel", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Уровень $currentLevel", fontSize = if (compact) 12.sp else 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(if (currentLevel < LevelSystem.MAX_LEVEL) "Уровень ${currentLevel + 1}"
-                    else "Максимум", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else "Максимум", fontSize = if (compact) 12.sp else 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 LinearProgressIndicator(
                     progress  = { xpProgressAnimated },
@@ -1075,7 +1110,7 @@ private fun XpCard(
                 )
                 Text(
                     "Ур. $currentLevel  ·  ${LevelSystem.rankForLevel(currentLevel).displayName}",
-                    fontSize  = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize  = if (compact) 11.sp else 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier  = Modifier.fillMaxWidth(), textAlign = TextAlign.Center
                 )
             }
@@ -1084,18 +1119,18 @@ private fun XpCard(
 }
 
 @Composable
-private fun XpRow(label: String, value: Int, color: Color) {
+private fun XpRow(label: String, value: Int, color: Color, compact: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("+$value XP", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = color)
+        Text(label, fontSize = if (compact) 12.sp else 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("+$value XP", fontSize = if (compact) 12.sp else 13.sp, fontWeight = FontWeight.Medium, color = color)
     }
 }
 
 @Composable
-private fun ResultStat(value: String, label: String, color: Color) {
+private fun ResultStat(value: String, label: String, color: Color, compact: Boolean = false) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = color)
-        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontWeight = FontWeight.Bold, fontSize = if (compact) 20.sp else 22.sp, color = color)
+        Text(label, fontSize = if (compact) 10.sp else 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1134,12 +1169,19 @@ private fun AnswerReviewScreen(
                             modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null,
-                                tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
+                            Icon(
+                                painter = androidx.compose.ui.res.painterResource(id = com.example.brainracer.R.drawable.arrow_back_btn),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                modifier = Modifier
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .background(MaterialTheme.colorScheme.background)
             )
         }
     ) { padding ->
