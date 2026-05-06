@@ -541,8 +541,8 @@ fun isValidPassword(password: String): Boolean {
 
 fun isValidUsername(username: String): Boolean {
     return username.isNotBlank()
-        && !username.contains(" ")
-        && !username.all { it.isDigit() }
+            && !username.contains(" ")
+            && !username.all { it.isDigit() }
 }
 
 @Preview
