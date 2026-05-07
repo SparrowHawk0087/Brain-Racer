@@ -11,7 +11,6 @@ import androidx.compose.foundation.shape.*
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,6 +23,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,20 +38,21 @@ import com.example.brainracer.ui.utils.QuizItem
 import com.example.brainracer.ui.utils.customAuthorCaption
 import com.example.brainracer.ui.utils.toQuizItem
 import kotlinx.coroutines.delay
+import com.example.brainracer.R
 
+// Список категорий для фильтрации
 private val allCategories = listOf(
     "Все", "География", "История", "Математика",
     "Фильмы и музыка", "Наука", "Спорт", HOME_CATEGORY_CUSTOM
 )
 
-// ══════════════════════════════════════════════════════════════════════════════
-
+// Главный экран поиска викторин с фильтрами
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     navController: NavController,
-    initialCategory: String = "Все",   // передаётся при переходе «Смотреть все»
-    initialCustomOnly: Boolean = false // только викторины id quiz_custom_*
+    initialCategory: String = "Все",
+    initialCustomOnly: Boolean = false
 ) {
     val repo          = remember { QuizRepositoryImpl() }
     val scope         = rememberCoroutineScope()
@@ -68,6 +69,7 @@ fun SearchScreen(
 
     val cs = MaterialTheme.colorScheme
     val ext = LocalBrainRacerExtendedColors.current
+    // Опции фильтра по сложности с цветами
     val difficultyOptions = remember(cs, ext) {
         listOf(
             Triple("Все уровни", null, cs.onSurfaceVariant),
@@ -78,26 +80,24 @@ fun SearchScreen(
         )
     }
 
+    // Конвертация доменных объектов в UI-модели
     fun mapQuizRows(data: List<com.example.brainracer.domain.entities.Quiz>): List<QuizItem> =
         data.map { it.toQuizItem() }
 
-    /**
-     * Режим только кастомных: вкладка «Кастомные» или вход с `customOnly=true` пока выбрано «Все».
-     * Смена категории (напр. «География») выключает принудительный кастомный режим с deep link.
-     */
+    // Проверка: активен ли режим только кастомных викторин
     fun customCatalogActive(): Boolean = when {
         selectedCategory == HOME_CATEGORY_CUSTOM -> true
         initialCustomOnly && selectedCategory == "Все" -> true
         else -> false
     }
 
-    /** Категория предмета для Firestore; «Кастомные» — не поле categoryId у квиза. */
+    // Возвращает категорию для запроса к Firestore (null = все)
     fun subjectCategoryArg(): String? = when (selectedCategory) {
         "Все", HOME_CATEGORY_CUSTOM -> null
         else -> selectedCategory
     }
 
-    // Фокус на поле ввода при открытии; стартовая загрузка по режиму
+    // Фокус на поле ввода и начальная загрузка данных
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
         when {
@@ -124,7 +124,7 @@ fun SearchScreen(
         }
     }
 
-    // Debounce-поиск при вводе текста
+    // Debounce-поиск: запрос к репозиторию с задержкой
     LaunchedEffect(query, selectedCategory, selectedDifficulty, initialCustomOnly) {
         if (query.isBlank() && selectedCategory == "Все" && selectedDifficulty == null) {
             if (!hasSearched) return@LaunchedEffect
@@ -145,9 +145,9 @@ fun SearchScreen(
                             is com.example.brainracer.data.utils.Result.Success -> {
                                 val filtered = r.data.filter { q ->
                                     q.title.lowercase().contains(needle) ||
-                                        q.description.lowercase().contains(needle)
+                                            q.description.lowercase().contains(needle)
                                 }
-                                com.example.brainracer.data.utils.Result.success(filtered)
+                                com.example.brainrainracer.data.utils.Result.success(filtered)
                             }
                             is com.example.brainracer.data.utils.Result.Error -> r
                         }
@@ -163,6 +163,7 @@ fun SearchScreen(
             var list = (raw as? com.example.brainracer.data.utils.Result.Success)
                 ?.data?.let { mapQuizRows(it) } ?: emptyList()
 
+            // Фильтр только кастомных викторин по ID
             if (customMode) {
                 list = list.filter { it.id.startsWith("quiz_custom_") }
             }
@@ -176,12 +177,13 @@ fun SearchScreen(
         isLoading = false
     }
 
+    // Основной Scaffold экрана
     Scaffold(
         containerColor = cs.background,
         topBar = {
             Surface(color = cs.background) {
                 Column {
-                    // ── Строка поиска ──────────────────────────────────────
+                    // Строка поиска с кнопкой назад
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -191,7 +193,11 @@ fun SearchScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = cs.onBackground)
+                            Icon(
+                                painter = androidx.compose.ui.res.painterResource(id = com.example.brainracer.R.drawable.arrow_back_btn),
+                                contentDescription = null,
+                                tint = cs.onBackground
+                            )
                         }
 
                         OutlinedTextField(
@@ -205,7 +211,7 @@ fun SearchScreen(
                                 )
                             },
                             leadingIcon   = {
-                                Icon(Icons.Default.Search, null, tint = cs.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                                Icon(painter = painterResource(id = R.drawable.search_btn),  null, tint = cs.onSurfaceVariant, modifier = Modifier.size(18.dp))
                             },
                             trailingIcon  = {
                                 AnimatedVisibility(
@@ -241,7 +247,7 @@ fun SearchScreen(
                         )
                     }
 
-                    // ── Фильтр по категориям ───────────────────────────────
+                    // Горизонтальный список категорий
                     LazyRow(
                         contentPadding        = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -265,7 +271,7 @@ fun SearchScreen(
                         }
                     }
 
-                    // ── Фильтр по сложности ────────────────────────────────
+                    // Горизонтальный список фильтров по сложности
                     LazyRow(
                         contentPadding        = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -313,14 +319,14 @@ fun SearchScreen(
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
-                // ── Загрузка ──────────────────────────────────────────────
+                // Индикатор загрузки
                 isLoading -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = cs.primary)
                     }
                 }
 
-                // ── Начальное состояние ────────────────────────────────────
+                // Начальное состояние до первого поиска
                 !hasSearched -> {
                     SearchEmptyState(
                         icon    = Icons.Default.Search,
@@ -329,7 +335,7 @@ fun SearchScreen(
                     )
                 }
 
-                // ── Нет результатов ────────────────────────────────────────
+                // Пустой результат поиска
                 results.isEmpty() -> {
                     SearchEmptyState(
                         icon    = Icons.Default.SearchOff,
@@ -338,7 +344,7 @@ fun SearchScreen(
                     )
                 }
 
-                // ── Список результатов ─────────────────────────────────────
+                // Список найденных викторин
                 else -> {
                     LazyColumn(
                         contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
@@ -367,8 +373,7 @@ fun SearchScreen(
     }
 }
 
-// ── Карточка результата ────────────────────────────────────────────────────
-
+// Карточка викторины в результатах поиска
 @Composable
 private fun SearchResultCard(
     quiz: QuizItem,
@@ -381,6 +386,7 @@ private fun SearchResultCard(
     val gradients = ext.cardGradients
     val gradient = gradients[colorIndex % gradients.size]
 
+    // Цвет и подпись для уровня сложности
     val diffColor = when (quiz.difficulty) {
         "EASY"   -> ext.difficultyEasy
         "MEDIUM" -> ext.difficultyMedium
@@ -407,7 +413,7 @@ private fun SearchResultCard(
             modifier          = Modifier.fillMaxWidth().padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Цветная иконка
+            // Иконка с градиентным фоном
             Box(
                 modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp))
                     .background(Brush.linearGradient(gradient, Offset.Zero, Offset(400f, 400f))),
@@ -432,7 +438,7 @@ private fun SearchResultCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment     = Alignment.CenterVertically
                 ) {
-                    // Категория
+                    // Бейдж категории
                     Surface(
                         shape = RoundedCornerShape(6.dp),
                         color = cs.primary.copy(alpha = 0.15f)
@@ -445,7 +451,7 @@ private fun SearchResultCard(
                             fontWeight = FontWeight.Medium
                         )
                     }
-                    // Сложность
+                    // Бейдж сложности
                     Surface(
                         shape = RoundedCornerShape(6.dp),
                         color = diffColor.copy(alpha = 0.12f)
@@ -458,9 +464,10 @@ private fun SearchResultCard(
                             fontWeight = FontWeight.Medium
                         )
                     }
-                    // Вопросы
+                    // Количество вопросов
                     Text("${quiz.questionCount} вопр.", fontSize = 11.sp, color = cs.onSurfaceVariant)
                 }
+                // Подпись автора для кастомных викторин
                 quiz.customAuthorCaption()?.let { cap ->
                     Spacer(Modifier.height(4.dp))
                     Text(
@@ -478,8 +485,7 @@ private fun SearchResultCard(
     }
 }
 
-// ── Пустое состояние ────────────────────────────────────────────────────────
-
+// Экран-заглушка для пустого состояния поиска
 @Composable
 private fun SearchEmptyState(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
