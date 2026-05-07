@@ -4,37 +4,53 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.example.brainracer.data.storage.StorageConfig
 import com.example.brainracer.domain.entities.QuizDifficulty
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.viewmodels.DraftQuestion
@@ -71,6 +87,8 @@ private val allCategories = listOf(
     "Фильмы и музыка", "Наука", "Спорт"
 )
 
+private val quizCreatorExpandIntSpec = tween<IntSize>(durationMillis = 200, easing = FastOutSlowInEasing)
+
 // ══════════════════════════════════════════════════════════════════════════════
 //  ГЛАВНЫЙ ЭКРАН КОНСТРУКТОРА
 // ══════════════════════════════════════════════════════════════════════════════
@@ -79,6 +97,7 @@ private val allCategories = listOf(
 @Composable
 fun QuizCreatorScreen(
     navController: NavController,
+    editQuizIdArg: String? = null,
     vm: QuizCreatorViewModel = viewModel()
 ) {
     val uiState by vm.uiState.collectAsState()
@@ -88,6 +107,15 @@ fun QuizCreatorScreen(
     val pagerState  = rememberPagerState { 3 }
     val tabTitles   = listOf("Конструктор", "Черновики", "Шаблоны")
     val tabIcons    = listOf(Icons.Default.Build, Icons.Default.Folder, Icons.Default.AutoAwesome)
+    val isEditMode = uiState.editingQuizId != null
+
+    LaunchedEffect(editQuizIdArg) {
+        if (!editQuizIdArg.isNullOrBlank()) {
+            vm.loadQuizForEdit(editQuizIdArg)
+        } else if (uiState.editingQuizId != null) {
+            vm.newDraft()
+        }
+    }
 
     // Глобальное сообщение об ошибке
     val snackbarHost = remember { SnackbarHostState() }
@@ -109,40 +137,44 @@ fun QuizCreatorScreen(
         topBar = {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column {
-                    Row(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .windowInsetsPadding(WindowInsets.statusBars)
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MaterialTheme.colorScheme.onSurface)
+                        IconButton(
+                            onClick = { navController.popBackStack() },
+                            modifier = Modifier.align(Alignment.CenterStart)
+                        ) {
+                            Icon(
+                                painter = androidx.compose.ui.res.painterResource(id = com.example.brainracer.R.drawable.arrow_back_btn),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                         Text(
-                            "Конструктор",
+                            if (isEditMode) "Редактирование" else "Конструктор",
                             fontWeight = FontWeight.Bold,
                             fontSize   = 18.sp,
                             color      = MaterialTheme.colorScheme.onSurface
                         )
-                        // Кнопка «Сохранить черновик» только на вкладке конструктора
                         if (pagerState.currentPage == 0) {
                             TextButton(
                                 onClick  = { vm.saveDraft() },
-                                enabled  = !uiState.isSaving
+                                enabled  = !uiState.isSaving,
+                                modifier = Modifier.align(Alignment.CenterEnd)
                             ) {
                                 if (uiState.isSaving)
                                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                                 else
                                     Text("Сохранить", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
                             }
-                        } else {
-                            Spacer(Modifier.width(72.dp))
                         }
                     }
 
-                    // Вкладки
+                    // Вкладки (компактные — чтобы помещались бейджи-счётчики)
                     TabRow(
                         selectedTabIndex = pagerState.currentPage,
                         containerColor   = MaterialTheme.colorScheme.background,
@@ -152,7 +184,7 @@ fun QuizCreatorScreen(
                                 TabRowDefaults.Indicator(
                                     modifier = Modifier.tabIndicatorOffset(positions[pagerState.currentPage])
                                         .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)),
-                                    color    = MaterialTheme.colorScheme.primary, height = 3.dp
+                                    color    = MaterialTheme.colorScheme.primary, height = 2.5.dp
                                 )
                             }
                         },
@@ -167,18 +199,30 @@ fun QuizCreatorScreen(
                             ) {
                                 Row(
                                     verticalAlignment     = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.padding(horizontal = 2.dp, vertical = 7.dp)
                                 ) {
-                                    Icon(tabIcons[i], null, modifier = Modifier.size(15.dp))
+                                    Icon(tabIcons[i], null, modifier = Modifier.size(13.dp))
                                     Text(
                                         title,
-                                        fontSize   = 13.sp,
+                                        fontSize   = 11.5.sp,
+                                        maxLines   = 1,
+                                        overflow   = TextOverflow.Ellipsis,
                                         fontWeight = if (pagerState.currentPage == i) FontWeight.SemiBold else FontWeight.Normal
                                     )
-                                    // Бейдж черновиков
+                                    // Бейдж черновиков (компактный)
                                     if (i == 1 && uiState.drafts.isNotEmpty()) {
-                                        Badge { Text("${uiState.drafts.size}") }
+                                        Badge(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.defaultMinSize(minWidth = 16.dp, minHeight = 16.dp)
+                                        ) {
+                                            Text(
+                                                "${uiState.drafts.size}",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -219,6 +263,7 @@ fun QuizCreatorScreen(
 //  ВКЛАДКА: КОНСТРУКТОР
 // ══════════════════════════════════════════════════════════════════════════════
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ConstructorTab(
     vm: QuizCreatorViewModel,
@@ -226,6 +271,8 @@ private fun ConstructorTab(
 ) {
     val draft   = uiState.currentDraft
     val context = LocalContext.current
+    val listState = rememberLazyListState()
+    var listScrollLocked by remember { mutableStateOf(false) }
 
     val coverPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -237,8 +284,10 @@ private fun ConstructorTab(
     }
 
     LazyColumn(
-        contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        state               = listState,
+        userScrollEnabled   = !listScrollLocked,
+        contentPadding      = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier            = Modifier.fillMaxSize()
     ) {
         // ── Обложка ──────────────────────────────────────────────────────
@@ -247,26 +296,27 @@ private fun ConstructorTab(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(160.dp)
-                    .clip(RoundedCornerShape(18.dp))
+                    .height(148.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(18.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
                     .clickable { coverPicker.launch("image/*") },
                 contentAlignment = Alignment.Center
             ) {
-                val coverSrc = draft.coverUrl ?: draft.coverUri
+                val coverSrc: Any? = draft.coverUrl?.let { StorageConfig.resolvePublicUrlForCoil(it) }
+                    ?: draft.coverUri
                 if (coverSrc != null) {
                     AsyncImage(
                         model             = coverSrc,
                         contentDescription = "Обложка",
                         contentScale      = ContentScale.Crop,
-                        modifier          = Modifier.fillMaxSize().clip(RoundedCornerShape(18.dp))
+                        modifier          = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
                     )
                     // Оверлей с кнопкой замены
                     Box(
                         modifier = Modifier.fillMaxSize()
                             .background(Color.Black.copy(alpha = 0.35f))
-                            .clip(RoundedCornerShape(18.dp)),
+                            .clip(RoundedCornerShape(16.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(
@@ -362,7 +412,7 @@ private fun ConstructorTab(
                 Text(
                     "Вопросы (${draft.questions.size})",
                     fontWeight = FontWeight.Bold,
-                    fontSize   = 16.sp,
+                    fontSize   = 15.sp,
                     color      = MaterialTheme.colorScheme.onSurface
                 )
                 TextButton(onClick = { vm.addQuestion() }) {
@@ -374,24 +424,44 @@ private fun ConstructorTab(
         }
 
         // ── Список вопросов ───────────────────────────────────────────────
-        itemsIndexed(draft.questions) { index, question ->
-            QuestionCard(
-                index      = index,
-                question   = question,
-                isUploading = uiState.uploadingImageForQuestion == index,
-                vm         = vm,
-                canDelete  = draft.questions.size > 1
-            )
+        itemsIndexed(
+            items = draft.questions,
+            key = { _, q -> q.id }
+        ) { index, question ->
+            key(question.id) {
+                QuestionCard(
+                    index        = index,
+                    question     = question,
+                    isUploading  = uiState.uploadingImageForQuestion == index,
+                    vm           = vm,
+                    canDelete    = draft.questions.size > 1,
+                    questionCount = draft.questions.size,
+                    onMoveQuestion = { from, to -> vm.moveQuestion(from, to) },
+                    onDragStateChange = { listScrollLocked = it },
+                    modifier = Modifier.animateItem(
+                        placementSpec = tween(200, easing = FastOutSlowInEasing)
+                    )
+                )
+            }
         }
 
         // ── Кнопка публикации ─────────────────────────────────────────────
         item {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Перед публикацией выполняется авто-модерация контента.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp)
+            )
             Button(
                 onClick  = { vm.publish(onSuccess = {}) },
                 enabled  = !uiState.isPublishing && draft.title.isNotBlank(),
-                modifier = Modifier.fillMaxWidth().height(54.dp),
-                shape    = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape    = RoundedCornerShape(14.dp),
                 colors   = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     disabledContainerColor = MaterialTheme.colorScheme.outline
@@ -400,14 +470,22 @@ private fun ConstructorTab(
                 if (uiState.isPublishing) {
                     CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = Color.White)
                     Spacer(Modifier.width(12.dp))
-                    Text("Публикуем…", fontSize = 15.sp)
+                    Text(if (uiState.editingQuizId != null) "Сохраняем…" else "Публикуем…", fontSize = 15.sp)
                 } else {
-                    Icon(Icons.Default.Publish, null, modifier = Modifier.size(20.dp))
+                    Icon(
+                        if (uiState.editingQuizId != null) Icons.Default.Edit else Icons.Default.Publish,
+                        null,
+                        modifier = Modifier.size(20.dp)
+                    )
                     Spacer(Modifier.width(8.dp))
-                    Text("Опубликовать", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(
+                        if (uiState.editingQuizId != null) "Сохранить изменения" else "Опубликовать",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
                 }
             }
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(28.dp))
         }
     }
 }
@@ -420,27 +498,100 @@ private fun QuestionCard(
     question: DraftQuestion,
     isUploading: Boolean,
     vm: QuizCreatorViewModel,
-    canDelete: Boolean
+    canDelete: Boolean,
+    questionCount: Int,
+    onMoveQuestion: (Int, Int) -> Unit,
+    onDragStateChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(index == 0) }
+
+    val indexState = rememberUpdatedState(index)
 
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            vm.setQuestionImageUri(index, it)
-            vm.uploadQuestionImage(context, index)
+            val i = indexState.value
+            vm.setQuestionImageUri(i, it)
+            vm.uploadQuestionImage(context, i)
         }
     }
 
+    val density = LocalDensity.current
+    val pxPerSlot = remember(density) { with(density) { 84.dp.toPx() } }
+
+    var offsetY by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+
+    // Плавный «отскок» в исходное положение на отпускании, когда индекс не меняется.
+    val animatedOffsetY by animateFloatAsState(
+        targetValue = if (isDragging) offsetY else 0f,
+        animationSpec = if (isDragging) snap() else tween(180, easing = FastOutSlowInEasing),
+        label = "questionDragOffsetY"
+    )
+    val animatedScale by animateFloatAsState(
+        targetValue = if (isDragging) 1.03f else 1f,
+        animationSpec = tween(160, easing = FastOutSlowInEasing),
+        label = "questionDragScale"
+    )
+    val animatedElevation by animateFloatAsState(
+        targetValue = if (isDragging) 12f else 0f,
+        animationSpec = tween(160, easing = FastOutSlowInEasing),
+        label = "questionDragElevation"
+    )
+
+    val cardShape = RoundedCornerShape(16.dp)
+    val canReorder = questionCount > 1
+
     Surface(
-        shape  = RoundedCornerShape(18.dp),
+        shape  = cardShape,
         color  = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            .zIndex(if (isDragging) 1f else 0f)
+            .shadow(elevation = animatedElevation.dp, shape = cardShape, clip = false)
+            .graphicsLayer {
+                translationY = animatedOffsetY
+                scaleX = animatedScale
+                scaleY = animatedScale
+            }
+            // Перетаскивание ВСЕЙ карточкой по long-press. Долгое нажатие на любую её часть
+            // переводит карточку в режим drag — обычные тапы (на иконки/строки) при этом
+            // продолжают работать, потому что drag запускается только после задержки нажатия.
+            .then(
+                if (canReorder) Modifier.pointerInput(index, questionCount, pxPerSlot) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = {
+                            onDragStateChange(true)
+                            isDragging = true
+                            offsetY = 0f
+                        },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            offsetY += dragAmount.y
+                        },
+                        onDragEnd = {
+                            val delta = (offsetY / pxPerSlot).roundToInt()
+                            val target = (index + delta).coerceIn(0, questionCount - 1)
+                            if (target != index) onMoveQuestion(index, target)
+                            offsetY = 0f
+                            isDragging = false
+                            onDragStateChange(false)
+                        },
+                        onDragCancel = {
+                            offsetY = 0f
+                            isDragging = false
+                            onDragStateChange(false)
+                        }
+                    )
+                } else Modifier
+            )
+            .animateContentSize(animationSpec = quizCreatorExpandIntSpec)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             // Заголовок карточки
             Row(
                 modifier              = Modifier.fillMaxWidth(),
@@ -449,34 +600,42 @@ private fun QuestionCard(
             ) {
                 Row(
                     verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.weight(1f).clickable { expanded = !expanded }
                 ) {
                     Box(
-                        modifier = Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(0.18f)),
+                        modifier = Modifier.size(28.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(0.18f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("${index + 1}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("${index + 1}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                     Text(
                         question.text.ifBlank { "Вопрос ${index + 1}" },
                         color      = if (question.text.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                        fontSize   = 14.sp,
+                        fontSize   = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines   = 1,
                         overflow   = TextOverflow.Ellipsis,
                         modifier   = Modifier.weight(1f)
                     )
                 }
-                Row {
-                    IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(32.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (canReorder) {
+                        Icon(
+                            Icons.Default.DragHandle,
+                            contentDescription = "Удерживайте карточку, чтобы перетащить",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isDragging) 1f else 0.55f),
+                            modifier = Modifier.padding(end = 2.dp).size(18.dp)
+                        )
+                    }
+                    IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(28.dp)) {
                         Icon(
                             if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                             null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp)
                         )
                     }
                     if (canDelete) {
-                        IconButton(onClick = { vm.removeQuestion(index) }, modifier = Modifier.size(32.dp)) {
+                        IconButton(onClick = { vm.removeQuestion(indexState.value) }, modifier = Modifier.size(28.dp)) {
                             Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                         }
                     }
@@ -484,10 +643,14 @@ private fun QuestionCard(
             }
 
             // Раскрытое содержимое
-            AnimatedVisibility(visible = expanded) {
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn(animationSpec = tween(180)) + expandVertically(animationSpec = quizCreatorExpandIntSpec),
+                exit = fadeOut(animationSpec = tween(140)) + shrinkVertically(animationSpec = quizCreatorExpandIntSpec)
+            ) {
                 Column(
-                    modifier            = Modifier.padding(top = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier            = Modifier.padding(top = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     // Текст вопроса
                     CreatorTextField(
@@ -502,7 +665,7 @@ private fun QuestionCard(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(if (question.imageUrl != null) 140.dp else 52.dp)
+                            .height(if (question.imageUrl != null) 120.dp else 44.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(MaterialTheme.colorScheme.background)
                             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
@@ -511,7 +674,7 @@ private fun QuestionCard(
                     ) {
                         if (question.imageUrl != null) {
                             AsyncImage(
-                                model             = question.imageUrl,
+                                model             = StorageConfig.resolvePublicUrlForCoil(question.imageUrl),
                                 contentDescription = null,
                                 contentScale      = ContentScale.Crop,
                                 modifier          = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
@@ -600,6 +763,34 @@ private fun QuestionCard(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(0.5f))
 
+                    // ── Подсказка / объяснение ────────────────────────────
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Lightbulb,
+                            null,
+                            tint = LocalBrainRacerExtendedColors.current.statusOrange,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            "Подсказка (показывается в результатах)",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    CreatorTextField(
+                        value         = question.explanation,
+                        onValueChange = { vm.updateQuestionExplanation(index, it) },
+                        placeholder   = "Например: «Столица Франции — Париж, основан в III веке до н.э.»",
+                        maxLines      = 4,
+                        maxLength     = 300
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(0.5f))
+
                     // Баллы + время в строку
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(modifier = Modifier.weight(1f)) {
@@ -671,16 +862,16 @@ private fun DraftsTab(
     }
 
     LazyColumn(
-        contentPadding      = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding      = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier            = Modifier.fillMaxSize()
     ) {
         item {
             Text(
                 "Черновики (${drafts.size})",
                 color      = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize   = 13.sp,
-                modifier   = Modifier.padding(bottom = 4.dp)
+                fontSize   = 12.sp,
+                modifier   = Modifier.padding(bottom = 2.dp)
             )
         }
         items(drafts, key = { it.id }) { draft ->
@@ -699,53 +890,54 @@ private fun DraftCard(
     val dateStr = remember(draft.updatedAt) { fmt.format(Date(draft.updatedAt)) }
 
     Surface(
-        shape    = RoundedCornerShape(16.dp),
+        shape    = RoundedCornerShape(12.dp),
         color    = MaterialTheme.colorScheme.surface,
         border   = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().clickable { onLoad() }
     ) {
         Row(
-            modifier          = Modifier.fillMaxWidth().padding(14.dp),
+            modifier          = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
+                Modifier.size(36.dp).clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.primary.copy(0.18f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.EditNote, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                Icon(Icons.Default.EditNote, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     draft.title.ifBlank { "Без названия" },
                     color      = if (draft.title.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize   = 14.sp,
+                    fontSize   = 13.sp,
                     maxLines   = 1,
                     overflow   = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(3.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("${draft.questions.size} вопр.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                    Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                    Text(draft.categoryId, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
-                    Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                    Text(dateStr, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Spacer(Modifier.height(2.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Text("${draft.questions.size} вопр.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                    Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                    Text(
+                        draft.categoryId,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                    Text(dateStr, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, maxLines = 1)
                 }
             }
-            Spacer(Modifier.width(8.dp))
-            // Кнопки
-            Column(horizontalAlignment = Alignment.End) {
-                TextButton(
-                    onClick         = onLoad,
-                    contentPadding  = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Text("Открыть", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
-                }
+            Spacer(Modifier.width(4.dp))
+            IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
             }
         }
     }
@@ -789,52 +981,73 @@ private fun TemplateCard(
     val diffLabel = diffLabels[template.difficulty] ?: ""
 
     Surface(
-        shape  = RoundedCornerShape(18.dp),
+        shape  = RoundedCornerShape(16.dp),
         color  = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier          = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Эмодзи в цветном фоне
-            Box(
-                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp))
-                    .background(Brush.linearGradient(gradient)),
-                contentAlignment = Alignment.Center
+            // Шапка: эмодзи + заголовок (полная ширина для длинных названий)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(template.emoji, fontSize = 26.sp)
-            }
-
-            Spacer(Modifier.width(14.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(template.title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                Spacer(Modifier.height(4.dp))
-                Text(template.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 2)
-                Spacer(Modifier.height(8.dp))
-                FlowRow(
-                    modifier            = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement   = Arrangement.spacedBy(6.dp)
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Brush.linearGradient(gradient)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    InfoChip("${template.questionCount} вопр.", MaterialTheme.colorScheme.onSurfaceVariant)
-                    InfoChip("${template.timePerQuestion}с", MaterialTheme.colorScheme.onSurfaceVariant)
-                    InfoChip(diffLabel, diffColor)
-                    InfoChip("${template.defaultPoints}★", LocalBrainRacerExtendedColors.current.statusOrange)
+                    Text(template.emoji, fontSize = 24.sp)
                 }
+                Text(
+                    text = template.title,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    lineHeight = 19.sp,
+                    modifier = Modifier.weight(1f)
+                )
             }
 
-            Spacer(Modifier.width(10.dp))
+            // Описание: переносится по высоте, не обрезается двумя строками
+            if (template.description.isNotBlank()) {
+                Text(
+                    text = template.description,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+            }
 
+            // Метаданные шаблона (chips заворачиваются на следующую строку при переполнении)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement   = Arrangement.spacedBy(6.dp)
+            ) {
+                InfoChip("${template.questionCount} вопр.", MaterialTheme.colorScheme.onSurfaceVariant)
+                InfoChip("${template.timePerQuestion}с", MaterialTheme.colorScheme.onSurfaceVariant)
+                InfoChip(diffLabel, diffColor)
+                InfoChip("${template.defaultPoints}★", LocalBrainRacerExtendedColors.current.statusOrange)
+            }
+
+            // Кнопка применения шаблона на полной ширине — текст всегда виден целиком.
             Button(
                 onClick = onApply,
+                modifier = Modifier.fillMaxWidth().height(40.dp),
                 colors  = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                shape   = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                shape   = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
             ) {
-                Text("Выбрать", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Выбрать шаблон", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -851,7 +1064,7 @@ private fun SectionLabel(text: String) {
         color      = MaterialTheme.colorScheme.onSurfaceVariant,
         fontSize   = 12.sp,
         fontWeight = FontWeight.Medium,
-        modifier   = Modifier.padding(bottom = 6.dp)
+        modifier   = Modifier.padding(bottom = 4.dp)
     )
 }
 
