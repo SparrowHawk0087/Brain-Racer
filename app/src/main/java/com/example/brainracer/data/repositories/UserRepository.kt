@@ -14,6 +14,8 @@ interface UserRepository {
     suspend fun countUsersWithNicknameNormalized(normalized: String, excludeUserId: String? = null): Result<Int>
     /** Дозаписать `nickname_normalized` у существующего документа (миграция). */
     suspend fun mergeNicknameNormalized(userId: String, normalized: String): Result<Unit>
+    // Фоново проставить nickname_normalized старым аккаунтам с тем же nickname
+    suspend fun backfillNicknameNormalizedForNickname(rawNickname: String, normalized: String): Result<Int>
     /** Соло: зачёт попытки + XP (один раз на quizId). Возвращает фактически начисленный XP. */
     suspend fun applySoloQuizCompletion(
         userId: String,
@@ -39,4 +41,6 @@ interface UserRepository {
     suspend fun acceptFriendRequest(requestId: String, userId: String, friendId: String): Result<Unit>
     suspend fun declineFriendRequest(requestId: String): Result<Unit>
     suspend fun removeFriend(userId: String, friendId: String): Result<Unit>
+    // Удаление профиля из Firestore
+    suspend fun deleteUserAccountData(userId: String): Result<Unit>
 }
