@@ -35,7 +35,7 @@ fun rememberFabVisibilityOnScroll(
                     delta > downThresholdPx -> fabVisible = false
                     delta < -upThresholdPx -> fabVisible = true
                     listState.firstVisibleItemIndex == 0 &&
-                        listState.firstVisibleItemScrollOffset < 12 -> fabVisible = true
+                            listState.firstVisibleItemScrollOffset < 12 -> fabVisible = true
                 }
             }
     }
