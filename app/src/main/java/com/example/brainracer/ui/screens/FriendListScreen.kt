@@ -62,6 +62,9 @@ fun FriendsScreen(
     onQuizzesClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
     currentRoute: String = "friends",
+    bottomBarLoggedInUserId: String? = null,
+    bottomBarProfileDestinationUserId: String? = null,
+    bottomBarShowChallengesIncomingBadge: Boolean = false,
     /** Из превью викторины: после загрузки названия — нажатие на карточку друга шлёт вызов */
     preselectChallengeQuizIdArg: String? = null
 ) {
@@ -202,13 +205,16 @@ fun FriendsScreen(
         },
         bottomBar = {
             BottomBar(
-                showBar              = true,
-                currentRoute         = currentRoute,
-                onHomeClick          = onHomeClick,
-                onLeaderboardClick   = onLeaderboardClick,
-                onChallengesClick    = onChallengesClick,
-                onQuizzesClick       = onQuizzesClick,
-                onProfileClick       = onProfileClick
+                showBar                  = true,
+                currentRoute             = currentRoute,
+                loggedInUserId           = bottomBarLoggedInUserId,
+                profileDestinationUserId = bottomBarProfileDestinationUserId,
+                showChallengesIncomingBadge = bottomBarShowChallengesIncomingBadge,
+                onHomeClick              = onHomeClick,
+                onLeaderboardClick       = onLeaderboardClick,
+                onChallengesClick        = onChallengesClick,
+                onQuizzesClick           = onQuizzesClick,
+                onProfileClick           = onProfileClick
             )
         },
         containerColor = MaterialTheme.colorScheme.background
