@@ -7,6 +7,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
+import com.example.brainracer.data.storage.EvolutionStorageRepositoryImpl
+import com.example.brainracer.data.storage.QuizDraftRepositoryImpl
+import com.example.brainracer.data.storage.StorageConfig
 import com.example.brainracer.data.utils.ImageOptimizerUtil
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
@@ -19,16 +22,11 @@ import com.example.brainracer.domain.entities.QuizDifficulty
 import com.example.brainracer.domain.entities.QuizStats
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.storage.FirebaseStorage
-import com.google.firebase.storage.StorageException
-import com.google.firebase.storage.StorageMetadata
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 // ── Модель черновика вопроса ──────────────────────────────────────────────
@@ -42,7 +40,8 @@ data class DraftQuestion(
     val timeLimit: Int         = 30,
     val imageUri: Uri?         = null,     // локальный URI до загрузки
     val imageUrl: String?      = null,     // URL после загрузки в Storage
-    val isGif: Boolean         = false
+    val isGif: Boolean         = false,
+    val explanation: String    = ""        // подсказка/объяснение для экрана результатов
 )
 
 // ── Модель черновика викторины ────────────────────────────────────────────
@@ -155,7 +154,9 @@ data class QuizCreatorUiState(
     val publishSuccess: Boolean       = false,
     val error: String?                = null,
     val uploadingImageForQuestion: Int? = null,  // index вопроса, чья картинка грузится
-    val uploadingCover: Boolean       = false
+    val uploadingCover: Boolean       = false,
+    /** URL'ы старых картинок, которые надо удалить из bucket после успешной перезаписи/публикации. */
+    val pendingDeletionUrls: List<String> = emptyList()
 )
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -167,19 +168,11 @@ class QuizCreatorViewModel : ViewModel() {
 
     private val quizRepository = QuizRepositoryImpl()
     private val userRepository = UserRepositoryImpl()
-    private val auth           = FirebaseAuth.getInstance()
-    private val firestore      = FirebaseFirestore.getInstance()
-    private val storage        = FirebaseStorage.getInstance()
+    private val auth = FirebaseAuth.getInstance()
+    private val storageRepository = EvolutionStorageRepositoryImpl()
+    private val draftRepository = QuizDraftRepositoryImpl(storageRepository)
 
     private val userId get() = auth.currentUser?.uid ?: ""
-
-    private fun logStorageFailure(op: String, e: Exception) {
-        if (e is StorageException) {
-            Log.e("QuizCreator", "$op StorageException errorCode=${e.errorCode} message=${e.message}", e)
-        } else {
-            Log.e("QuizCreator", "$op failed: ${e.message}", e)
-        }
-    }
 
     init { loadDrafts() }
 
@@ -217,7 +210,8 @@ class QuizCreatorViewModel : ViewModel() {
                                 points = q.points,
                                 timeLimit = q.timeLimit,
                                 imageUrl = q.imageUrl ?: q.gifUrl,
-                                isGif = !q.gifUrl.isNullOrBlank()
+                                isGif = !q.gifUrl.isNullOrBlank(),
+                                explanation = q.explanation.orEmpty()
                             )
                         }.ifEmpty { listOf(DraftQuestion(timeLimit = quiz.timePerQuestion)) }
                     )
@@ -252,7 +246,15 @@ class QuizCreatorViewModel : ViewModel() {
 
     // ── Обложка ───────────────────────────────────────────────────────────
 
-    fun setCoverUri(uri: Uri) = updateDraft { it.copy(coverUri = uri, coverUrl = null) }
+    fun setCoverUri(uri: Uri) {
+        // Запоминаем старую обложку: её удалим после успешной загрузки новой
+        // (как с фотографиями профиля — старые файлы не остаются в bucket).
+        val prevUrl = _uiState.value.currentDraft.coverUrl
+        if (!prevUrl.isNullOrBlank()) {
+            _uiState.update { it.copy(pendingDeletionUrls = it.pendingDeletionUrls + prevUrl) }
+        }
+        updateDraft { it.copy(coverUri = uri, coverUrl = null) }
+    }
 
     fun uploadCover(context: Context) {
         val uri = _uiState.value.currentDraft.coverUri ?: return
@@ -271,17 +273,27 @@ class QuizCreatorViewModel : ViewModel() {
             try {
                 val optimized = ImageOptimizerUtil.optimize(context, uri, isCover = true)
                 val ext = optimized.mimeType.substringAfter('/').ifBlank { "jpeg" }
-                val path = "quiz_covers/$uid/${UUID.randomUUID()}.$ext"
-                val ref = storage.reference.child(path)
-                val metadata = StorageMetadata.Builder()
-                    .setContentType(optimized.mimeType)
-                    .build()
-                ref.putBytes(optimized.bytes, metadata).await()
-                val url = ref.downloadUrl.await().toString()
-                updateDraft { it.copy(coverUrl = url) }
-                Log.d("Creator", "Cover uploaded: ${optimized.sizeKb}KB path=$path")
+                val key = StorageConfig.quizCoverKey(uid, UUID.randomUUID().toString(), ext)
+                when (val uploadResult = storageRepository.upload(
+                    bucket = StorageConfig.BUCKET_QUIZZES,
+                    key = key,
+                    bytes = optimized.bytes,
+                    mimeType = optimized.mimeType,
+                    isPublic = true
+                )) {
+                    is Result.Success -> {
+                        updateDraft { it.copy(coverUrl = uploadResult.data) }
+                        Log.d(TAG, "Cover uploaded: ${optimized.sizeKb}KB → $key")
+                        flushPendingDeletions()
+                    }
+                    is Result.Error -> {
+                        _uiState.update {
+                            it.copy(error = "Ошибка загрузки обложки: ${uploadResult.exception.message}")
+                        }
+                    }
+                }
             } catch (e: Exception) {
-                logStorageFailure("uploadCover", e)
+                Log.e(TAG, "uploadCover failed", e)
                 _uiState.update { it.copy(error = "Ошибка загрузки обложки: ${e.message}") }
             }
             _uiState.update { it.copy(uploadingCover = false) }
@@ -296,12 +308,31 @@ class QuizCreatorViewModel : ViewModel() {
         ))
     }
 
-    fun removeQuestion(index: Int) = updateDraft { draft ->
-        if (draft.questions.size <= 1) return@updateDraft draft
-        draft.copy(questions = draft.questions.toMutableList().also { it.removeAt(index) })
+    fun removeQuestion(index: Int) {
+        val toRemoveUrl = _uiState.value.currentDraft.questions.getOrNull(index)?.imageUrl
+        if (!toRemoveUrl.isNullOrBlank()) {
+            _uiState.update { it.copy(pendingDeletionUrls = it.pendingDeletionUrls + toRemoveUrl) }
+            viewModelScope.launch { flushPendingDeletions() }
+        }
+        updateDraft { draft ->
+            if (draft.questions.size <= 1) return@updateDraft draft
+            draft.copy(questions = draft.questions.toMutableList().also { it.removeAt(index) })
+        }
+    }
+
+    /** Перетаскивание: вставляет вопрос в позицию [toIndex] после удаления с [fromIndex]. */
+    fun moveQuestion(fromIndex: Int, toIndex: Int) = updateDraft { draft ->
+        val qs = draft.questions.toMutableList()
+        if (fromIndex !in qs.indices) return@updateDraft draft
+        val bounded = toIndex.coerceIn(0, qs.lastIndex)
+        if (bounded == fromIndex) return@updateDraft draft
+        val item = qs.removeAt(fromIndex)
+        qs.add(bounded.coerceIn(0, qs.size), item)
+        draft.copy(questions = qs)
     }
 
     fun updateQuestionText(index: Int, text: String)  = updateQuestion(index) { it.copy(text = text) }
+    fun updateQuestionExplanation(index: Int, text: String) = updateQuestion(index) { it.copy(explanation = text) }
     fun updateOption(index: Int, optIndex: Int, v: String) = updateQuestion(index) { q ->
         val opts = q.options.toMutableList().also { it[optIndex] = v }
         q.copy(options = opts)
@@ -309,7 +340,25 @@ class QuizCreatorViewModel : ViewModel() {
     fun setCorrectAnswer(qIndex: Int, ansIndex: Int) = updateQuestion(qIndex) { it.copy(correctIndex = ansIndex) }
     fun updatePoints(index: Int, pts: Int)           = updateQuestion(index) { it.copy(points = pts) }
     fun updateTimeLimit(index: Int, sec: Int)        = updateQuestion(index) { it.copy(timeLimit = sec) }
-    fun setQuestionImageUri(index: Int, uri: Uri)    = updateQuestion(index) { it.copy(imageUri = uri, imageUrl = null) }
+    fun setQuestionImageUri(index: Int, uri: Uri) {
+        // Запоминаем старую картинку вопроса для удаления из bucket после успешной перезаписи.
+        val prevUrl = _uiState.value.currentDraft.questions.getOrNull(index)?.imageUrl
+        if (!prevUrl.isNullOrBlank()) {
+            _uiState.update { it.copy(pendingDeletionUrls = it.pendingDeletionUrls + prevUrl) }
+        }
+        updateQuestion(index) { it.copy(imageUri = uri, imageUrl = null) }
+    }
+
+    /** Удалить картинку вопроса (и из bucket'а тоже). */
+    fun clearQuestionImage(index: Int) {
+        val prevUrl = _uiState.value.currentDraft.questions.getOrNull(index)?.imageUrl
+        if (!prevUrl.isNullOrBlank()) {
+            _uiState.update { it.copy(pendingDeletionUrls = it.pendingDeletionUrls + prevUrl) }
+            // Удаляем сразу — UI уже не ссылается на этот URL.
+            viewModelScope.launch { flushPendingDeletions() }
+        }
+        updateQuestion(index) { it.copy(imageUri = null, imageUrl = null, isGif = false) }
+    }
 
     fun addOptionToQuestion(index: Int) = updateQuestion(index) { q ->
         if (q.options.size >= 6) return@updateQuestion q
@@ -343,18 +392,32 @@ class QuizCreatorViewModel : ViewModel() {
             }
             try {
                 val optimized = ImageOptimizerUtil.optimize(context, uri, isCover = false)
-                val ext = if (optimized.mimeType == "image/gif") "gif" else optimized.mimeType.substringAfter('/').ifBlank { "jpeg" }
-                val path = "quiz_images/$uid/${UUID.randomUUID()}.$ext"
-                val ref = storage.reference.child(path)
-                val metadata = StorageMetadata.Builder()
-                    .setContentType(optimized.mimeType)
-                    .build()
-                ref.putBytes(optimized.bytes, metadata).await()
-                val url = ref.downloadUrl.await().toString()
-                updateQuestion(qIndex) { it.copy(imageUrl = url, isGif = optimized.mimeType == "image/gif") }
-                Log.d("Creator", "Q$qIndex image uploaded: ${optimized.sizeKb}KB path=$path")
+                val ext = if (optimized.mimeType == "image/gif") "gif"
+                else optimized.mimeType.substringAfter('/').ifBlank { "jpeg" }
+                val key = StorageConfig.questionImageKey(uid, UUID.randomUUID().toString(), ext)
+                when (val uploadResult = storageRepository.upload(
+                    bucket = StorageConfig.BUCKET_QUIZZES,
+                    key = key,
+                    bytes = optimized.bytes,
+                    mimeType = optimized.mimeType,
+                    isPublic = true
+                )) {
+                    is Result.Success -> {
+                        val isGif = optimized.mimeType == "image/gif"
+                        updateQuestion(qIndex) {
+                            it.copy(imageUrl = uploadResult.data, isGif = isGif)
+                        }
+                        Log.d(TAG, "Q$qIndex image uploaded: ${optimized.sizeKb}KB → $key")
+                        flushPendingDeletions()
+                    }
+                    is Result.Error -> {
+                        _uiState.update {
+                            it.copy(error = "Ошибка загрузки картинки: ${uploadResult.exception.message}")
+                        }
+                    }
+                }
             } catch (e: Exception) {
-                logStorageFailure("uploadQuestionImage(q=$qIndex)", e)
+                Log.e(TAG, "uploadQuestionImage(q=$qIndex) failed", e)
                 _uiState.update { it.copy(error = "Ошибка загрузки картинки: ${e.message}") }
             }
             _uiState.update { it.copy(uploadingImageForQuestion = null) }
@@ -364,39 +427,25 @@ class QuizCreatorViewModel : ViewModel() {
     // ── Черновики ─────────────────────────────────────────────────────────
 
     fun saveDraft() {
+        val uid = userId
+        if (uid.isBlank()) {
+            _uiState.update { it.copy(error = "Войдите в аккаунт, чтобы сохранить черновик") }
+            return
+        }
         val draft = _uiState.value.currentDraft.copy(updatedAt = System.currentTimeMillis())
         _uiState.update { it.copy(isSaving = true) }
         viewModelScope.launch {
-            try {
-                val data = mapOf(
-                    "id"          to draft.id,
-                    "title"       to draft.title,
-                    "description" to draft.description,
-                    "categoryId"  to draft.categoryId,
-                    "difficulty"  to draft.difficulty.name,
-                    "coverUrl"    to draft.coverUrl,
-                    "timePerQuestion" to draft.timePerQuestion,
-                    "updatedAt"   to draft.updatedAt,
-                    "questions"   to draft.questions.map { q ->
-                        mapOf(
-                            "id"           to q.id,
-                            "text"         to q.text,
-                            "options"      to q.options,
-                            "correctIndex" to q.correctIndex,
-                            "points"       to q.points,
-                            "timeLimit"    to q.timeLimit,
-                            "imageUrl"     to q.imageUrl,
-                            "isGif"        to q.isGif
-                        )
+            when (val result = draftRepository.saveDraft(uid, draft)) {
+                is Result.Success -> {
+                    updateDraft { draft }
+                    loadDrafts()
+                    Log.d(TAG, "Draft saved: ${draft.id}")
+                }
+                is Result.Error -> {
+                    _uiState.update {
+                        it.copy(error = "Ошибка сохранения черновика: ${result.exception.message}")
                     }
-                )
-                firestore.collection("users").document(userId)
-                    .collection("drafts").document(draft.id)
-                    .set(data).await()
-                updateDraft { draft }
-                loadDrafts()
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = "Ошибка сохранения: ${e.message}") }
+                }
             }
             _uiState.update { it.copy(isSaving = false) }
         }
@@ -407,58 +456,25 @@ class QuizCreatorViewModel : ViewModel() {
     }
 
     fun deleteDraft(draftId: String) {
+        val uid = userId
+        if (uid.isBlank()) return
         viewModelScope.launch {
-            try {
-                firestore.collection("users").document(userId)
-                    .collection("drafts").document(draftId)
-                    .delete().await()
-                loadDrafts()
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = "Ошибка удаления: ${e.message}") }
+            when (val result = draftRepository.deleteDraft(uid, draftId)) {
+                is Result.Success -> loadDrafts()
+                is Result.Error -> _uiState.update {
+                    it.copy(error = "Ошибка удаления черновика: ${result.exception.message}")
+                }
             }
         }
     }
 
     private fun loadDrafts() {
-        if (userId.isBlank()) return
+        val uid = userId
+        if (uid.isBlank()) return
         viewModelScope.launch {
-            try {
-                val snap = firestore.collection("users").document(userId)
-                    .collection("drafts")
-                    .orderBy("updatedAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .get().await()
-                val drafts = snap.documents.mapNotNull { doc ->
-                    try {
-                        @Suppress("UNCHECKED_CAST")
-                        val qs = (doc.get("questions") as? List<Map<String, Any>>) ?: emptyList()
-                        QuizDraft(
-                            id              = doc.getString("id") ?: doc.id,
-                            title           = doc.getString("title") ?: "",
-                            description     = doc.getString("description") ?: "",
-                            categoryId      = doc.getString("categoryId") ?: "Кастомные",
-                            difficulty      = try { QuizDifficulty.valueOf(doc.getString("difficulty") ?: "MEDIUM") } catch (_: Exception) { QuizDifficulty.MEDIUM },
-                            coverUrl        = doc.getString("coverUrl"),
-                            timePerQuestion = (doc.getLong("timePerQuestion") ?: 30).toInt(),
-                            updatedAt       = doc.getLong("updatedAt") ?: 0L,
-                            questions       = qs.map { q ->
-                                @Suppress("UNCHECKED_CAST")
-                                DraftQuestion(
-                                    id           = q["id"] as? String ?: UUID.randomUUID().toString(),
-                                    text         = q["text"] as? String ?: "",
-                                    options      = (q["options"] as? List<String>) ?: listOf("", "", "", ""),
-                                    correctIndex = (q["correctIndex"] as? Long)?.toInt() ?: 0,
-                                    points       = (q["points"] as? Long)?.toInt() ?: 10,
-                                    timeLimit    = (q["timeLimit"] as? Long)?.toInt() ?: 30,
-                                    imageUrl     = q["imageUrl"] as? String,
-                                    isGif        = q["isGif"] as? Boolean ?: false
-                                )
-                            }
-                        )
-                    } catch (_: Exception) { null }
-                }
-                _uiState.update { it.copy(drafts = drafts) }
-            } catch (e: Exception) {
-                Log.e("Creator", "loadDrafts error: ${e.message}")
+            when (val result = draftRepository.loadDrafts(uid)) {
+                is Result.Success -> _uiState.update { it.copy(drafts = result.data) }
+                is Result.Error -> Log.e(TAG, "loadDrafts error: ${result.exception.message}")
             }
         }
     }
@@ -484,6 +500,13 @@ class QuizCreatorViewModel : ViewModel() {
 
     // ── Публикация ────────────────────────────────────────────────────────
 
+    /**
+     * Полная авто-модерация выполняется при КАЖДОЙ попытке публикации, в том числе
+     * для черновиков, загруженных из раздела «Черновики». Так как правила модерации
+     * (см. [QuizModeration]) могут обновляться, прохождение модерации в момент сохранения
+     * черновика не гарантирует прохождение в момент публикации — поэтому проверка всегда
+     * запускается заново на актуальном [QuizDraft] из стейта.
+     */
     fun publish(onSuccess: () -> Unit) {
         val draft = _uiState.value.currentDraft
         if (draft.title.isBlank()) {
@@ -501,7 +524,8 @@ class QuizCreatorViewModel : ViewModel() {
             is ModerationResult.Blocked -> {
                 _uiState.update {
                     it.copy(
-                        error = "Публикация заблокирована: [${moderation.violation.category.localizedLabel()}] запрещённый контент в ${moderation.violation.location} (${moderation.violation.reason})"
+                        error = "Публикация заблокирована: [${moderation.violation.category.localizedLabel()}] " +
+                                "запрещённый контент в ${moderation.violation.location} (${moderation.violation.reason})"
                     )
                 }
                 return
@@ -537,7 +561,7 @@ class QuizCreatorViewModel : ViewModel() {
                     timePerQuestion = draft.timePerQuestion,
                     createdAt       = existingQuiz?.createdAt ?: Timestamp.now(),
                     stats           = existingQuiz?.stats ?: QuizStats(),
-                    questions       = draft.questions.mapIndexed { i, q ->
+                    questions       = draft.questions.mapIndexed { _, q ->
                         Question(
                             id                 = q.id,
                             questionText       = q.text,
@@ -547,18 +571,33 @@ class QuizCreatorViewModel : ViewModel() {
                             points             = q.points,
                             timeLimit          = q.timeLimit,
                             imageUrl           = if (!q.isGif) q.imageUrl else null,
-                            gifUrl             = if (q.isGif) q.imageUrl else null
+                            gifUrl             = if (q.isGif) q.imageUrl else null,
+                            explanation        = q.explanation.trim().ifBlank { null }
                         )
                     }
                 )
+
+                // Удаляем картинки/обложку, которые остались от прошлой версии и больше не используются.
+                if (existingQuiz != null) {
+                    val newCover = draft.coverUrl
+                    val oldCover = existingQuiz.imageUrl.ifBlank { null }
+                    if (!oldCover.isNullOrBlank() && oldCover != newCover) {
+                        _uiState.update { it.copy(pendingDeletionUrls = it.pendingDeletionUrls + oldCover) }
+                    }
+                    val newImageUrls = draft.questions.mapNotNull { it.imageUrl }.toSet()
+                    existingQuiz.questions.forEach { oldQ ->
+                        val oldImg = (oldQ.imageUrl ?: oldQ.gifUrl).orEmpty()
+                        if (oldImg.isNotBlank() && oldImg !in newImageUrls) {
+                            _uiState.update { it.copy(pendingDeletionUrls = it.pendingDeletionUrls + oldImg) }
+                        }
+                    }
+                }
+
                 when (val r = if (existingQuiz != null) quizRepository.updateQuiz(quiz) else quizRepository.createQuiz(quiz)) {
                     is Result.Success -> {
-                        // Удаляем черновик после публикации
-                        try {
-                            firestore.collection("users").document(userId)
-                                .collection("drafts").document(draft.id).delete().await()
-                        } catch (_: Exception) {}
+                        draftRepository.deleteDraft(userId, draft.id)
                         ProfileAfterQuizRefresh.notify(userId)
+                        flushPendingDeletions()
                         _uiState.update {
                             it.copy(
                                 isPublishing = false,
@@ -607,5 +646,31 @@ class QuizCreatorViewModel : ViewModel() {
             if (index in qs.indices) qs[index] = transform(qs[index])
             draft.copy(questions = qs)
         }
+    }
+
+    /**
+     * Удаляет накопленные «осиротевшие» URL'ы из bucket'а (старые обложки/картинки
+     * вопросов после перезаписи или удаления). По аналогии с фотографиями профиля —
+     * лишних файлов не остаётся.
+     */
+    private suspend fun flushPendingDeletions() {
+        val urls = _uiState.value.pendingDeletionUrls
+        if (urls.isEmpty()) return
+        _uiState.update { it.copy(pendingDeletionUrls = emptyList()) }
+        urls.distinct().forEach { url -> deleteStorageObjectByUrl(url) }
+    }
+
+    private suspend fun deleteStorageObjectByUrl(url: String?) {
+        if (url.isNullOrBlank()) return
+        val key = StorageConfig.extractObjectKeyPublic(url) ?: return
+        val bucket = StorageConfig.bucketForKeyPublic(key) ?: return
+        when (val res = storageRepository.delete(bucket, key)) {
+            is Result.Success -> Log.d(TAG, "Deleted stale object: $bucket/$key")
+            is Result.Error -> Log.w(TAG, "Failed to delete $bucket/$key: ${res.exception.message}")
+        }
+    }
+
+    companion object {
+        private const val TAG = "QuizCreatorViewModel"
     }
 }
