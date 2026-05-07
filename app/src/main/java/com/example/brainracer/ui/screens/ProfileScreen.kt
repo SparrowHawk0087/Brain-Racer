@@ -1,6 +1,10 @@
 package com.example.brainracer.ui.screens
 
 import android.net.Uri
+import android.os.Build
+import android.view.View
+import android.view.ViewParent
+import android.view.Window
 import com.example.brainracer.R
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -20,12 +24,14 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -44,12 +50,18 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -63,13 +75,16 @@ import com.example.brainracer.domain.entities.UserRank
 import com.example.brainracer.domain.entities.UserStats
 import com.example.brainracer.ui.components.BottomBar
 import com.example.brainracer.ui.components.ChallengeFriendQuizSheetContent
+import com.example.brainracer.ui.components.ToggleThemeButton
 import com.example.brainracer.ui.components.bottomBarOcclusionBlockClicks
 import com.example.brainracer.ui.components.bottomBarOcclusionEffect
 import com.example.brainracer.ui.components.bottomBarSafePadding
 import com.example.brainracer.ui.components.pressClickable
 import com.example.brainracer.ui.components.pressScale
 import com.example.brainracer.ui.components.rememberFabVisibilityOnScroll
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
 import com.example.brainracer.ui.utils.AppMotionConfig
 import com.example.brainracer.ui.utils.AchievementUi
@@ -83,9 +98,128 @@ import com.example.brainracer.ui.theme.BrainRacerTheme
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import com.example.brainracer.ui.viewmodels.FriendsViewModel
+import com.example.brainracer.data.storage.StorageConfig
 import com.example.brainracer.ui.viewmodels.ProfileViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.foundation.verticalScroll
 
+private const val PROFILE_EDIT_BACKDROP_ANIM_MS = 280
+private const val PROFILE_EDIT_DISMISS_HOLD_MS = 320
+private val PROFILE_EDIT_SHAPE_TOP = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
+
+// Ищет окно диалога по родительскому представлению
+private fun findComposeDialogWindow(anchorView: View): Window? {
+    var p: ViewParent? = anchorView.parent
+    while (p != null) {
+        if (p is DialogWindowProvider) return p.window
+        p = p.parent
+    }
+    return null
+}
+
+// Шторка редактирования профиля с затемнением
+@Composable
+private fun ProfileEditBackdropSheet(
+    onDismissComplete: () -> Unit,
+    content: @Composable ColumnScope.(requestDismiss: () -> Unit) -> Unit
+) {
+    var backdropPhase by remember { mutableFloatStateOf(1f) }
+    val backdropAlpha by animateFloatAsState(
+        targetValue = backdropPhase,
+        animationSpec = tween(PROFILE_EDIT_BACKDROP_ANIM_MS),
+        label = "profileEditBackdropFade"
+    )
+    val dismissSheet: () -> Unit = { backdropPhase = 0f }
+
+    LaunchedEffect(backdropPhase) {
+        if (backdropPhase == 0f) {
+            delay(PROFILE_EDIT_DISMISS_HOLD_MS.toLong())
+            onDismissComplete()
+        }
+    }
+
+    Dialog(
+        onDismissRequest = dismissSheet,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        val view = LocalView.current
+        val inspecting = LocalInspectionMode.current
+        DisposableEffect(view, inspecting) {
+            onDispose {
+                if (!inspecting && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    findComposeDialogWindow(view)?.setBackgroundBlurRadius(0)
+                }
+            }
+        }
+        SideEffect {
+            if (inspecting) return@SideEffect
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val window = findComposeDialogWindow(view) ?: return@SideEffect
+                val radiusPx = (backdropAlpha * 56f).toInt().coerceIn(0, 84)
+                window.setBackgroundBlurRadius(radiusPx)
+            }
+        }
+
+        val interactionNone = remember { MutableInteractionSource() }
+        val configuration = LocalConfiguration.current
+        val maxSheetHeight = remember(configuration.screenHeightDp) {
+            (configuration.screenHeightDp.toFloat() * 0.80f).dp
+        }
+        val scroll = rememberScrollState()
+
+        Box(Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(interactionSource = interactionNone, indication = null, onClick = dismissSheet)
+                    .background(Color.Black.copy(alpha = 0.38f * backdropAlpha))
+            )
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .heightIn(max = maxSheetHeight)
+                    .navigationBarsPadding(),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                shadowElevation = 12.dp,
+                shape = PROFILE_EDIT_SHAPE_TOP,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.24f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scroll)
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 8.dp, bottom = 28.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            Modifier
+                                .width(40.dp)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                        )
+                    }
+                    content(dismissSheet)
+                }
+            }
+        }
+    }
+}
+
+// Главный экран профиля пользователя
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ProfileScreen(
@@ -101,6 +235,9 @@ fun ProfileScreen(
     onQuizzesClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
     currentRoute: String = "profile",
+    bottomBarLoggedInUserId: String? = null,
+    bottomBarProfileDestinationUserId: String? = null,
+    bottomBarShowChallengesIncomingBadge: Boolean = false,
     isOwnProfile: Boolean = true
 ) {
     val expandMotion = AppMotionConfig.expand
@@ -131,11 +268,13 @@ fun ProfileScreen(
         friendsUiState.friends.any { it.id == userId }
     }
 
+    // Загрузка данных профиля при входе
     LaunchedEffect(userId, isOwnProfile) {
         if (isOwnProfile) ProfileAfterQuizRefresh.takePending(userId)
         profileViewModel.loadUserProfile(userId, forceRefresh = true)
     }
 
+    // Обновление после прохождения викторины
     LaunchedEffect(userId, isOwnProfile) {
         if (!isOwnProfile) return@LaunchedEffect
         ProfileAfterQuizRefresh.events.collectLatest { uid ->
@@ -146,6 +285,7 @@ fun ProfileScreen(
         }
     }
 
+    // Перезагрузка при возврате в экран
     DisposableEffect(lifecycleOwner, userId, isOwnProfile) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -158,6 +298,7 @@ fun ProfileScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // Выход если сессия завершена
     LaunchedEffect(user) {
         if (user == null && isOwnProfile) {
             Toast.makeText(context, "Сессия завершена или аккаунт удалён", Toast.LENGTH_SHORT).show()
@@ -165,6 +306,7 @@ fun ProfileScreen(
         }
     }
 
+    // Показ ошибок удаления аккаунта
     LaunchedEffect(deleteAccountError) {
         deleteAccountError?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
@@ -172,6 +314,7 @@ fun ProfileScreen(
         }
     }
 
+    // Показ общих ошибок профиля
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
@@ -179,6 +322,7 @@ fun ProfileScreen(
         }
     }
 
+    // Уведомление об отправке вызова
     LaunchedEffect(friendsUiState.challengeSentMessage) {
         friendsUiState.challengeSentMessage?.let { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
@@ -188,11 +332,11 @@ fun ProfileScreen(
     }
 
     var showProfileEditSheet by remember { mutableStateOf(false) }
-    val profileEditSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var editDraftUsername by remember { mutableStateOf("") }
     var editDraftBio by remember { mutableStateOf("") }
     var editSelectedBadges by remember { mutableStateOf<Set<String>>(emptySet()) }
 
+    // Инициализация полей редактирования
     LaunchedEffect(showProfileEditSheet) {
         if (showProfileEditSheet) {
             editDraftUsername = uiState.username
@@ -201,168 +345,160 @@ fun ProfileScreen(
         }
     }
 
+    // Лаунчер выбора аватара
     val avatarPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { profileViewModel.uploadAvatar(context, userId, it) }
     }
 
+    // Шторка редактирования профиля
     if (showProfileEditSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showProfileEditSheet = false },
-            sheetState = profileEditSheetState,
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 32.dp)
+        ProfileEditBackdropSheet(onDismissComplete = { showProfileEditSheet = false }) { requestDismiss ->
+            Text(
+                "Редактирование профиля",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
+            Spacer(Modifier.height(16.dp))
+            Text("Имя пользователя", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value = editDraftUsername,
+                onValueChange = { if (it.length <= 30) editDraftUsername = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                    cursorColor = MaterialTheme.colorScheme.primary,
+                    focusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                placeholder = { Text("Введите никнейм", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f)) }
+            )
+            Text(
+                "${editDraftUsername.length}/30",
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.7f),
+                fontSize = 11.sp,
+                modifier = Modifier.align(Alignment.End)
+            )
+            Spacer(Modifier.height(14.dp))
+            Text("О себе", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value = editDraftBio,
+                onValueChange = { if (it.length <= 400) editDraftBio = it },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3,
+                maxLines = 6,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                    cursorColor = MaterialTheme.colorScheme.primary,
+                    focusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                placeholder = { Text("Расскажите о себе", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f)) }
+            )
+            Text(
+                "${editDraftBio.length}/400",
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.7f),
+                fontSize = 11.sp,
+                modifier = Modifier.align(Alignment.End)
+            )
+            Spacer(Modifier.height(16.dp))
+            Text("Бейджи целей (до ${ProfileGoalBadges.MAX_SELECTED})", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            Spacer(Modifier.height(8.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    "Редактирование профиля",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
-                Spacer(Modifier.height(16.dp))
-                Text("Имя пользователя", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-                Spacer(Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = editDraftUsername,
-                    onValueChange = { if (it.length <= 30) editDraftUsername = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                        cursorColor = MaterialTheme.colorScheme.primary,
-                        focusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    placeholder = { Text("Введите никнейм", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f)) }
-                )
-                Text(
-                    "${editDraftUsername.length}/30",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.7f),
-                    fontSize = 11.sp,
-                    modifier = Modifier.align(Alignment.End)
-                )
-                Spacer(Modifier.height(14.dp))
-                Text("О себе", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-                Spacer(Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = editDraftBio,
-                    onValueChange = { if (it.length <= 400) editDraftBio = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                    maxLines = 6,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                        cursorColor = MaterialTheme.colorScheme.primary,
-                        focusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    placeholder = { Text("Расскажите о себе", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f)) }
-                )
-                Text(
-                    "${editDraftBio.length}/400",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.7f),
-                    fontSize = 11.sp,
-                    modifier = Modifier.align(Alignment.End)
-                )
-                Spacer(Modifier.height(16.dp))
-                Text("Бейджи целей (до ${ProfileGoalBadges.MAX_SELECTED})", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-                Spacer(Modifier.height(8.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    ProfileGoalBadges.all.forEach { opt ->
-                        val sel = opt.id in editSelectedBadges
-                        FilterChip(
-                            selected = sel,
-                            onClick = {
-                                editSelectedBadges = when {
-                                    sel -> editSelectedBadges - opt.id
-                                    editSelectedBadges.size >= ProfileGoalBadges.MAX_SELECTED -> editSelectedBadges
-                                    else -> editSelectedBadges + opt.id
-                                }
-                            },
-                            label = { Text(opt.label, fontSize = 13.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary.copy(0.35f),
-                                selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                                containerColor = MaterialTheme.colorScheme.outline.copy(0.4f),
-                                labelColor = MaterialTheme.colorScheme.onSurface
-                            )
-                        )
-                    }
-                }
-                Spacer(Modifier.height(24.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { showProfileEditSheet = false },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        enabled = !uiState.isSavingProfile
-                    ) { Text("Отмена") }
-                    Button(
+                ProfileGoalBadges.all.forEach { opt ->
+                    val sel = opt.id in editSelectedBadges
+                    FilterChip(
+                        selected = sel,
                         onClick = {
-                            val usernameValidation = ProfileUtils.validateUsername(editDraftUsername.trim())
-                            if (!usernameValidation.isValid) {
-                                Toast.makeText(
-                                    context,
-                                    usernameValidation.errorMessage ?: "Некорректный никнейм",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            } else {
-                                val saveBioAndBadges = {
-                                    profileViewModel.saveBioAndGoalBadges(
-                                        userId,
-                                        editDraftBio,
-                                        editSelectedBadges.toList()
-                                    ) { ok -> if (ok) showProfileEditSheet = false }
-                                }
-                                if (editDraftUsername.trim() != uiState.username.trim()) {
-                                    profileViewModel.updateUsername(userId, editDraftUsername.trim()) { nameSaved ->
-                                        if (nameSaved) saveBioAndBadges()
-                                    }
-                                } else {
-                                    saveBioAndBadges()
-                                }
+                            editSelectedBadges = when {
+                                sel -> editSelectedBadges - opt.id
+                                editSelectedBadges.size >= ProfileGoalBadges.MAX_SELECTED -> editSelectedBadges
+                                else -> editSelectedBadges + opt.id
                             }
                         },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        enabled = !uiState.isSavingProfile
-                    ) {
-                        if (uiState.isSavingProfile) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(22.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
+                        label = { Text(opt.label, fontSize = 13.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(0.35f),
+                            selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                            containerColor = MaterialTheme.colorScheme.outline.copy(0.4f),
+                            labelColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    )
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = requestDismiss,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    enabled = !uiState.isSavingProfile
+                ) { Text("Отмена") }
+                Button(
+                    onClick = {
+                        val usernameValidation = ProfileUtils.validateUsername(editDraftUsername.trim())
+                        if (!usernameValidation.isValid) {
+                            Toast.makeText(
+                                context,
+                                usernameValidation.errorMessage ?: "Некорректный никнейм",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         } else {
-                            Text("Сохранить", fontWeight = FontWeight.SemiBold)
+                            val saveBioAndBadges = {
+                                profileViewModel.saveBioAndGoalBadges(
+                                    userId,
+                                    editDraftBio,
+                                    editSelectedBadges.toList()
+                                ) { ok -> if (ok) requestDismiss() }
+                            }
+                            if (editDraftUsername.trim() != uiState.username.trim()) {
+                                profileViewModel.updateUsername(userId, editDraftUsername.trim()) { nameSaved ->
+                                    if (nameSaved) saveBioAndBadges()
+                                }
+                            } else {
+                                saveBioAndBadges()
+                            }
                         }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    enabled = !uiState.isSavingProfile
+                ) {
+                    if (uiState.isSavingProfile) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Сохранить", fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
+            Spacer(Modifier.height(16.dp))
         }
     }
 
+    // Шторка вызова друга
     if (showChallengeSheet && !isOwnProfile) {
         val rankFromProfile =
             UserRank.entries.find { it.displayName == uiState.rankName } ?: UserRank.BEGINNER
@@ -390,6 +526,7 @@ fun ProfileScreen(
         }
     }
 
+    // Диалог удаления викторины
     quizPendingDelete?.let { pending ->
         val deletingThis = uiState.deletingQuizId == pending.id
         AlertDialog(
@@ -441,6 +578,7 @@ fun ProfileScreen(
         )
     }
 
+    // Основной Scaffold экрана
     Scaffold(
         contentWindowInsets = WindowInsets.systemBars,
         containerColor = MaterialTheme.colorScheme.background,
@@ -462,8 +600,7 @@ fun ProfileScreen(
                     } else null,
                     showEdit = isOwnProfile,
                     onEditClick = { showProfileEditSheet = true },
-                    showSettings = isOwnProfile,
-                    onSettingsClick = { navController.navigate("settings") },
+                    showThemeToggle = isOwnProfile,
                     showAddFriend = !isOwnProfile && !isFriend,
                     onAddFriendClick = { friendsViewModel.sendFriendRequest(userId) },
                     addFriendEnabled = true,
@@ -475,14 +612,17 @@ fun ProfileScreen(
         },
         bottomBar = {
             BottomBar(
-                showBar              = true,
-                currentRoute         = currentRoute,
-                onHomeClick          = onHomeClick,
-                onLeaderboardClick   = onLeaderboardClick,
-                onChallengesClick    = onChallengesClick,
-                onQuizzesClick       = onQuizzesClick,
-                onProfileClick       = onProfileClick,
-                reflexShift          = bottomReflexShift
+                showBar                  = true,
+                currentRoute             = currentRoute,
+                loggedInUserId           = bottomBarLoggedInUserId,
+                profileDestinationUserId = bottomBarProfileDestinationUserId,
+                showChallengesIncomingBadge = bottomBarShowChallengesIncomingBadge,
+                onHomeClick              = onHomeClick,
+                onLeaderboardClick       = onLeaderboardClick,
+                onChallengesClick        = onChallengesClick,
+                onQuizzesClick           = onQuizzesClick,
+                onProfileClick           = onProfileClick,
+                reflexShift              = bottomReflexShift
             )
         },
         floatingActionButton = {
@@ -788,6 +928,7 @@ fun ProfileScreen(
         }
     }
 
+    // Диалог подтверждения удаления аккаунта
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -823,14 +964,14 @@ fun ProfileScreen(
     }
 }
 
+// Верхняя панель профиля с кнопками действий
 @Composable
 private fun ProfileScreenTopBar(
     title: String,
     onBackToFriendsClick: (() -> Unit)? = null,
     showEdit: Boolean,
     onEditClick: () -> Unit,
-    showSettings: Boolean = false,
-    onSettingsClick: () -> Unit = {},
+    showThemeToggle: Boolean = false,
     showAddFriend: Boolean = false,
     onAddFriendClick: () -> Unit = {},
     addFriendEnabled: Boolean = true,
@@ -866,7 +1007,7 @@ private fun ProfileScreenTopBar(
                 }
             }
             Spacer(modifier = Modifier.weight(1f))
-            if (showSettings || showEdit || showAddFriend || showRemoveFriend) {
+            if (showThemeToggle || showEdit || showAddFriend || showRemoveFriend) {
                 Row(
                     modifier = Modifier.widthIn(min = 88.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -897,14 +1038,8 @@ private fun ProfileScreenTopBar(
                             )
                         }
                     }
-                    if (showSettings) {
-                        IconButton(onClick = onSettingsClick, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.settings),
-                                contentDescription = "Настройки",
-                                tint = MaterialTheme.colorScheme.onSurface.copy(0.85f)
-                            )
-                        }
+                    if (showThemeToggle) {
+                        ToggleThemeButton()
                     }
                     if (showEdit) {
                         IconButton(onClick = onEditClick, modifier = Modifier.size(36.dp)) {
@@ -932,6 +1067,7 @@ private fun ProfileScreenTopBar(
     }
 }
 
+// Блок с био и бейджами целей
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ProfileBioBadgesSection(
@@ -984,6 +1120,7 @@ private fun ProfileBioBadgesSection(
     }
 }
 
+// Карточка с количеством друзей
 @Composable
 private fun ProfileFriendsSummaryCard(
     friendsCount: Int,
@@ -1025,6 +1162,7 @@ private fun ProfileFriendsSummaryCard(
     }
 }
 
+// Основная карточка профиля с аватаром и прогрессом
 @Composable
 private fun ProfileMainCard(
     userName: String,
@@ -1065,21 +1203,53 @@ private fun ProfileMainCard(
                 .background(Brush.linearGradient(avatarStops)),
             contentAlignment = Alignment.Center
         ) {
-            val url = avatarUrl?.takeIf { it.isNotBlank() }
+            val context = LocalContext.current
+            val rawUrl = avatarUrl?.takeIf { it.isNotBlank() }
+            // Формируем публичную ссылку для аватара
+            val url = rawUrl?.let { StorageConfig.resolveAvatarUrlForCoil(it) }
+            val initialLetter = userName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+            val letterPlaceholder: @Composable () -> Unit = {
+                Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = initialLetter,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+            }
             if (url != null) {
-                AsyncImage(
-                    model = url,
+                SubcomposeAsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(url)
+                        .crossfade(true)
+                        // Не кэшировать ошибки загрузки
+                        .memoryCachePolicy(CachePolicy.ENABLED)
+                        .diskCachePolicy(CachePolicy.ENABLED)
+                        .listener(
+                            onError = { req, res ->
+                                android.util.Log.e(
+                                    "Avatar/Coil",
+                                    "load failed url=${req.data} err=${res.throwable.message}",
+                                    res.throwable
+                                )
+                            },
+                            onSuccess = { req, _ ->
+                                android.util.Log.d("Avatar/Coil", "loaded url=${req.data}")
+                            }
+                        )
+                        .build(),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    loading = { letterPlaceholder() },
+                    error = { letterPlaceholder() }
                 )
             } else {
-                Text(
-                    text = userName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
+                letterPlaceholder()
             }
             if (isUploadingAvatar) {
                 Box(
@@ -1128,6 +1298,7 @@ private fun ProfileMainCard(
     }
 }
 
+// Строка со статистикой: игры, рейтинг, точность
 @Composable
 private fun ProfileUserStatRow(stats: UserStats?) {
     val accPct = if ((stats?.totalQuestionsAnswered ?: 0) > 0) {
@@ -1166,6 +1337,7 @@ private fun ProfileUserStatRow(stats: UserStats?) {
     }
 }
 
+// Карточка статистики по темам
 @Composable
 private fun ProfileTopicStatsCard(
     topicStats: List<TopicStatUi>,
@@ -1242,6 +1414,7 @@ private fun ProfileTopicStatsCard(
     }
 }
 
+// Строка статистики одной темы
 @Composable
 private fun ProfileTopicRow(stat: TopicStatUi) {
     val topicBarColors = LocalBrainRacerExtendedColors.current.topicBarColors
@@ -1273,6 +1446,7 @@ private fun ProfileTopicRow(stat: TopicStatUi) {
     }
 }
 
+// Пустое состояние для вкладок
 @Composable
 private fun EmptyTabHint(message: String) {
     Text(
@@ -1288,6 +1462,7 @@ private fun EmptyTabHint(message: String) {
     )
 }
 
+// Заголовок списка с возможностью сворачивания
 @Composable
 private fun ProfileCollapsibleHistoryHeader(
     title: String,
@@ -1307,6 +1482,8 @@ private fun ProfileCollapsibleHistoryHeader(
     )
     Row(
         modifier = Modifier
+            .bottomBarOcclusionEffect()
+            .bottomBarOcclusionBlockClicks()
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 4.dp)
             .clip(shape)
@@ -1341,6 +1518,7 @@ private fun ProfileCollapsibleHistoryHeader(
     }
 }
 
+// Склонение слова "викторина"
 private fun createdQuizCountWord(n: Int): String {
     val mod10 = n % 10
     val mod100 = n % 100
@@ -1352,6 +1530,7 @@ private fun createdQuizCountWord(n: Int): String {
     }
 }
 
+// Склонение слова "прохождение"
 private fun passAttemptCountWord(n: Int): String {
     val mod10 = n % 10
     val mod100 = n % 100
@@ -1363,6 +1542,7 @@ private fun passAttemptCountWord(n: Int): String {
     }
 }
 
+// Элемент списка созданных викторин
 @Composable
 private fun CreatedQuizRow(
     quiz: QuizItem,
@@ -1456,6 +1636,7 @@ private fun CreatedQuizRow(
     }
 }
 
+// Элемент истории пройденных викторин
 @Composable
 private fun PassedQuizRow(
     attempt: PassedQuizUi,
@@ -1502,6 +1683,7 @@ private fun PassedQuizRow(
     }
 }
 
+// Элемент достижения с раскрытием
 @Composable
 private fun ProfileAchievementRow(
     achievement: AchievementUi,
@@ -1581,6 +1763,7 @@ private fun ProfileAchievementRow(
     }
 }
 
+// Превью для превьюшки в студии
 @Preview(showBackground = true)
 @Composable
 fun ProfileScreenPreview() {
