@@ -1,5 +1,7 @@
 package com.example.brainracer.data.storage
 
+package com.example.brainracer.data.storage
+
 import android.util.Log
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.domain.entities.QuizDifficulty
@@ -121,7 +123,8 @@ class QuizDraftRepositoryImpl(
                     "points" to q.points,
                     "timeLimit" to q.timeLimit,
                     "imageUrl" to q.imageUrl,
-                    "isGif" to q.isGif
+                    "isGif" to q.isGif,
+                    "explanation" to q.explanation
                 )
             }
         )
@@ -163,7 +166,8 @@ class QuizDraftRepositoryImpl(
                         points = q.int("points", 10),
                         timeLimit = q.int("timeLimit", 30),
                         imageUrl = q.strOrNull("imageUrl"),
-                        isGif = q.bool("isGif")
+                        isGif = q.bool("isGif"),
+                        explanation = q.str("explanation")
                     )
                 } catch (e: Exception) {
                     Log.w(TAG, "Skipping malformed question: ${e.message}")
