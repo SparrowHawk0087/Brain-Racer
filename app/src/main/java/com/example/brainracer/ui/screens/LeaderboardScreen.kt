@@ -142,7 +142,10 @@ fun LeaderboardScreen(
     onChallengesClick: () -> Unit = {},
     onQuizzesClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
-    currentRoute: String = "leaderboard"
+    currentRoute: String = "leaderboard",
+    bottomBarLoggedInUserId: String? = null,
+    bottomBarProfileDestinationUserId: String? = null,
+    bottomBarShowChallengesIncomingBadge: Boolean = false
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -162,7 +165,7 @@ fun LeaderboardScreen(
     val bottomReflexShift by remember {
         derivedStateOf {
             ((leaderboardListState.firstVisibleItemIndex * 4f) +
-                leaderboardListState.firstVisibleItemScrollOffset * 0.012f).coerceIn(0f, 18f)
+                    leaderboardListState.firstVisibleItemScrollOffset * 0.012f).coerceIn(0f, 18f)
         }
     }
 
@@ -298,6 +301,9 @@ fun LeaderboardScreen(
             BottomBar(
                 showBar = true,
                 currentRoute = currentRoute,
+                loggedInUserId = bottomBarLoggedInUserId,
+                profileDestinationUserId = bottomBarProfileDestinationUserId,
+                showChallengesIncomingBadge = bottomBarShowChallengesIncomingBadge,
                 onHomeClick = onHomeClick,
                 onLeaderboardClick = onLeaderboardClick,
                 onChallengesClick = onChallengesClick,
@@ -390,26 +396,26 @@ fun LeaderboardScreen(
                                     val isOpenClose = initialState == null || targetState == null
                                     if (isOpenClose) {
                                         (
-                                            slideInVertically(slideSpring) { it / 5 } +
-                                                fadeIn(tween(220)) +
-                                                scaleIn(initialScale = 0.96f, animationSpec = tween(220))
-                                            ) togetherWith (
-                                            slideOutVertically(tween(200)) { -it / 6 } +
-                                                fadeOut(tween(180)) +
-                                                scaleOut(targetScale = 0.96f, animationSpec = tween(180))
-                                            )
+                                                slideInVertically(slideSpring) { it / 5 } +
+                                                        fadeIn(tween(220)) +
+                                                        scaleIn(initialScale = 0.96f, animationSpec = tween(220))
+                                                ) togetherWith (
+                                                slideOutVertically(tween(200)) { -it / 6 } +
+                                                        fadeOut(tween(180)) +
+                                                        scaleOut(targetScale = 0.96f, animationSpec = tween(180))
+                                                )
                                     } else {
                                         val direction =
                                             if ((targetState?.rank ?: 0) > (initialState?.rank ?: 0)) 1 else -1
                                         (
-                                            slideInHorizontally(slideSpring) { fullWidth ->
-                                                direction * fullWidth / 5
-                                            } + fadeIn(tween(220))
-                                            ) togetherWith (
-                                            slideOutHorizontally(slideSpring) { fullWidth ->
-                                                -direction * fullWidth / 5
-                                            } + fadeOut(tween(200))
-                                            )
+                                                slideInHorizontally(slideSpring) { fullWidth ->
+                                                    direction * fullWidth / 5
+                                                } + fadeIn(tween(220))
+                                                ) togetherWith (
+                                                slideOutHorizontally(slideSpring) { fullWidth ->
+                                                    -direction * fullWidth / 5
+                                                } + fadeOut(tween(200))
+                                                )
                                     }
                                 },
                                 label = "topPlayerCardAnimation"
