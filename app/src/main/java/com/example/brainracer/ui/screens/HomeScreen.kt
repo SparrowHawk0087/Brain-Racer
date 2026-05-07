@@ -2,21 +2,24 @@ package com.example.brainracer.ui.screens
 
 import android.graphics.drawable.Drawable
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -24,11 +27,13 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -40,7 +45,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.brainracer.R
+import com.example.brainracer.data.storage.StorageConfig
 import com.example.brainracer.domain.entities.Challenge
 import com.example.brainracer.domain.entities.ChallengeStatus
 import com.example.brainracer.domain.entities.UserStats
@@ -60,12 +67,33 @@ import com.example.brainracer.ui.viewmodels.AuthViewModel
 import com.example.brainracer.ui.viewmodels.HomeViewModel
 import java.util.Calendar
 
-private data class Banner(
-    val id: Int,
+private data class WhatsNewFeature(
+    val emoji: String,
     val title: String,
-    val subtitle: String,
-    val gradient: List<Color>,
-    val actionLabel: String = "Участвовать →"
+    val description: String
+)
+
+private val whatsNewFeatures = listOf(
+    WhatsNewFeature(
+        emoji = "📷",
+        title = "Загрузка фото",
+        description = "Теперь можно ставить фото профиля, обложки викторин и картинки к вопросам"
+    ),
+    WhatsNewFeature(
+        emoji = "🎨",
+        title = "Новый дизайн",
+        description = "Полностью переработали интерфейс — стало чище и современнее"
+    ),
+    WhatsNewFeature(
+        emoji = "💧",
+        title = "Жидкое стекло",
+        description = "Добавили эффекты «жидкого стекла» и плавные анимации между экранами"
+    ),
+    WhatsNewFeature(
+        emoji = "📱",
+        title = "Адаптивность",
+        description = "Интерфейс теперь корректно адаптируется под разные размеры экранов"
+    )
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -79,20 +107,16 @@ fun HomeScreen(
     onChallengesClick: () -> Unit = {},
     onQuizzesClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
-    currentRoute: String = "home"
+    currentRoute: String = "home",
+    bottomBarLoggedInUserId: String? = null,
+    bottomBarProfileDestinationUserId: String? = null,
+    bottomBarShowChallengesIncomingBadge: Boolean = false
 ) {
     val uiState       by homeViewModel.uiState.collectAsState()
     val context       = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val ext = LocalBrainRacerExtendedColors.current
-    val homeBanners = remember(ext.cardGradients) {
-        val g = ext.cardGradients
-        listOf(
-            Banner(1, "🏆 Турнир Чемпионов", "Призовой фонд 5000 монет", g[0]),
-            Banner(2, "⚡ Блиц-неделя", "x2 опыта до воскресенья", g[1]),
-            Banner(3, "🎯 Новая категория", "Искусство и Культура", g[2])
-        )
-    }
+    val whatsNewGradient = remember(ext.cardGradients) { ext.cardGradients[0] }
 
     // ── Обновляем статистику при каждом возвращении на экран ─────────────
     // Это нужно, чтобы уровень/XP обновились после прохождения викторины
@@ -180,6 +204,7 @@ fun HomeScreen(
                 levelProgress              = uiState.levelProgress,
                 rankName                   = uiState.rankName,
                 unreadNotificationsCount   = uiState.unreadNotificationsCount,
+                showBellChallengeDot       = bottomBarShowChallengesIncomingBadge,
                 onSearchClick              = { navController.navigate("search?category=Все&customOnly=false") },
                 onNotificationsClick       = {
                     if (uiState.currentUserId.isNotBlank()) {
@@ -198,7 +223,9 @@ fun HomeScreen(
             BottomBar(
                 showBar                      = true,
                 currentRoute                 = currentRoute,
-                showChallengesIncomingBadge  = uiState.pendingChallenges.isNotEmpty(),
+                loggedInUserId               = bottomBarLoggedInUserId,
+                profileDestinationUserId      = bottomBarProfileDestinationUserId,
+                showChallengesIncomingBadge  = bottomBarShowChallengesIncomingBadge,
                 onHomeClick                  = onHomeClick,
                 onLeaderboardClick           = onLeaderboardClick,
                 onChallengesClick            = onChallengesClick,
@@ -268,12 +295,13 @@ fun HomeScreen(
             item {
                 WelcomeRow(
                     userName = uiState.userName.ifBlank { "Гость" },
+                    avatarUrl = uiState.userAvatarUrl,
                     greeting = greetingUi.greeting,
                     emoji = greetingUi.emoji,
                     onClick = onProfileClick
                 )
             }
-            item { BannerCarousel(homeBanners) }
+            item { WhatsNewCard(whatsNewGradient) }
 
             if (tabs.isNotEmpty()) {
                 item { CategoryTabs(tabs, selectedTabIndex) { selectedTabIndex = it } }
@@ -332,6 +360,7 @@ private fun HomeTopBar(
     levelProgress: Float,       // 0.0–1.0 реальный прогресс внутри уровня
     rankName: String,
     unreadNotificationsCount: Int,
+    showBellChallengeDot: Boolean,
     onSearchClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onSignOut: () -> Unit
@@ -391,7 +420,9 @@ private fun HomeTopBar(
                     IconButton(onClick = onNotificationsClick) {
                         Box {
                             Icon(painter = painterResource(id = R.drawable.bell_btn), null, tint = MaterialTheme.colorScheme.onSurface.copy(0.7f))
-                            if (unreadNotificationsCount > 0) {
+                            val showBellDot =
+                                unreadNotificationsCount > 0 || showBellChallengeDot
+                            if (showBellDot) {
                                 Box(
                                     Modifier.size(8.dp).align(Alignment.TopEnd)
                                         .offset(x = 2.dp, y = (-2).dp)
@@ -464,10 +495,17 @@ private fun UserStatRow(
 // ══════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun WelcomeRow(userName: String, greeting: String, emoji: String, onClick: () -> Unit) {
+private fun WelcomeRow(
+    userName: String,
+    avatarUrl: String?,
+    greeting: String,
+    emoji: String,
+    onClick: () -> Unit
+) {
     val ext = LocalBrainRacerExtendedColors.current
     val g = ext.cardGradients
     val avatarStops = listOf(g[0][0], g[1][0])
+    val resolved = avatarUrl?.takeIf { it.isNotBlank() }?.let { StorageConfig.resolvePublicUrlForCoil(it) }
     Row(
         modifier              = Modifier
             .fillMaxWidth()
@@ -485,10 +523,19 @@ private fun WelcomeRow(userName: String, greeting: String, emoji: String, onClic
                 .background(Brush.linearGradient(avatarStops)),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                userName.firstOrNull()?.uppercase() ?: "?",
-                fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary
-            )
+            if (resolved != null) {
+                AsyncImage(
+                    model = resolved,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Text(
+                    userName.firstOrNull()?.uppercase() ?: "?",
+                    fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary
+                )
+            }
         }
     }
 }
@@ -507,54 +554,189 @@ private fun getGreetingUi(): GreetingUi {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * Карточка «Что нового». В свернутом виде показывает заголовок и подсказку «Нажмите,
+ * чтобы посмотреть», в раскрытом — список фишек последнего обновления.
+ *
+ * Анимация раскрытия:
+ *  - Высота карточки плавно меняется через [expandVertically] / [shrinkVertically]
+ *    у внешнего [AnimatedVisibility] контента — без отдельного `animateContentSize`,
+ *    чтобы не было двух конкурирующих аниматоров высоты.
+ *  - Стрелка-индикатор поворачивается на 180° в едином таймингсе с раскрытием.
+ *  - Подсказка под заголовком меняется через [AnimatedContent] с crossfade —
+ *    без визуального «прыжка» текста.
+ *  - Каждая строка фишки появляется с небольшой задержкой (stagger), создавая ощущение
+ *    «волны»: контент сначала раскрывается, затем по очереди проявляются строки.
+ */
 @Composable
-private fun BannerCarousel(banners: List<Banner>) {
-    val pagerState = rememberPagerState { banners.size }
-    Column {
-        HorizontalPager(
-            state          = pagerState,
-            contentPadding = PaddingValues(horizontal = 20.dp),
-            pageSpacing    = 16.dp
-        ) { page ->
-            val b = banners[page]
-            Box(
-                modifier = Modifier.width(320.dp).height(150.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(Brush.linearGradient(b.gradient, Offset.Zero, Offset(1000f, 1000f))),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Box(Modifier.size(110.dp).align(Alignment.TopEnd).offset(x = 28.dp, y = (-28).dp)
-                    .clip(CircleShape).background(Color.White.copy(0.08f)))
-                Box(Modifier.size(55.dp).align(Alignment.BottomStart).offset(x = (-18).dp, y = 18.dp)
-                    .clip(CircleShape).background(Color.White.copy(0.08f)))
-                Column(
-                    modifier = Modifier.fillMaxHeight().padding(horizontal = 22.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(b.title, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Color.White)
-                    Spacer(Modifier.height(5.dp))
-                    Text(b.subtitle, fontSize = 13.sp, color = Color.White.copy(0.85f))
-                    Spacer(Modifier.height(12.dp))
-                    Surface(shape = RoundedCornerShape(20.dp), color = Color.White.copy(0.22f)) {
-                        Text(b.actionLabel,
-                            modifier   = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                            color      = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+private fun WhatsNewCard(gradient: List<Color>) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+
+    // Единая длительность всех под-анимаций — чтобы они шли «в один такт».
+    val expandDurationMs = 380
+    val expandEasing = FastOutSlowInEasing
+
+    val rotation by animateFloatAsState(
+        targetValue   = if (expanded) 180f else 0f,
+        animationSpec = tween(durationMillis = expandDurationMs, easing = expandEasing),
+        label = "whatsNewArrow"
+    )
+
+    Box(modifier = Modifier.padding(horizontal = 20.dp)) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Color.Transparent,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(Brush.linearGradient(gradient, Offset.Zero, Offset(1200f, 1200f)))
+                .clickable { expanded = !expanded }
+        ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                // Декор: «жидкое стекло» — мягкие круги
+                Box(
+                    Modifier.size(120.dp).align(Alignment.TopEnd).offset(x = 32.dp, y = (-32).dp)
+                        .clip(CircleShape).background(Color.White.copy(0.10f))
+                )
+                Box(
+                    Modifier.size(64.dp).align(Alignment.BottomStart).offset(x = (-22).dp, y = 22.dp)
+                        .clip(CircleShape).background(Color.White.copy(0.10f))
+                )
+
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
+                    // Шапка
+                    Row(
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color.White.copy(alpha = 0.22f)
+                        ) {
+                            Text(
+                                "✨ Что нового",
+                                modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                color      = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize   = 11.sp
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Icon(
+                            Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (expanded) "Свернуть" else "Развернуть",
+                            tint = Color.White,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .graphicsLayer { rotationZ = rotation }
+                        )
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    Text(
+                        "Обновление",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize   = 18.sp,
+                        color      = Color.White
+                    )
+                    Spacer(Modifier.height(4.dp))
+
+                    // Crossfade подсказки: текст меняется плавно, без «прыжка» при тапе.
+                    AnimatedContent(
+                        targetState = expanded,
+                        transitionSpec = {
+                            fadeIn(tween(durationMillis = 240, easing = expandEasing)) togetherWith
+                                    fadeOut(tween(durationMillis = 180, easing = expandEasing))
+                        },
+                        label = "whatsNewSubtitle"
+                    ) { isExpanded ->
+                        Text(
+                            if (isExpanded) "Главные изменения:" else "Нажмите, чтобы посмотреть фишки",
+                            fontSize = 13.sp,
+                            color    = Color.White.copy(alpha = 0.85f)
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = expanded,
+                        enter = expandVertically(
+                            animationSpec = tween(durationMillis = expandDurationMs, easing = expandEasing)
+                        ) + fadeIn(
+                            animationSpec = tween(durationMillis = expandDurationMs, delayMillis = 80, easing = expandEasing)
+                        ),
+                        exit = shrinkVertically(
+                            animationSpec = tween(durationMillis = 260, easing = expandEasing)
+                        ) + fadeOut(
+                            animationSpec = tween(durationMillis = 160, easing = expandEasing)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(top = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            whatsNewFeatures.forEachIndexed { index, feature ->
+                                // Stagger: каждая строка появляется с небольшой задержкой,
+                                // создавая мягкую «волну» проявления списка.
+                                AnimatedVisibility(
+                                    visible = expanded,
+                                    enter = fadeIn(
+                                        animationSpec = tween(
+                                            durationMillis = 280,
+                                            delayMillis = 120 + index * 60,
+                                            easing = expandEasing
+                                        )
+                                    ) + expandVertically(
+                                        animationSpec = tween(
+                                            durationMillis = 320,
+                                            delayMillis = 120 + index * 60,
+                                            easing = expandEasing
+                                        )
+                                    ),
+                                    exit = fadeOut(animationSpec = tween(140, easing = expandEasing))
+                                ) {
+                                    WhatsNewRow(feature)
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            banners.forEachIndexed { i, _ ->
-                val selected = pagerState.currentPage == i
-                Box(
-                    Modifier.padding(horizontal = 3.dp)
-                        .size(if (selected) 22.dp else 7.dp, 7.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
-                )
-            }
+    }
+}
+
+@Composable
+private fun WhatsNewRow(feature: WhatsNewFeature) {
+    Row(
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color.White.copy(alpha = 0.18f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(feature.emoji, fontSize = 18.sp)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                feature.title,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                feature.description,
+                color = Color.White.copy(alpha = 0.85f),
+                fontSize = 12.sp,
+                lineHeight = 16.sp
+            )
         }
     }
 }
