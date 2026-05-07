@@ -40,12 +40,23 @@ class AuthViewModel : ViewModel() {
     fun signIn(email: String, password: String) {
         viewModelScope.launch {
             try {
-                auth.signInWithEmailAndPassword(email, password).await()
+                signInWithRetry(email, password)
                 _user.value = auth.currentUser
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing in", e)
                 _error.value = userFacingAuthMessage(e)
             }
+        }
+    }
+
+    private suspend fun signInWithRetry(email: String, password: String) {
+        try {
+            auth.signInWithEmailAndPassword(email, password).await()
+        } catch (e: Exception) {
+            if (!isTransientNetworkError(e)) throw e
+            Log.w("AuthViewModel", "Transient network error on signIn, retrying once", e)
+            delay(SIGN_IN_RETRY_DELAY_MS)
+            auth.signInWithEmailAndPassword(email, password).await()
         }
     }
 
