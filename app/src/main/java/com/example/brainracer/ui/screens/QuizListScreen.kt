@@ -48,7 +48,10 @@ fun QuizListScreen(
     onChallengesClick: () -> Unit = {},
     onQuizzesClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
-    currentRoute: String = "quizzes"
+    currentRoute: String = "quizzes",
+    bottomBarLoggedInUserId: String? = null,
+    bottomBarProfileDestinationUserId: String? = null,
+    bottomBarShowChallengesIncomingBadge: Boolean = false
 ) {
     val repo = remember { QuizRepositoryImpl() }
     var quizzes by remember { mutableStateOf<List<QuizItem>>(emptyList()) }
@@ -106,6 +109,9 @@ fun QuizListScreen(
             BottomBar(
                 showBar = true,
                 currentRoute = currentRoute,
+                loggedInUserId = bottomBarLoggedInUserId,
+                profileDestinationUserId = bottomBarProfileDestinationUserId,
+                showChallengesIncomingBadge = bottomBarShowChallengesIncomingBadge,
                 onHomeClick = onHomeClick,
                 onLeaderboardClick = onLeaderboardClick,
                 onChallengesClick = onChallengesClick,
