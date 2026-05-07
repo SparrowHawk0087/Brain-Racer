@@ -63,7 +63,10 @@ fun ChallengesScreen(
     onChallengesClick: () -> Unit = {},
     onQuizzesClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
-    currentRoute: String = "challenges"
+    currentRoute: String = "challenges",
+    bottomBarLoggedInUserId: String? = null,
+    bottomBarProfileDestinationUserId: String? = null,
+    bottomBarShowChallengesIncomingBadge: Boolean = false
 ) {
     val uiState     by vm.uiState.collectAsState()
     val context     = LocalContext.current
@@ -161,7 +164,9 @@ fun ChallengesScreen(
             BottomBar(
                 showBar                     = true,
                 currentRoute                = currentRoute,
-                showChallengesIncomingBadge = incomingCount > 0,
+                loggedInUserId              = bottomBarLoggedInUserId,
+                profileDestinationUserId    = bottomBarProfileDestinationUserId,
+                showChallengesIncomingBadge = bottomBarShowChallengesIncomingBadge,
                 onHomeClick                 = onHomeClick,
                 onLeaderboardClick          = onLeaderboardClick,
                 onChallengesClick           = onChallengesClick,
@@ -765,15 +770,69 @@ private fun CompletedChallengeCard(
             elevation = CardDefaults.cardElevation(0.dp),
             border    = CardDefaults.outlinedCardBorder()
         ) {
-        if (compact) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            if (compact) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        AvatarCircle(opponentName.take(2).uppercase(), MaterialTheme.colorScheme.primary, 42)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "vs $opponentName",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                challenge.quizTitle,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                formatTimestamp(challenge.completedAt?.seconds?.times(1000) ?: 0L),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "$myScore : $opponentScore",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Surface(shape = RoundedCornerShape(6.dp), color = resultColor.copy(.15f)) {
+                            Text(
+                                resultLabel,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = resultColor
+                            )
+                        }
+                    }
+                }
+            } else {
                 Row(
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     AvatarCircle(opponentName.take(2).uppercase(), MaterialTheme.colorScheme.primary, 42)
                     Column(modifier = Modifier.weight(1f)) {
@@ -800,78 +859,24 @@ private fun CompletedChallengeCard(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "$myScore : $opponentScore",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Surface(shape = RoundedCornerShape(6.dp), color = resultColor.copy(.15f)) {
-                        Text(
-                            resultLabel,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = resultColor
-                        )
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("$myScore : $opponentScore", fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+                        Surface(shape = RoundedCornerShape(6.dp), color = resultColor.copy(.15f)) {
+                            Text(
+                                resultLabel,
+                                modifier   = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                fontSize   = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = resultColor
+                            )
+                        }
                     }
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
                 }
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                AvatarCircle(opponentName.take(2).uppercase(), MaterialTheme.colorScheme.primary, 42)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "vs $opponentName",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        challenge.quizTitle,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        formatTimestamp(challenge.completedAt?.seconds?.times(1000) ?: 0L),
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("$myScore : $opponentScore", fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
-                    Surface(shape = RoundedCornerShape(6.dp), color = resultColor.copy(.15f)) {
-                        Text(
-                            resultLabel,
-                            modifier   = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            fontSize   = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = resultColor
-                        )
-                    }
-                }
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
             }
         }
-    }
     }
 }
 
