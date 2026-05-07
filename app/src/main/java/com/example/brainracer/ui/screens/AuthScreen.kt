@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -90,6 +89,7 @@ fun AuthScreen(
     val error by authViewModel.error.collectAsState()
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
+    val webClientId = stringResource(R.string.default_web_client_id)
     val appNameBrush = remember {
         Brush.horizontalGradient(
             listOf(
@@ -343,9 +343,6 @@ fun AuthScreen(
                 AuthGoogleButton(
                     enabled = !isLoading,
                     onClick = {
-
-                        val webClientId = stringResource(R.string.default_web_client_id)
-
                         if (webClientId.isBlank()) {
                             Toast.makeText(
                                 context,
