@@ -40,12 +40,23 @@ class AuthViewModel : ViewModel() {
     fun signIn(email: String, password: String) {
         viewModelScope.launch {
             try {
-                auth.signInWithEmailAndPassword(email, password).await()
+                signInWithRetry(email, password)
                 _user.value = auth.currentUser
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Error signing in", e)
                 _error.value = userFacingAuthMessage(e)
             }
+        }
+    }
+
+    private suspend fun signInWithRetry(email: String, password: String) {
+        try {
+            auth.signInWithEmailAndPassword(email, password).await()
+        } catch (e: Exception) {
+            if (!isTransientNetworkError(e)) throw e
+            Log.w("AuthViewModel", "Transient network error on signIn, retrying once", e)
+            delay(SIGN_IN_RETRY_DELAY_MS)
+            auth.signInWithEmailAndPassword(email, password).await()
         }
     }
 
@@ -245,6 +256,38 @@ class AuthViewModel : ViewModel() {
         else -> e.message?.takeIf { it.isNotBlank() } ?: "Произошла ошибка"
     }
 
+    private fun isTransientNetworkError(e: Throwable): Boolean {
+        var cur: Throwable? = e
+        var depth = 0
+        while (cur != null && depth < 8) {
+            if (cur is FirebaseNetworkException ||
+                cur is SSLException ||
+                cur is SocketException ||
+                cur is SocketTimeoutException ||
+                cur is IOException
+            ) return true
+            val msg = cur.message?.lowercase().orEmpty()
+            if (msg.isNotEmpty() && (
+                        "connection reset" in msg ||
+                                "broken pipe" in msg ||
+                                "read error" in msg ||
+                                "i/o error during system call" in msg ||
+                                "timed out" in msg ||
+                                "timeout" in msg ||
+                                "unable to resolve host" in msg ||
+                                "failed to connect" in msg
+                        )
+            ) return true
+            cur = cur.cause
+            depth++
+        }
+        return false
+    }
+
+    companion object {
+        private const val SIGN_IN_RETRY_DELAY_MS = 600L
+    }
+
     fun reloadUser() {
         viewModelScope.launch {
             try {
@@ -262,12 +305,19 @@ class AuthViewModel : ViewModel() {
             is Result.Success -> {
                 val user = existing.data
                 val fallbackNormalized = normalizeNicknameForStorage(user.nickname)
+                val googlePhoto = firebaseUser.photoUrl?.toString()?.takeIf { it.isNotBlank() }
+                val mergedAvatar = when {
+                    user.avatarUrl?.contains("s3.cloud.ru") == true -> user.avatarUrl
+                    googlePhoto != null -> googlePhoto
+                    else -> user.avatarUrl
+                }
                 val updatedUser = user.copy(
                     email = firebaseUser.email ?: user.email,
-                    avatarUrl = firebaseUser.photoUrl?.toString() ?: user.avatarUrl,
+                    avatarUrl = mergedAvatar,
                     nicknameNormalized = user.nicknameNormalized.ifBlank { fallbackNormalized },
                     lastLogin = Timestamp.now()
                 )
+
                 when (val updateResult = userRepository.updateUser(updatedUser)) {
                     is Result.Error -> throw updateResult.exception
                     is Result.Success -> Unit
