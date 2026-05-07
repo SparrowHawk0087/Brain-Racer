@@ -305,12 +305,19 @@ class AuthViewModel : ViewModel() {
             is Result.Success -> {
                 val user = existing.data
                 val fallbackNormalized = normalizeNicknameForStorage(user.nickname)
+                val googlePhoto = firebaseUser.photoUrl?.toString()?.takeIf { it.isNotBlank() }
+                val mergedAvatar = when {
+                    user.avatarUrl?.contains("s3.cloud.ru") == true -> user.avatarUrl
+                    googlePhoto != null -> googlePhoto
+                    else -> user.avatarUrl
+                }
                 val updatedUser = user.copy(
                     email = firebaseUser.email ?: user.email,
-                    avatarUrl = firebaseUser.photoUrl?.toString() ?: user.avatarUrl,
+                    avatarUrl = mergedAvatar,
                     nicknameNormalized = user.nicknameNormalized.ifBlank { fallbackNormalized },
                     lastLogin = Timestamp.now()
                 )
+
                 when (val updateResult = userRepository.updateUser(updatedUser)) {
                     is Result.Error -> throw updateResult.exception
                     is Result.Success -> Unit
