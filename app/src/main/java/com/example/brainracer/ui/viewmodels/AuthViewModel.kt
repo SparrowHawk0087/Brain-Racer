@@ -256,6 +256,38 @@ class AuthViewModel : ViewModel() {
         else -> e.message?.takeIf { it.isNotBlank() } ?: "Произошла ошибка"
     }
 
+    private fun isTransientNetworkError(e: Throwable): Boolean {
+        var cur: Throwable? = e
+        var depth = 0
+        while (cur != null && depth < 8) {
+            if (cur is FirebaseNetworkException ||
+                cur is SSLException ||
+                cur is SocketException ||
+                cur is SocketTimeoutException ||
+                cur is IOException
+            ) return true
+            val msg = cur.message?.lowercase().orEmpty()
+            if (msg.isNotEmpty() && (
+                        "connection reset" in msg ||
+                                "broken pipe" in msg ||
+                                "read error" in msg ||
+                                "i/o error during system call" in msg ||
+                                "timed out" in msg ||
+                                "timeout" in msg ||
+                                "unable to resolve host" in msg ||
+                                "failed to connect" in msg
+                        )
+            ) return true
+            cur = cur.cause
+            depth++
+        }
+        return false
+    }
+
+    companion object {
+        private const val SIGN_IN_RETRY_DELAY_MS = 600L
+    }
+
     fun reloadUser() {
         viewModelScope.launch {
             try {
