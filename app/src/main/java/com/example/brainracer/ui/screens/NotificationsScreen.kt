@@ -11,9 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Sports
 import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,9 +25,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.example.brainracer.data.storage.StorageConfig
 import com.example.brainracer.domain.entities.AppNotification
 import com.example.brainracer.domain.entities.AppNotificationType
-import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.example.brainracer.ui.viewmodels.NotificationsViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -54,24 +52,13 @@ fun NotificationsScreen(
     vm: NotificationsViewModel = viewModel()
 ) {
     val uiState by vm.uiState.collectAsState()
-    var tabIndex by remember { mutableIntStateOf(0) }
-    val tabTitles = listOf("Общие", "Вызовы")
-
     val hidden = uiState.hiddenChallengeIds
-    val generalList = remember(uiState.items) {
-        uiState.items.filter { it.type != AppNotificationType.CHALLENGE }
-    }
     val challengesList = remember(uiState.items, hidden) {
         uiState.items.filter {
             it.type == AppNotificationType.CHALLENGE &&
                     (it.challengeId == null || it.challengeId !in hidden)
         }
     }
-    val hasUnreadGeneral = remember(generalList) { generalList.any { !it.read } }
-    val hasUnreadChallenges = remember(challengesList, uiState.challengesTabBadgeReady) {
-        uiState.challengesTabBadgeReady && challengesList.any { !it.read }
-    }
-    val listShown = if (tabIndex == 0) generalList else challengesList
 
     Scaffold(
         containerColor      = MaterialTheme.colorScheme.background,
@@ -102,54 +89,6 @@ fun NotificationsScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            TabRow(
-                selectedTabIndex = tabIndex,
-                containerColor   = MaterialTheme.colorScheme.background,
-                contentColor     = MaterialTheme.colorScheme.primary,
-                indicator = { tabPositions ->
-                    if (tabIndex < tabPositions.size) {
-                        TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(tabPositions[tabIndex]),
-                            color    = MaterialTheme.colorScheme.primary,
-                            height   = 2.dp
-                        )
-                    }
-                },
-                divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outline) }
-            ) {
-                tabTitles.forEachIndexed { i, title ->
-                    val showUnreadDot = when (i) {
-                        0 -> hasUnreadGeneral
-                        1 -> hasUnreadChallenges
-                        else -> false
-                    }
-                    Tab(
-                        selected = tabIndex == i,
-                        onClick  = { tabIndex = i },
-                        text = {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(title, fontSize = 14.sp)
-                                if (showUnreadDot) {
-                                    Spacer(Modifier.width(6.dp))
-                                    Box(
-                                        Modifier
-                                            .size(7.dp)
-                                            .clip(CircleShape)
-                                            .background(LocalBrainRacerExtendedColors.current.difficultyHard)
-                                    )
-                                }
-                            }
-                        },
-                        selectedContentColor   = MaterialTheme.colorScheme.primary,
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
             when {
                 uiState.isLoading ->
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -159,11 +98,14 @@ fun NotificationsScreen(
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Text(uiState.errorMessage!!, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
                     }
-                listShown.isEmpty() ->
+                !uiState.challengesTabBadgeReady ->
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                challengesList.isEmpty() ->
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Text(
-                            if (tabIndex == 0) "Пока нет общих уведомлений"
-                            else "Нет уведомлений о вызовах",
+                            "Нет уведомлений о вызовах",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 14.sp
                         )
@@ -173,7 +115,7 @@ fun NotificationsScreen(
                         contentPadding      = PaddingValues(16.dp),
                         verticalArrangement   = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(listShown, key = { it.id }) { n ->
+                        items(challengesList, key = { it.id }) { n ->
                             NotificationCard(
                                 n = n,
                                 quizTimeLabel = formatNotificationQuizDuration(n.quizTotalTimeSeconds),
@@ -230,7 +172,7 @@ private fun NotificationCard(
             when {
                 !n.actorAvatarUrl.isNullOrBlank() ->
                     AsyncImage(
-                        model             = n.actorAvatarUrl,
+                        model             = StorageConfig.resolveAvatarUrlForCoil(n.actorAvatarUrl),
                         contentDescription = null,
                         modifier          = Modifier.size(48.dp).clip(CircleShape)
                             .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
@@ -270,13 +212,13 @@ private fun NotificationCard(
                     Spacer(Modifier.height(4.dp))
                 }
                 if (!n.actorNickname.isNullOrBlank() && n.type == AppNotificationType.CHALLENGE) {
-                    Text(
+                    /*Text(
                         n.actorNickname,
                         fontSize = 12.sp,
                         color    = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium
-                    )
-                    Spacer(Modifier.height(4.dp))
+                    )*/
+                    //Spacer(Modifier.height(4.dp))
                 }
                 Text(
                     n.message,
