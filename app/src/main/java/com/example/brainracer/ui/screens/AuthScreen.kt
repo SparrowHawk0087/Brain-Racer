@@ -343,9 +343,9 @@ fun AuthScreen(
                 AuthGoogleButton(
                     enabled = !isLoading,
                     onClick = {
-                        val webClientId = runCatching { context.getString(R.string.default_web_client_id) }
-                            .getOrNull()
-                            .orEmpty()
+
+                        val webClientId = stringResource(R.string.default_web_client_id)
+
                         if (webClientId.isBlank()) {
                             Toast.makeText(
                                 context,
