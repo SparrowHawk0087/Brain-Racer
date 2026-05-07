@@ -117,6 +117,12 @@ object StorageConfig {
      *   https://global.s3.cloud.ru/<global>/<key>     (path-style по глобальному имени)
      *   https://<host>.s3.cloud.ru/<key>              (virtual-hosted по доменному / базовому имени)
      */
+    // Публичная обёртка для [extractObjectKey] (для безопасного удаления старых объектов по URL)
+    fun extractObjectKeyPublic(url: String): String? = extractObjectKey(url)
+
+    // Публичная обёртка для [bucketForKey]
+    fun bucketForKeyPublic(key: String): String? = bucketForKey(key)
+
     private fun extractObjectKey(url: String): String? {
         val u = url.trim().substringBefore('?').substringBefore('#')
         if (u.isEmpty()) return null
