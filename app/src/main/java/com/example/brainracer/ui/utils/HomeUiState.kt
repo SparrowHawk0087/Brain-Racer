@@ -11,8 +11,6 @@ data class HomeUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val userName: String = "",
-    /** URL аватара из Firestore (или null для гостя / без фото). */
-    val userAvatarUrl: String? = null,
     val userStats: UserStats = UserStats(),
     val quizzes: List<QuizItem> = emptyList(),
     val searchResults: List<QuizItem> = emptyList(),

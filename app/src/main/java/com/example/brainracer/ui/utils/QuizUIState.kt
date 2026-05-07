@@ -13,13 +13,6 @@ enum class QuizNonScoringReason {
     PRACTICE_REPLAY
 }
 
-enum class QuestionOutcome {
-    UNANSWERED,
-    CORRECT,
-    WRONG,
-    TIMEOUT
-}
-
 /**
  * UI-состояние экрана прохождения викторины.
  */
@@ -45,8 +38,6 @@ data class QuizUIState(
     val currentQuestionIndex: Int = 0,
     val totalQuestions: Int = 0,
     val accuracy: Double = 0.0,
-    /** Состояние каждого вопроса для прогресс-линии */
-    val questionOutcomes: List<QuestionOutcome> = emptyList(),
 
     // ── Управление экранами ───────────────────────────────────────────────
     val isQuizCompleted: Boolean = false,

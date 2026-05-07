@@ -1,17 +1,49 @@
 package com.example.brainracer.domain.entities
 
-import java.time.LocalDateTime
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.Exclude
+import com.google.firebase.firestore.PropertyName
 
-// Сущность пользователя
 data class User(
-    val id: String,
-    val email: String,
-    val username: String,
-    val password: String,
-    val stats: UserStats,
-    val createdAt: LocalDateTime,
-    val lastActiveAt: LocalDateTime
+    val id: String = "",
+    val email: String = "",
+    val nickname: String = "",
+    /** Нормализованный ник для уникальности: `nickname.trim().lowercase()`. */
+    @get:PropertyName("nickname_normalized")
+    val nicknameNormalized: String = "",
+    val bio: String = "",
+    val avatarUrl: String? = null,
+    val stats: UserStats = UserStats(),
+    val interests: List<String> = emptyList(),
+    val rank: UserRank = UserRank.BEGINNER,
+    val createdAt: Timestamp = Timestamp.now(),
+    val lastLogin: Timestamp = Timestamp.now(),
+    val createdQuizzes: List<String> = emptyList(),
+    val friends: List<String> = emptyList(),
+
+    /** FCM токен для push; обновляет клиент, читает Cloud Function. */
+    @PropertyName("fcmToken")
+    val fcmToken: String? = null
 ) {
-    fun getTotalStats(): Int = stats.totalScore
+    @get:Exclude
+    val accuracy: Double
+        get() = if (stats.totalQuestionsAnswered > 0) {
+            stats.correctAnswers.toDouble() / stats.totalQuestionsAnswered * 100
+        } else 0.0
+
+    /** Значение для запросов: поле в Firestore или производное от [nickname] (старые документы). */
+    @get:Exclude
+    val effectiveNicknameNormalized: String
+        get() = nicknameNormalized.trim().takeIf { it.isNotBlank() }
+            ?: nickname.trim().lowercase()
 }
 
+fun normalizeNicknameForStorage(nickname: String): String = nickname.trim().lowercase()
+
+enum class UserRank(val displayName: String, val minPoints: Int) {
+    BEGINNER("Новичок", 0),
+    EXPLORER("Исследователь", 100),
+    SCHOLAR("Ученый", 500),
+    MASTER("Мастер", 1500),
+    GRANDMASTER("Великий мастер", 3000)
+}
