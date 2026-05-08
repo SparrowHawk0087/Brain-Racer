@@ -106,7 +106,7 @@ class ChallengeViewModel : ViewModel() {
             .distinctBy { it.id }
             .filter {
                 it.status == ChallengeStatus.ACCEPTED &&
-                    it.expiresAt.toDate().after(nowDate)
+                        it.expiresAt.toDate().after(nowDate)
             }
             .sortedWith(
                 compareBy<Challenge> { it.expiresAt.seconds }.thenBy { it.expiresAt.nanoseconds }
