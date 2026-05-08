@@ -22,7 +22,7 @@
 ## Технологии
 - **Язык:** Kotlin  
 - **UI:** Jetpack Compose, Material 3  
-- **Бэкенд:** Firebase (Auth, Firestore, Storage)  
+- **Бэкенд:** Firebase (Auth, Firestore) + Cloud.ru (Evolution Object Storage) + Coil
 - **Архитектура:** MVVM  
 
 ## Дизайн
