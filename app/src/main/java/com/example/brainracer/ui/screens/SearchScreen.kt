@@ -147,7 +147,7 @@ fun SearchScreen(
                                     q.title.lowercase().contains(needle) ||
                                             q.description.lowercase().contains(needle)
                                 }
-                                com.example.brainrainracer.data.utils.Result.success(filtered)
+                                com.example.brainracer.data.utils.Result.success(filtered)
                             }
                             is com.example.brainracer.data.utils.Result.Error -> r
                         }
