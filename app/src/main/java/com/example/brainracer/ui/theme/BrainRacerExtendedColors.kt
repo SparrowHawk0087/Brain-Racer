@@ -1,7 +1,7 @@
 package com.example.brainracer.ui.theme
 
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -71,4 +71,9 @@ fun brainRacerExtendedColorsLight(): BrainRacerExtendedColors = BrainRacerExtend
     detailTextPrimary = BrainRacerColorTokens.Light.TextPrimary
 )
 
-val LocalBrainRacerExtendedColors = staticCompositionLocalOf { brainRacerExtendedColorsDark() }
+/**
+ * Используется [compositionLocalOf], а не `static`, потому что значение анимируется при смене
+ * темы (см. `rememberAnimatedExtendedColors` в `Theme.kt`). С `staticCompositionLocalOf`
+ * любое изменение значения инвалидировало бы всё поддерево на каждом кадре анимации.
+ */
+val LocalBrainRacerExtendedColors = compositionLocalOf { brainRacerExtendedColorsDark() }
