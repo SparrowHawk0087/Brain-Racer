@@ -15,14 +15,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Date
 
 data class NotificationsUiState(
     val items: List<AppNotification> = emptyList(),
     /** Вызовы с этими id не показываем (отклонён, отменён, завершён, истёк) — дублирует очистку в Firestore. */
     val hiddenChallengeIds: Set<String> = emptySet(),
     /**
-     * После первого снимка Firestore [hiddenChallengeIds] ещё не заполнен — красная точка на вкладке «Вызовы»
-     * не должна загораться до окончания [syncHiddenChallengeIds] (иначе мигание при отсутствии актуальных вызовов).
+     * 'true' после того, как [syncHiddenChallengeIds] отработал для текущего снимка —
+     * до этого список вызовов на экране не показываем (иначе мелькают все уведомления,
+     * а после фильтра остаются только актуальные).
      */
     val challengesTabBadgeReady: Boolean = false,
     val isLoading: Boolean = true,
@@ -57,12 +59,13 @@ class NotificationsViewModel : ViewModel() {
                     repository.observeNotificationsForUser(uid).collect { list ->
                         hiddenSyncGeneration++
                         val gen = hiddenSyncGeneration
+                        // Не сбрасываем challengesTabBadgeReady здесь: иначе при каждом снимке
+                        // снова показываются «все» вызовы до конца sync (мигание старых карточек).
                         _uiState.update {
                             it.copy(
                                 items = list,
                                 isLoading = false,
-                                errorMessage = null,
-                                challengesTabBadgeReady = false
+                                errorMessage = null
                             )
                         }
                         enrichJob?.cancel()
@@ -95,16 +98,22 @@ class NotificationsViewModel : ViewModel() {
             }
             return
         }
+        val now = Date()
         val hidden = mutableSetOf<String>()
         for (cid in challengeIds) {
             when (val r = challengeRepository.getChallenge(cid)) {
                 is Result.Success -> {
-                    when (r.data.status) {
+                    val ch = r.data
+                    val expiredByTime = !ch.expiresAt.toDate().after(now)
+                    when (ch.status) {
                         ChallengeStatus.DECLINED,
                         ChallengeStatus.CANCELLED,
                         ChallengeStatus.COMPLETED,
                         ChallengeStatus.EXPIRED -> hidden.add(cid)
-                        else -> { }
+                        else -> {
+                            // В БД часто остаётся PENDING после истечения срока — не показываем такие вызовы.
+                            if (expiredByTime) hidden.add(cid)
+                        }
                     }
                 }
                 is Result.Error -> {
