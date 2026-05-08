@@ -13,6 +13,7 @@ import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.UserAnswer
 import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
 import com.example.brainracer.ui.utils.QuizNonScoringReason
+import com.example.brainracer.ui.utils.QuestionOutcome
 import com.example.brainracer.ui.utils.QuizUIState
 import com.example.brainracer.ui.utils.XpBreakdown
 import com.google.firebase.auth.FirebaseAuth
@@ -125,6 +126,7 @@ class QuizViewModel : ViewModel() {
         if (quiz.questions.isNotEmpty()) {
             questionStartTime = System.currentTimeMillis()
             val first = quiz.questions[0]
+            val outcomes = List(quiz.questions.size) { QuestionOutcome.UNANSWERED }
             _uiState.value = QuizUIState(
                 isLoading = false,
                 question = first.questionText,
@@ -132,6 +134,7 @@ class QuizViewModel : ViewModel() {
                 totalQuestions = quiz.questions.size,
                 currentQuestionTimeLimit = first.timeLimit.coerceAtLeast(5),
                 attachedImageUrl = first.imageUrl ?: first.gifUrl,
+                questionOutcomes = outcomes,
                 challengeId = challengeId,
                 quizTitle = quiz.title,
                 sessionNetworkAvailable = networkAvailableAtStart,
@@ -210,12 +213,24 @@ class QuizViewModel : ViewModel() {
         )
 
         _uiState.update {
+            val nextOutcomes = run {
+                val base = it.questionOutcomes
+                if (base.isEmpty() || qIndex !in base.indices) base
+                else base.toMutableList().also { list ->
+                    list[qIndex] = when {
+                        selectedIdx == -1 -> QuestionOutcome.TIMEOUT
+                        isCorrect         -> QuestionOutcome.CORRECT
+                        else              -> QuestionOutcome.WRONG
+                    }
+                }
+            }
             it.copy(
                 isAnswerSubmitted = true,
                 isAnswerCorrect = isCorrect,
                 score = it.score + if (isCorrect) question.points else 0,
                 correctAnswers = it.correctAnswers + if (isCorrect) 1 else 0,
-                incorrectAnswers = it.incorrectAnswers + if (!isCorrect) 1 else 0
+                incorrectAnswers = it.incorrectAnswers + if (!isCorrect) 1 else 0,
+                questionOutcomes = nextOutcomes
             )
         }
 
@@ -335,12 +350,18 @@ class QuizViewModel : ViewModel() {
                 )
             }
             if (userId != null) {
-                quizRepository.recordUserQuizSessionFinished(
-                    userId,
-                    quiz.id,
-                    sessionId,
-                    savedResultToQuizResults = false
-                )
+                when (
+                    quizRepository.recordUserQuizSessionFinished(
+                        userId,
+                        quiz.id,
+                        sessionId,
+                        savedResultToQuizResults = false
+                    )
+                ) {
+                    is Result.Success ->
+                        ProfileAfterQuizRefresh.notify(userId)
+                    else -> Unit
+                }
             }
             return
         }
@@ -404,13 +425,18 @@ class QuizViewModel : ViewModel() {
                         duelXpDeferred = isChallenge && soloAwarded == 0
                     )
                 }
-                quizRepository.recordUserQuizSessionFinished(
-                    userId,
-                    quiz.id,
-                    sessionId,
-                    savedResultToQuizResults = true
-                )
-                ProfileAfterQuizRefresh.notify(userId)
+                when (
+                    quizRepository.recordUserQuizSessionFinished(
+                        userId,
+                        quiz.id,
+                        sessionId,
+                        savedResultToQuizResults = true
+                    )
+                ) {
+                    is Result.Success ->
+                        ProfileAfterQuizRefresh.notify(userId)
+                    else -> Unit
+                }
             }
         }
     }
