@@ -2,23 +2,32 @@ package com.example.brainracer.ui.theme
 
 import android.app.Activity
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.ColorScheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import kotlinx.coroutines.delay
 
 fun brainRacerDarkColorScheme() = darkColorScheme(
     primary = BrainRacerColorTokens.Accent,
@@ -96,151 +105,168 @@ fun brainRacerLightColorScheme() = lightColorScheme(
     surfaceContainerHighest = BrainRacerColorTokens.Light.Border
 )
 
-private const val THEME_TRANSITION_DURATION_MS = 550
-
 /**
- * Анимирует переход между двумя [ColorScheme]: каждый цвет M3 интерполируется через
- * [animateColorAsState], благодаря чему смена темы выглядит плавной — фон, поверхности,
- * текст, primary/secondary плавно «перетекают» из одной палитры в другую.
+ * Длительность общего fade-out оверлея. Подобрана так, чтобы анимация ощущалась
+ * заметной, но не затянутой; совпадает с продолжительностью animateColorAsState
+ * для статус-/навбара, чтобы они выходили на новые цвета синхронно с экраном.
  */
-@Composable
-private fun rememberAnimatedColorScheme(target: ColorScheme): ColorScheme {
-    val spec = tween<Color>(durationMillis = THEME_TRANSITION_DURATION_MS, easing = FastOutSlowInEasing)
-    @Composable fun anim(c: Color, label: String): Color =
-        animateColorAsState(targetValue = c, animationSpec = spec, label = label).value
-
-    return target.copy(
-        primary = anim(target.primary, "primary"),
-        onPrimary = anim(target.onPrimary, "onPrimary"),
-        primaryContainer = anim(target.primaryContainer, "primaryContainer"),
-        onPrimaryContainer = anim(target.onPrimaryContainer, "onPrimaryContainer"),
-        secondary = anim(target.secondary, "secondary"),
-        onSecondary = anim(target.onSecondary, "onSecondary"),
-        secondaryContainer = anim(target.secondaryContainer, "secondaryContainer"),
-        onSecondaryContainer = anim(target.onSecondaryContainer, "onSecondaryContainer"),
-        tertiary = anim(target.tertiary, "tertiary"),
-        onTertiary = anim(target.onTertiary, "onTertiary"),
-        tertiaryContainer = anim(target.tertiaryContainer, "tertiaryContainer"),
-        onTertiaryContainer = anim(target.onTertiaryContainer, "onTertiaryContainer"),
-        background = anim(target.background, "background"),
-        onBackground = anim(target.onBackground, "onBackground"),
-        surface = anim(target.surface, "surface"),
-        onSurface = anim(target.onSurface, "onSurface"),
-        surfaceVariant = anim(target.surfaceVariant, "surfaceVariant"),
-        onSurfaceVariant = anim(target.onSurfaceVariant, "onSurfaceVariant"),
-        surfaceTint = anim(target.surfaceTint, "surfaceTint"),
-        inverseSurface = anim(target.inverseSurface, "inverseSurface"),
-        inverseOnSurface = anim(target.inverseOnSurface, "inverseOnSurface"),
-        inversePrimary = anim(target.inversePrimary, "inversePrimary"),
-        error = anim(target.error, "error"),
-        onError = anim(target.onError, "onError"),
-        errorContainer = anim(target.errorContainer, "errorContainer"),
-        onErrorContainer = anim(target.onErrorContainer, "onErrorContainer"),
-        outline = anim(target.outline, "outline"),
-        outlineVariant = anim(target.outlineVariant, "outlineVariant"),
-        scrim = anim(target.scrim, "scrim"),
-        surfaceBright = anim(target.surfaceBright, "surfaceBright"),
-        surfaceDim = anim(target.surfaceDim, "surfaceDim"),
-        surfaceContainerLowest = anim(target.surfaceContainerLowest, "surfaceContainerLowest"),
-        surfaceContainerLow = anim(target.surfaceContainerLow, "surfaceContainerLow"),
-        surfaceContainer = anim(target.surfaceContainer, "surfaceContainer"),
-        surfaceContainerHigh = anim(target.surfaceContainerHigh, "surfaceContainerHigh"),
-        surfaceContainerHighest = anim(target.surfaceContainerHighest, "surfaceContainerHighest"),
-    )
-}
+private const val THEME_TRANSITION_DURATION_MS = 650
 
 /**
- * Анимирует «расширенные» цвета приложения (вне ColorScheme): tabBar, заголовок detail-карточек,
- * границы, surface-тона. Без этого всё, что напрямую читает [LocalBrainRacerExtendedColors],
- * при переключении темы «прыгало» — теперь оно тоже плавно перетекает.
+ * Через какое время после начала перехода переключаем тон системных бар-иконок
+ * (светлые ↔ тёмные). На середине fade-out оверлей уже наполовину прозрачен,
+ * статус-бар уже близок к новому цвету — флип тона на этом моменте не виден,
+ * а на t=0 он бы дал «битые» (невидимые) иконки на ещё-старом фоне.
+ */
+private const val THEME_SYSTEM_BAR_TONE_DELAY_MS = 220L
+
+/**
+ * Глобальная тема Brain Racer.
  *
- * Поля, которые одинаковы для светлой и тёмной палитры (градиенты карточек, цвета сложности,
- * topicBarColors), остаются ссылочно-стабильными — анимировать их не нужно.
+ * Стратегия плавного перехода — **crossfade-оверлей**, а не пер-цветная анимация:
+ *
+ * 1. [MaterialTheme] и [LocalBrainRacerExtendedColors] получают палитру **мгновенно**
+ *    — без `target.copy(...)` каждый кадр. Это убирает 50+ одновременных
+ *    `animateColorAsState`, которые каждый кадр пересоздавали `ColorScheme`
+ *    и инвалидировали всех читателей темы (каждый Text, Surface, Card в дереве).
+ *
+ * 2. Поверх контента рисуется [ThemeCrossfadeOverlay]: на момент переключения
+ *    snap'ом ставится `alpha = 1f` (полное закрытие старым фоном), под оверлеем
+ *    мгновенно применяется новая палитра, и оверлей плавно гасится за
+ *    [THEME_TRANSITION_DURATION_MS] одной [Animatable]-анимацией.
+ *    Перерисовка ограничена `graphicsLayer { alpha = ... }` одного `Box` —
+ *    не задевая ни один читатель `MaterialTheme.colorScheme.*`.
+ *
+ * 3. Системные статус/навбар анимируются через [SystemBarsThemeAnimator]:
+ *    один animateColorAsState на цвет, дешёвая запись `window.statusBarColor`
+ *    в SideEffect. Тон бар-иконок (`isAppearanceLight*`) флипается единожды
+ *    через `LaunchedEffect` с задержкой [THEME_SYSTEM_BAR_TONE_DELAY_MS].
  */
-@Composable
-private fun rememberAnimatedExtendedColors(target: BrainRacerExtendedColors): BrainRacerExtendedColors {
-    val spec = tween<Color>(durationMillis = THEME_TRANSITION_DURATION_MS, easing = FastOutSlowInEasing)
-    @Composable fun anim(c: Color, label: String): Color =
-        animateColorAsState(targetValue = c, animationSpec = spec, label = label).value
-
-    val tabBarBackground   = anim(target.tabBarBackground,   "tabBarBackground")
-    val tabInactive        = anim(target.tabInactive,        "tabInactive")
-    val statusOrange       = anim(target.statusOrange,       "statusOrange")
-    val shadowOnDark       = anim(target.shadowOnDark,       "shadowOnDark")
-    val difficultyEasy     = anim(target.difficultyEasy,     "difficultyEasy")
-    val difficultyMedium   = anim(target.difficultyMedium,   "difficultyMedium")
-    val difficultyHard     = anim(target.difficultyHard,     "difficultyHard")
-    val difficultyExpert   = anim(target.difficultyExpert,   "difficultyExpert")
-    val detailBackground   = anim(target.detailBackground,   "detailBackground")
-    val detailSurface      = anim(target.detailSurface,      "detailSurface")
-    val detailSurfaceAlt   = anim(target.detailSurfaceAlt,   "detailSurfaceAlt")
-    val detailAccentPurple = anim(target.detailAccentPurple, "detailAccentPurple")
-    val detailBlue         = anim(target.detailBlue,         "detailBlue")
-    val detailGreen        = anim(target.detailGreen,        "detailGreen")
-    val detailOrange       = anim(target.detailOrange,       "detailOrange")
-    val detailTextPrimary  = anim(target.detailTextPrimary,  "detailTextPrimary")
-
-    return remember(
-        tabBarBackground, tabInactive, statusOrange, shadowOnDark,
-        difficultyEasy, difficultyMedium, difficultyHard, difficultyExpert,
-        detailBackground, detailSurface, detailSurfaceAlt,
-        detailAccentPurple, detailBlue, detailGreen, detailOrange, detailTextPrimary,
-        target.cardGradients, target.topicBarColors
-    ) {
-        target.copy(
-            tabBarBackground   = tabBarBackground,
-            tabInactive        = tabInactive,
-            statusOrange       = statusOrange,
-            shadowOnDark       = shadowOnDark,
-            difficultyEasy     = difficultyEasy,
-            difficultyMedium   = difficultyMedium,
-            difficultyHard     = difficultyHard,
-            difficultyExpert   = difficultyExpert,
-            detailBackground   = detailBackground,
-            detailSurface      = detailSurface,
-            detailSurfaceAlt   = detailSurfaceAlt,
-            detailAccentPurple = detailAccentPurple,
-            detailBlue         = detailBlue,
-            detailGreen        = detailGreen,
-            detailOrange       = detailOrange,
-            detailTextPrimary  = detailTextPrimary
-        )
-    }
-}
-
 @Composable
 fun BrainRacerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val targetColorScheme = if (darkTheme) brainRacerDarkColorScheme() else brainRacerLightColorScheme()
-    val colorScheme = rememberAnimatedColorScheme(targetColorScheme)
-    val targetExtended = if (darkTheme) brainRacerExtendedColorsDark() else brainRacerExtendedColorsLight()
-    val extended = rememberAnimatedExtendedColors(targetExtended)
+    val colorScheme = remember(darkTheme) {
+        if (darkTheme) brainRacerDarkColorScheme() else brainRacerLightColorScheme()
+    }
+    val extended = remember(darkTheme) {
+        if (darkTheme) brainRacerExtendedColorsDark() else brainRacerExtendedColorsLight()
+    }
 
+    SystemBarsThemeAnimator(darkTheme = darkTheme)
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        CompositionLocalProvider(LocalBrainRacerExtendedColors provides extended) {
+            MaterialTheme(
+                colorScheme = colorScheme,
+                typography = Typography,
+                shapes = Shapes,
+                content = content
+            )
+        }
+        ThemeCrossfadeOverlay(darkTheme = darkTheme)
+    }
+}
+
+/**
+ * Анимация цвета и тона системных бар. Изолирована в отдельный composable:
+ * recomposition внутри animateColorAsState затрагивает только эту функцию,
+ * а не родителя [BrainRacerTheme] — поэтому всё дерево контента не
+ * пересобирается каждый кадр анимации.
+ */
+@Composable
+private fun SystemBarsThemeAnimator(darkTheme: Boolean) {
     val view = LocalView.current
-    if (!view.isInEditMode) {
-        SideEffect {
-            // colorScheme.surface уже анимирован, поэтому SideEffect будет вызываться
-            // на каждом кадре анимации — статус-бар и нав-бар плавно перетекают вместе с UI.
-            val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.surface.toArgb()
-            window.navigationBarColor = colorScheme.surface.toArgb()
-            WindowCompat.getInsetsController(window, view).apply {
-                val lightBars = colorScheme.surface.luminance() > 0.5f
-                isAppearanceLightStatusBars = lightBars
-                isAppearanceLightNavigationBars = lightBars
-            }
+    if (view.isInEditMode) return
+
+    val targetBar = if (darkTheme)
+        BrainRacerColorTokens.Dark.SurfaceCard
+    else
+        BrainRacerColorTokens.Light.SurfaceCard
+
+    val barColor by animateColorAsState(
+        targetValue = targetBar,
+        animationSpec = tween(THEME_TRANSITION_DURATION_MS, easing = FastOutSlowInEasing),
+        label = "themeSystemBarColor"
+    )
+    val barColorArgb = barColor.toArgb()
+
+    // SideEffect внутри маленького composable дешёвый: только два int-write,
+    // никаких аллокаций и никаких WindowCompat.getInsetsController вызовов на каждый кадр.
+    SideEffect {
+        val window = (view.context as Activity).window
+        window.statusBarColor = barColorArgb
+        window.navigationBarColor = barColorArgb
+    }
+
+    // Тон бар-иконок переключается ровно один раз на смене темы, с задержкой
+    // в середину анимации — иначе при переходе light→dark тёмные иконки на ещё-светлом
+    // (или наоборот) фоне моргают как «невидимые».
+    LaunchedEffect(darkTheme, view) {
+        delay(THEME_SYSTEM_BAR_TONE_DELAY_MS)
+        val window = (view.context as Activity).window
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = !darkTheme
+            isAppearanceLightNavigationBars = !darkTheme
+        }
+    }
+}
+
+/**
+ * Полноэкранный crossfade-оверлей.
+ *
+ * Логика: храним последний применённый `darkTheme`. Когда параметр меняется,
+ * запоминаем фон СТАРОЙ темы как [coverColor], мгновенно ставим alpha=1
+ * (`snapTo`), переключаем `lastDark` (контент под оверлеем сразу применяет
+ * новую тему — пользователь этого не видит, оверлей непрозрачный) и плавно
+ * гасим alpha до нуля.
+ *
+ * Цена анимации — единственный `Animatable<Float>` и `graphicsLayer` оверлея.
+ * Никакого пересоздания ColorScheme, никакой инвалидации `MaterialTheme.colorScheme.*`.
+ *
+ * `pointerInput` блокирует тапы на время перехода — иначе клик «сквозь» оверлей
+ * мог бы прилететь в уже новый, но визуально ещё закрытый UI.
+ */
+@Composable
+private fun ThemeCrossfadeOverlay(darkTheme: Boolean) {
+    var lastDark by remember { mutableStateOf(darkTheme) }
+    var coverColor by remember { mutableStateOf<Color?>(null) }
+    val alpha = remember { Animatable(0f) }
+
+    LaunchedEffect(darkTheme) {
+        if (darkTheme != lastDark) {
+            coverColor = if (lastDark)
+                BrainRacerColorTokens.Dark.Background
+            else
+                BrainRacerColorTokens.Light.Background
+            alpha.snapTo(1f)
+            lastDark = darkTheme
+            alpha.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(
+                    durationMillis = THEME_TRANSITION_DURATION_MS,
+                    easing = FastOutSlowInEasing
+                )
+            )
         }
     }
 
-    CompositionLocalProvider(LocalBrainRacerExtendedColors provides extended) {
-        MaterialTheme(
-            colorScheme = colorScheme,
-            typography = Typography,
-            shapes = Shapes,
-            content = content
+    val color = coverColor
+    if (alpha.value > 0f && color != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { this.alpha = alpha.value }
+                .background(color)
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            awaitPointerEvent().changes.forEach { it.consume() }
+                        }
+                    }
+                }
         )
     }
 }
