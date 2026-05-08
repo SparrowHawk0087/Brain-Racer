@@ -10,6 +10,7 @@ import com.example.brainracer.domain.entities.normalizeNicknameForStorage
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.ui.utils.ModerationResult
 import com.example.brainracer.ui.utils.QuizModeration
+import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
@@ -20,11 +21,16 @@ import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.io.IOException
+import java.net.SocketException
+import java.net.SocketTimeoutException
+import javax.net.ssl.SSLException
 
 class AuthViewModel : ViewModel() {
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
@@ -49,6 +55,11 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Один авто-повтор 'signInWithEmailAndPassword' при транзиентных сетевых ошибках
+     * (TLS reset, broken pipe, FirebaseNetworkException и т.п.). Без UI-флика 'isLoading'
+     * остаётся true, пока второй вызов не отработает.
+     */
     private suspend fun signInWithRetry(email: String, password: String) {
         try {
             auth.signInWithEmailAndPassword(email, password).await()
@@ -237,13 +248,13 @@ class AuthViewModel : ViewModel() {
         _error.value = null
     }
 
-    private fun userFacingAuthMessage(e: Exception): String = when (e) {
-        is FirebaseAuthInvalidCredentialsException -> "Неверный email или пароль"
-        is FirebaseAuthInvalidUserException -> "Аккаунт с таким email не найден"
-        is FirebaseAuthWeakPasswordException -> "Пароль слишком слабый"
-        is FirebaseAuthUserCollisionException -> "Этот email уже зарегистрирован"
-        is IllegalArgumentException -> "Некорректные данные"
-        is FirebaseAuthException -> when (e.errorCode) {
+    private fun userFacingAuthMessage(e: Exception): String = when {
+        e is FirebaseAuthInvalidCredentialsException -> "Неверный email или пароль"
+        e is FirebaseAuthInvalidUserException -> "Аккаунт с таким email не найден"
+        e is FirebaseAuthWeakPasswordException -> "Пароль слишком слабый"
+        e is FirebaseAuthUserCollisionException -> "Этот email уже зарегистрирован"
+        e is IllegalArgumentException -> "Некорректные данные"
+        e is FirebaseAuthException -> when (e.errorCode) {
             "ERROR_USER_DISABLED" -> "Этот аккаунт отключён"
             "ERROR_TOO_MANY_REQUESTS" -> "Слишком много попыток. Попробуйте позже"
             "ERROR_NETWORK_REQUEST_FAILED" -> "Проверьте подключение к интернету"
@@ -253,9 +264,19 @@ class AuthViewModel : ViewModel() {
             else -> e.message?.takeIf { it.isNotBlank() }
                 ?: "Ошибка авторизации (${e.errorCode})"
         }
+        // Сюда попадают TLS reset / broken pipe и FirebaseException("An internal error
+        // has occurred. [ Read error...]") — то есть транзиентные сетевые сбои, которые
+        // Firebase не оборачивает в FirebaseAuthException.
+        isTransientNetworkError(e) ->
+            "Проблема с подключением к серверу. Проверьте интернет (Wi-Fi/мобильный, VPN) и попробуйте ещё раз"
         else -> e.message?.takeIf { it.isNotBlank() } ?: "Произошла ошибка"
     }
 
+    /**
+     * Транзиентная сетевая ошибка: Firebase сеть, IO/SSL, либо текст «Connection reset»,
+     * «Broken pipe», «Read error», «timeout», «I/O error during system call» во вложенных
+     * причинах. Такие ошибки имеют смысл повторить один раз.
+     */
     private fun isTransientNetworkError(e: Throwable): Boolean {
         var cur: Throwable? = e
         var depth = 0
@@ -305,6 +326,7 @@ class AuthViewModel : ViewModel() {
             is Result.Success -> {
                 val user = existing.data
                 val fallbackNormalized = normalizeNicknameForStorage(user.nickname)
+                // Не затирать аватар из Evolution (s3.cloud.ru) фото профиля Google при входе.
                 val googlePhoto = firebaseUser.photoUrl?.toString()?.takeIf { it.isNotBlank() }
                 val mergedAvatar = when {
                     user.avatarUrl?.contains("s3.cloud.ru") == true -> user.avatarUrl
@@ -317,7 +339,6 @@ class AuthViewModel : ViewModel() {
                     nicknameNormalized = user.nicknameNormalized.ifBlank { fallbackNormalized },
                     lastLogin = Timestamp.now()
                 )
-
                 when (val updateResult = userRepository.updateUser(updatedUser)) {
                     is Result.Error -> throw updateResult.exception
                     is Result.Success -> Unit
