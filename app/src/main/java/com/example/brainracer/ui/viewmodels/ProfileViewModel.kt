@@ -2,10 +2,14 @@ package com.example.brainracer.ui.viewmodels
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
+import com.example.brainracer.data.repositories.UserRepositoryImpl.Companion.NICKNAME_TAKEN_ERROR_CODE
+import com.example.brainracer.data.storage.EvolutionStorageRepositoryImpl
+import com.example.brainracer.data.storage.StorageConfig
 import com.example.brainracer.data.utils.ImageOptimizerUtil
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.domain.entities.LevelSystem
@@ -14,14 +18,15 @@ import com.example.brainracer.domain.entities.normalizeNicknameForStorage
 import com.example.brainracer.ui.utils.PassedQuizUi
 import com.example.brainracer.ui.utils.ProfileAchievements
 import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
+import com.example.brainracer.ui.utils.ModerationResult
 import com.example.brainracer.ui.utils.ProfileGoalBadges
 import com.example.brainracer.ui.utils.ProfileUIState
+import com.example.brainracer.ui.utils.QuizModeration
 import com.example.brainracer.ui.utils.QuizItem
 import com.example.brainracer.ui.utils.toQuizItem
 import com.example.brainracer.ui.utils.TopicStatUi
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.UserProfileChangeRequest
-import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,8 +37,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.tasks.await
-import java.util.UUID
+import java.util.Locale
 
 class ProfileViewModel : ViewModel() {
 
@@ -43,16 +47,18 @@ class ProfileViewModel : ViewModel() {
     private val userRepository = UserRepositoryImpl()
     private val quizRepository = QuizRepositoryImpl()
     private val auth = FirebaseAuth.getInstance()
-    private val storage = FirebaseStorage.getInstance()
+    private val storageRepository = EvolutionStorageRepositoryImpl()
 
     private val profileLoadMutex = Mutex()
     private var profileCacheUserId: String? = null
     private var profileCacheLoadedAtMs: Long = 0L
 
     companion object {
+        private const val TAG = "ProfileViewModel"
         private const val MAX_BIO_LENGTH = 400
         /** Не полная перезагрузка с ON_RESUME чаще этого интервала; после игры срабатывает ProfileAfterQuizRefresh. */
         private const val PROFILE_CACHE_TTL_MS = 20_000L
+        private const val TOPIC_FALLBACK_CATEGORY = "Без темы"
     }
 
     /**
@@ -71,7 +77,14 @@ class ProfileViewModel : ViewModel() {
                     return@withLock
                 }
 
-                _uiState.update { it.copy(isLoading = true, errorMessage = null, deletingQuizId = null) }
+                _uiState.update {
+                    it.copy(
+                        isLoading = true,
+                        errorMessage = null,
+                        quizHistoryLoadError = null,
+                        deletingQuizId = null
+                    )
+                }
                 try {
                     when (val ur = userRepository.getUser(userId)) {
                         is Result.Success -> loadProfileData(ur.data)
@@ -106,7 +119,9 @@ class ProfileViewModel : ViewModel() {
         val totalXp = stats.totalPoints
         val level = LevelSystem.levelFromXp(totalXp)
         val progress = LevelSystem.levelProgress(totalXp)
-        val rankName = LevelSystem.rankForLevel(level).displayName
+        // Берём ранг из профиля пользователя, чтобы отображение
+        // совпадало со списком друзей/вызовами и не расходилось с формулой уровней
+        val rankName = user.rank.displayName
 
         val displayName = when {
             user.nickname.isNotBlank() -> user.nickname
@@ -128,15 +143,16 @@ class ProfileViewModel : ViewModel() {
                 is Result.Success -> resultsRes.data to null
                 is Result.Error ->
                     emptyList<com.example.brainracer.domain.entities.ChallengeResult>() to
-                        "История прохождений не загрузилась: ${resultsRes.exception.message}"
+                            "История прохождений не загрузилась: ${resultsRes.exception.message}"
             }
             Triple(items, rows, histErr)
         }
 
         val ids = resultsData.map { it.quizId }.distinct()
-        val quizById = when (val batch = quizRepository.getQuizzesByIds(ids)) {
-            is Result.Success -> batch.data
-            is Result.Error -> emptyMap()
+        val (quizById, quizzesLoadErr) = when (val batch = quizRepository.getQuizzesByIds(ids)) {
+            is Result.Success -> batch.data to null
+            is Result.Error -> emptyMap<String, com.example.brainracer.domain.entities.Quiz>() to
+                    "Данные по темам загружены частично: ${batch.exception.message}"
         }
 
         val passed = mutableListOf<PassedQuizUi>()
@@ -144,6 +160,8 @@ class ProfileViewModel : ViewModel() {
 
         for (r in resultsData) {
             val q = quizById[r.quizId]
+            val resolvedCategory = q?.categoryId?.takeIf { it.isNotBlank() } ?: TOPIC_FALLBACK_CATEGORY
+            byCategory.getOrPut(resolvedCategory) { mutableListOf() }.add(r.accuracy)
             if (q != null) {
                 passed.add(
                     PassedQuizUi(
@@ -155,13 +173,12 @@ class ProfileViewModel : ViewModel() {
                         completedAtEpochMs = r.completedAt.toDate().time
                     )
                 )
-                byCategory.getOrPut(q.categoryId) { mutableListOf() }.add(r.accuracy)
             } else {
                 passed.add(
                     PassedQuizUi(
                         quizId = r.quizId,
                         title = "Викторина",
-                        category = "—",
+                        category = TOPIC_FALLBACK_CATEGORY,
                         accuracyPercent = r.accuracy.toInt().coerceIn(0, 100),
                         pointsEarned = r.pointsEarned,
                         completedAtEpochMs = r.completedAt.toDate().time
@@ -183,16 +200,18 @@ class ProfileViewModel : ViewModel() {
             .mapIndexed { idx, t -> t.copy(paletteIndex = idx) }
 
         val achievements = ProfileAchievements.compute(stats, topicStats, createdQuizItems.size)
+        val combinedQuizHistoryErr = listOfNotNull(quizHistoryErr, quizzesLoadErr).takeIf { it.isNotEmpty() }?.joinToString("\n")
 
-        _uiState.update {
-            it.copy(
+        // Не затирать avatarUrl из UI, если в снимке Firestore поле ещё пустое
+        _uiState.update { s ->
+            s.copy(
                 isLoading = false,
                 errorMessage = null,
-                quizHistoryLoadError = quizHistoryErr,
+                quizHistoryLoadError = combinedQuizHistoryErr,
                 userId = user.id,
                 username = displayName,
                 email = user.email,
-                avatarUrl = user.avatarUrl,
+                avatarUrl = user.avatarUrl?.takeIf { it.isNotBlank() } ?: s.avatarUrl,
                 registrationDate = user.createdAt.toDate().toString(),
                 userLevel = level,
                 levelProgress = progress,
@@ -227,6 +246,7 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
+    // Аватар в Evolution Object Storage: ключ avatars/{userId}.{ext} (перезапись без мусора)
     fun uploadAvatar(context: Context, userId: String, uri: Uri) {
         val uid = auth.currentUser?.uid
         if (uid == null || uid != userId) {
@@ -237,18 +257,34 @@ class ProfileViewModel : ViewModel() {
             _uiState.update { it.copy(isUploadingAvatar = true, errorMessage = null) }
             try {
                 val optimized = ImageOptimizerUtil.optimize(context, uri, isCover = false)
-                val ext = if (optimized.mimeType == "image/gif") "gif" else optimized.mimeType.substringAfter('/')
-                val path = "avatars/$userId/${UUID.randomUUID()}.$ext"
-                val ref = storage.reference.child(path)
-                ref.putBytes(optimized.bytes).await()
-                val url = ref.downloadUrl.await().toString()
-                when (val result = userRepository.updateUserAvatar(userId, url)) {
-                    is Result.Success -> _uiState.update { it.copy(avatarUrl = url) }
-                    is Result.Error -> _uiState.update {
-                        it.copy(errorMessage = "Ошибка сохранения аватара: ${result.exception.message}")
+                val ext = if (optimized.mimeType == "image/gif") "gif"
+                else optimized.mimeType.substringAfter('/').ifBlank { "jpeg" }
+                val key = StorageConfig.avatarKey(userId, ext)
+                when (val uploadResult = storageRepository.upload(
+                    bucket = StorageConfig.BUCKET_AVATARS,
+                    key = key,
+                    bytes = optimized.bytes,
+                    mimeType = optimized.mimeType,
+                    isPublic = true
+                )) {
+                    is Result.Success -> {
+                        val url = uploadResult.data
+                        Log.d(TAG, "Avatar uploaded: ${optimized.sizeKb}KB → $url")
+                        when (val saveResult = userRepository.updateUserAvatar(userId, url)) {
+                            is Result.Success -> _uiState.update { it.copy(avatarUrl = url) }
+                            is Result.Error -> _uiState.update {
+                                it.copy(errorMessage = "Ошибка сохранения аватара: ${saveResult.exception.message}")
+                            }
+                        }
+                    }
+                    is Result.Error -> {
+                        _uiState.update {
+                            it.copy(errorMessage = "Ошибка загрузки аватара: ${uploadResult.exception.message}")
+                        }
                     }
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "uploadAvatar failed", e)
                 _uiState.update { it.copy(errorMessage = "Ошибка загрузки аватара: ${e.message}") }
             }
             _uiState.update { it.copy(isUploadingAvatar = false) }
@@ -308,12 +344,31 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
-    fun updateUsername(userId: String, newUsername: String) {
+    fun updateUsername(userId: String, newUsername: String, onFinished: (Boolean) -> Unit = {}) {
         val trimmed = newUsername.trim()
         val normalized = normalizeNicknameForStorage(trimmed)
         if (trimmed.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Введите никнейм") }
+            onFinished(false)
             return
+        }
+        if (trimmed.contains(" ")) {
+            _uiState.update { it.copy(errorMessage = "Имя не должно содержать пробелы") }
+            onFinished(false)
+            return
+        }
+        if (trimmed.all { it.isDigit() }) {
+            _uiState.update { it.copy(errorMessage = "Имя не может состоять только из цифр") }
+            onFinished(false)
+            return
+        }
+        when (val moderation = QuizModeration.validateUsername(trimmed)) {
+            is ModerationResult.Blocked -> {
+                _uiState.update { it.copy(errorMessage = "Никнейм отклонен: [${moderation.violation.category.localizedLabel()}] ${moderation.violation.reason}") }
+                onFinished(false)
+                return
+            }
+            ModerationResult.Allowed -> Unit
         }
         viewModelScope.launch {
             when (val nickCount = userRepository.countUsersWithNicknameNormalized(normalized, userId)) {
@@ -321,11 +376,13 @@ class ProfileViewModel : ViewModel() {
                     _uiState.update {
                         it.copy(errorMessage = "Не удалось проверить никнейм: ${nickCount.exception.message}")
                     }
+                    onFinished(false)
                     return@launch
                 }
                 is Result.Success -> {
                     if (nickCount.data > 0) {
                         _uiState.update { it.copy(errorMessage = "Этот никнейм уже занят") }
+                        onFinished(false)
                         return@launch
                     }
                 }
@@ -350,16 +407,25 @@ class ProfileViewModel : ViewModel() {
                                 } catch (_: Exception) { }
                             }
                             _uiState.update { it.copy(username = trimmed) }
+                            onFinished(true)
                         }
                         is Result.Error -> {
                             _uiState.update {
-                                it.copy(errorMessage = "Ошибка обновления имени: ${updateResult.exception.message}")
+                                it.copy(
+                                    errorMessage = if (updateResult.exception.message == NICKNAME_TAKEN_ERROR_CODE) {
+                                        "Этот никнейм уже занят"
+                                    } else {
+                                        "Ошибка обновления имени: ${updateResult.exception.message}"
+                                    }
+                                )
                             }
+                            onFinished(false)
                         }
                     }
                 }
                 is Result.Error -> {
                     _uiState.update { it.copy(errorMessage = "Ошибка обновления имени: ${userResult.exception.message}") }
+                    onFinished(false)
                 }
             }
         }
