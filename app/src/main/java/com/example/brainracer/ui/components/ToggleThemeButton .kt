@@ -43,7 +43,8 @@ import com.example.brainracer.ui.viewmodels.ThemeViewModel
  *    иконки «изнутри» с одновременным «уходом» старой — без визуального «прыжка»).
  *  - Лёгкий поворот при смене (rotate) для эффекта «переворота».
  *  - Анимированный цвет круглой подложки через [animateColorAsState] с [FastOutSlowInEasing],
- *    в такт глобальной анимации палитры темы (см. `BrainRacerTheme`).
+ *    подложка кнопки выходит на новый цвет одновременно с глобальным crossfade-оверлеем
+ *    темы (см. `BrainRacerTheme`).
  */
 @Composable
 fun ToggleThemeButton(

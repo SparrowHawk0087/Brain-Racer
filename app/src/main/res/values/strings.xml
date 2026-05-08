@@ -1,4 +1,9 @@
 <resources>
     <string name="app_name">Brain Racer</string>
     <string name="notification_channel_name">Brain Racer</string>
+    <string name="moderation_category_drugs">Наркотики</string>
+    <string name="moderation_category_violence">Насилие</string>
+    <string name="moderation_category_hate">Язык вражды</string>
+    <string name="moderation_category_scam">Мошенничество</string>
+    <string name="moderation_category_impersonation">Имитация роли</string>
 </resources>
