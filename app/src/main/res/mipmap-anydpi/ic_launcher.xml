@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Fallback иконки приложения для API 24–25 (минимальный SDK проекта = 24).
+  На API 26+ берётся mipmap-anydpi-v26/ic_launcher.xml (адаптивная иконка),
+  а здесь — простая обёртка, которая отдаёт системе тот же векторный логотип
+  drawable/group_29__2_, что и адаптивная пара ic_launcher_background +
+  ic_launcher_foreground после композиции.
+
+  <adaptive-icon> использовать здесь нельзя: этот элемент существует только
+  с API 26, поэтому на API 24–25 ресурс бы не распарсился. <inset> работает
+  на всех уровнях и не накладывает отступов (inset = 0dp).
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/group_29__2_"
+    android:inset="0dp" />
