@@ -13,7 +13,6 @@ import com.example.brainracer.domain.entities.User
 import com.example.brainracer.ui.utils.FriendRequestUi
 import com.example.brainracer.ui.utils.FriendsUiState
 import com.example.brainracer.ui.utils.OutgoingRequestUi
-import com.example.brainracer.ui.utils.QuizItem
 import com.example.brainracer.ui.utils.toQuizItem
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -33,27 +32,56 @@ class FriendsViewModel: ViewModel() {
     private val challengeRepository = ChallengeRepositoryImpl()
     private val auth = FirebaseAuth.getInstance()
     private val firestore = FirebaseFirestore.getInstance()
+    private var activeViewedUserId: String? = null
+    private var friendsLoadToken: Long = 0L
 
     init {
         loadFriends()
         loadFriendRequests()
     }
 
+    fun loadForUser(viewedUserId: String) {
+        val myId = auth.currentUser?.uid.orEmpty()
+        val normalized = viewedUserId.ifBlank { myId }
+        activeViewedUserId = normalized
+        loadFriends(normalized)
+        if (normalized == myId) {
+            loadFriendRequests()
+        } else {
+            _uiState.update {
+                it.copy(
+                    incomingRequests = emptyList(),
+                    outgoingRequests = emptyList()
+                )
+            }
+        }
+    }
+
+    fun isOwnFriendsList(viewedUserId: String): Boolean {
+        val myId = auth.currentUser?.uid.orEmpty()
+        return viewedUserId.isBlank() || viewedUserId == myId
+    }
+
     // Загружаем друзей
-    fun loadFriends() {
+    fun loadFriends(targetUserId: String? = null) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            val userId = auth.currentUser?.uid ?: run {
-                _uiState.update {
-                    it.copy(isLoading = false, errorMessage = "Пользователь не авторизован")
+            val userId = targetUserId?.takeIf { it.isNotBlank() }
+                ?: activeViewedUserId?.takeIf { it.isNotBlank() }
+                ?: auth.currentUser?.uid ?: run {
+                    _uiState.update {
+                        it.copy(isLoading = false, errorMessage = "Пользователь не авторизован")
+                    }
+                    return@launch
                 }
-                return@launch
-            }
+            activeViewedUserId = userId
+            val requestToken = ++friendsLoadToken
 
             try {
                 val userDoc = firestore.collection("users").document(userId).get().await()
                 val friendIds = userDoc.get("friends") as? List<String> ?: emptyList()
+                if (!isLatestFriendsLoad(requestToken, userId)) return@launch
 
                 if (friendIds.isEmpty()) {
                     _uiState.update { it.copy(isLoading = false, friends = emptyList()) }
@@ -64,16 +92,22 @@ class FriendsViewModel: ViewModel() {
                     firestore.collection("users").document(friendId).get().await()
                         .toObject(User::class.java)?.copy(id = friendId)
                 }
+                if (!isLatestFriendsLoad(requestToken, userId)) return@launch
 
                 _uiState.update {
                     it.copy(isLoading = false, friends = friends, errorMessage = null)
                 }
             } catch (e: Exception) {
+                if (!isLatestFriendsLoad(requestToken, userId)) return@launch
                 _uiState.update {
                     it.copy(isLoading = false, errorMessage = "Ошибка загрузки друзей: ${e.message}")
                 }
             }
         }
+    }
+
+    private fun isLatestFriendsLoad(token: Long, userId: String): Boolean {
+        return token == friendsLoadToken && activeViewedUserId == userId
     }
 
     // Загружаем запросы
@@ -82,11 +116,9 @@ class FriendsViewModel: ViewModel() {
             val userId = auth.currentUser?.uid ?: return@launch
 
             try {
-                // ── Входящие запросы ──────────────────────────────────────────────────
-                // Было: .orderBy("createdAt", Query.Direction.DESCENDING)
-                // Стало: orderBy убран → Firebase не требует составного индекса.
-                // Сортировка выполняется на клиенте через sortedByDescending — для
-                // десятков записей это абсолютно равнозначно по скорости.
+                // Входящие запросы
+                // orderBy в Firebase не требует составного индекса.
+                // Сортировка выполняется на клиенте через sortedByDescending
                 val incomingSnapshot = firestore.collection("friend_requests")
                     .whereEqualTo("receiverId", userId)
                     .whereEqualTo("status", FriendshipStatus.PENDING.name)
@@ -113,11 +145,11 @@ class FriendsViewModel: ViewModel() {
                             createdAt = request.createdAt.toString()
                         )
                     }
-                    // ← сортировка на клиенте: новые запросы отображаются первыми.
-                    //   Timestamp реализует Comparable, поэтому seconds доступен напрямую.
+                    // Сортировка на клиенте: новые запросы отображаются первыми.
+                    // Timestamp реализует Comparable, поэтому seconds доступен напрямую.
                     .sortedByDescending { it.createdAt }
 
-                // ── Исходящие запросы ─────────────────────────────────────────────────
+                // Исходящие запросы
                 // Та же логика: убираем orderBy, сортируем после маппинга.
                 val outgoingSnapshot = firestore.collection("friend_requests")
                     .whereEqualTo("senderId", userId)
