@@ -52,7 +52,7 @@ class HomeViewModel : ViewModel() {
         loadInitialData()
     }
 
-    // ── Начальная загрузка ────────────────────────────────────────────────
+    // Начальная загрузка
 
     private fun loadInitialData() {
         viewModelScope.launch {
@@ -63,7 +63,7 @@ class HomeViewModel : ViewModel() {
                 syncFcmTokenToProfile()
                 loadUserData(userId)
             } else {
-                _uiState.update { it.copy(userName = "Гость") }
+                _uiState.update { it.copy(userName = "Гость", userAvatarUrl = null) }
             }
             loadQuizzes()
             if (userId != null) {
@@ -106,7 +106,7 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    // ── Загрузка данных пользователя (suspend) ────────────────────────────
+    // Загрузка данных пользователя (suspend)
 
     /**
      * Загружает пользователя из Firestore и вычисляет уровень через LevelSystem.
@@ -131,14 +131,17 @@ class HomeViewModel : ViewModel() {
                 val progress = LevelSystem.levelProgress(totalXp)
                 val rank     = LevelSystem.rankForLevel(level)
 
+                val avatarUrl = user.avatarUrl?.takeIf { it.isNotBlank() }
+                    ?: auth.currentUser?.photoUrl?.toString()?.takeIf { it.isNotBlank() }
                 _uiState.update { state ->
                     state.copy(
-                        isLoading     = false,
-                        userName      = userName,
-                        userStats     = user.stats,
-                        userLevel     = level,
-                        levelProgress = progress,
-                        rankName      = rank.displayName
+                        isLoading       = false,
+                        userName        = userName,
+                        userAvatarUrl   = avatarUrl,
+                        userStats       = user.stats,
+                        userLevel       = level,
+                        levelProgress   = progress,
+                        rankName        = rank.displayName
                     )
                 }
             }
@@ -147,12 +150,18 @@ class HomeViewModel : ViewModel() {
                 val fallback = auth.currentUser?.displayName
                     ?: auth.currentUser?.email?.split("@")?.first()
                     ?: "Гость"
-                _uiState.update { it.copy(isLoading = false, userName = fallback) }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        userName = fallback,
+                        userAvatarUrl = auth.currentUser?.photoUrl?.toString()?.takeIf { s -> s.isNotBlank() }
+                    )
+                }
             }
         }
     }
 
-    // ── Загрузка викторин (suspend) ───────────────────────────────────────
+    // Загрузка викторин (suspend)
 
     private suspend fun loadQuizzes() {
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -209,7 +218,7 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    // ── Публичные методы ──────────────────────────────────────────────────
+    // Публичные методы
 
     /**
      * Вызывать при возвращении на HomeScreen (например после прохождения викторины),
@@ -241,7 +250,7 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    // ── Вызовы (данные с merge на клиенте, синхронно со snapshot в репозитории) ─
+    // Вызовы (данные с merge на клиенте, синхронно со snapshot в репозитории)
 
     private fun applyHomeChallengeSides(sides: UserChallengeSides) {
         val incoming = sides.asChallenged.filter { it.status == ChallengeStatus.PENDING }
@@ -378,7 +387,7 @@ class HomeViewModel : ViewModel() {
         _uiState.update { it.copy(challengeSentMessage = null) }
     }
 
-    // ── Добавление демо-викторин ──────────────────────────────────────────
+    // Добавление демо-викторин
 
     fun addDemoQuizzes() {
         viewModelScope.launch {

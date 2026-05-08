@@ -24,7 +24,7 @@ data class QuizResultsUiState(
     val showAchievements: Boolean = false,
     val shareContent: String? = null,
     val mark: QuizMark = QuizMark.AVERAGE
-    ) {
+) {
     // TODO: обновить после внедрения UseCases
     /**
      * val canPlayAgain: Boolean

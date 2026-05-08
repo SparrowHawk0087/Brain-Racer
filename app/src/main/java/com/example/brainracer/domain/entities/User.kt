@@ -8,6 +8,9 @@ data class User(
     val id: String = "",
     val email: String = "",
     val nickname: String = "",
+    /** Нормализованный ник для уникальности: `nickname.trim().lowercase()`. */
+    @get:PropertyName("nickname_normalized")
+    val nicknameNormalized: String = "",
     val bio: String = "",
     val avatarUrl: String? = null,
     val stats: UserStats = UserStats(),
@@ -27,7 +30,15 @@ data class User(
         get() = if (stats.totalQuestionsAnswered > 0) {
             stats.correctAnswers.toDouble() / stats.totalQuestionsAnswered * 100
         } else 0.0
+
+    /** Значение для запросов: поле в Firestore или производное от [nickname] (старые документы). */
+    @get:Exclude
+    val effectiveNicknameNormalized: String
+        get() = nicknameNormalized.trim().takeIf { it.isNotBlank() }
+            ?: nickname.trim().lowercase()
 }
+
+fun normalizeNicknameForStorage(nickname: String): String = nickname.trim().lowercase()
 
 enum class UserRank(val displayName: String, val minPoints: Int) {
     BEGINNER("Новичок", 0),

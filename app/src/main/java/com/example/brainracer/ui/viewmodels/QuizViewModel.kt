@@ -13,9 +13,11 @@ import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.UserAnswer
 import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
 import com.example.brainracer.ui.utils.QuizNonScoringReason
+import com.example.brainracer.ui.utils.QuestionOutcome
 import com.example.brainracer.ui.utils.QuizUIState
 import com.example.brainracer.ui.utils.XpBreakdown
 import com.google.firebase.auth.FirebaseAuth
+import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,6 +41,9 @@ class QuizViewModel : ViewModel() {
 
     private var totalTimeSpent = 0
     private var questionStartTime = 0L
+    private var currentSessionId: String = UUID.randomUUID().toString()
+    private var finalizationInFlight: Boolean = false
+    private val finalizedSessionIds = mutableSetOf<String>()
 
     private var networkAvailableAtStart = true
     private var forceNonScoringSession = false
@@ -59,7 +64,7 @@ class QuizViewModel : ViewModel() {
         return QuizNonScoringReason.NOT_SIGNED_IN
     }
 
-    // ── Загрузка викторины ────────────────────────────────────────────────
+    // Загрузка викторины
 
     fun loadQuiz(
         quizId: String,
@@ -110,6 +115,8 @@ class QuizViewModel : ViewModel() {
         this.networkAvailableAtStart = networkAvailableAtStart
 
         currentQuiz = quiz
+        currentSessionId = UUID.randomUUID().toString()
+        finalizationInFlight = false
         userAnswers.clear()
         totalTimeSpent = 0
 
@@ -119,6 +126,7 @@ class QuizViewModel : ViewModel() {
         if (quiz.questions.isNotEmpty()) {
             questionStartTime = System.currentTimeMillis()
             val first = quiz.questions[0]
+            val outcomes = List(quiz.questions.size) { QuestionOutcome.UNANSWERED }
             _uiState.value = QuizUIState(
                 isLoading = false,
                 question = first.questionText,
@@ -126,6 +134,7 @@ class QuizViewModel : ViewModel() {
                 totalQuestions = quiz.questions.size,
                 currentQuestionTimeLimit = first.timeLimit.coerceAtLeast(5),
                 attachedImageUrl = first.imageUrl ?: first.gifUrl,
+                questionOutcomes = outcomes,
                 challengeId = challengeId,
                 quizTitle = quiz.title,
                 sessionNetworkAvailable = networkAvailableAtStart,
@@ -139,7 +148,7 @@ class QuizViewModel : ViewModel() {
         }
     }
 
-    // ── Выбор ответа ──────────────────────────────────────────────────────
+    // Выбор ответа
 
     fun selectAnswer(answerIndex: Int) {
         if (_uiState.value.isAnswerSubmitted) return
@@ -204,12 +213,24 @@ class QuizViewModel : ViewModel() {
         )
 
         _uiState.update {
+            val nextOutcomes = run {
+                val base = it.questionOutcomes
+                if (base.isEmpty() || qIndex !in base.indices) base
+                else base.toMutableList().also { list ->
+                    list[qIndex] = when {
+                        selectedIdx == -1 -> QuestionOutcome.TIMEOUT
+                        isCorrect         -> QuestionOutcome.CORRECT
+                        else              -> QuestionOutcome.WRONG
+                    }
+                }
+            }
             it.copy(
                 isAnswerSubmitted = true,
                 isAnswerCorrect = isCorrect,
                 score = it.score + if (isCorrect) question.points else 0,
                 correctAnswers = it.correctAnswers + if (isCorrect) 1 else 0,
-                incorrectAnswers = it.incorrectAnswers + if (!isCorrect) 1 else 0
+                incorrectAnswers = it.incorrectAnswers + if (!isCorrect) 1 else 0,
+                questionOutcomes = nextOutcomes
             )
         }
 
@@ -248,8 +269,15 @@ class QuizViewModel : ViewModel() {
     }
 
     private fun saveQuizResults() {
+        val sessionId = currentSessionId
+        if (sessionId in finalizedSessionIds || finalizationInFlight) return
+        finalizationInFlight = true
         viewModelScope.launch {
-            val quiz = currentQuiz ?: return@launch
+            val quiz = currentQuiz
+            if (quiz == null) {
+                finalizationInFlight = false
+                return@launch
+            }
             val userId = currentUserId
             val xpBefore = userId?.let { uid ->
                 when (val r = userRepository.getUser(uid)) {
@@ -259,7 +287,18 @@ class QuizViewModel : ViewModel() {
             } ?: 0
 
             val persist = sessionCountsTowardProgress()
-            finishWithXp(quiz, xpBefore, persistResults = persist, userId = userId)
+            try {
+                finishWithXp(
+                    quiz = quiz,
+                    xpBefore = xpBefore,
+                    persistResults = persist,
+                    userId = userId,
+                    sessionId = sessionId
+                )
+                finalizedSessionIds += sessionId
+            } finally {
+                finalizationInFlight = false
+            }
         }
     }
 
@@ -267,7 +306,8 @@ class QuizViewModel : ViewModel() {
         quiz: Quiz,
         xpBefore: Int,
         persistResults: Boolean,
-        userId: String? = null
+        userId: String? = null,
+        sessionId: String
     ) {
         val totalQ = quiz.questions.size
         val correct = userAnswers.count { it.isCorrect }
@@ -310,11 +350,18 @@ class QuizViewModel : ViewModel() {
                 )
             }
             if (userId != null) {
-                quizRepository.recordUserQuizSessionFinished(
-                    userId,
-                    quiz.id,
-                    savedResultToQuizResults = false
-                )
+                when (
+                    quizRepository.recordUserQuizSessionFinished(
+                        userId,
+                        quiz.id,
+                        sessionId,
+                        savedResultToQuizResults = false
+                    )
+                ) {
+                    is Result.Success ->
+                        ProfileAfterQuizRefresh.notify(userId)
+                    else -> Unit
+                }
             }
             return
         }
@@ -378,12 +425,18 @@ class QuizViewModel : ViewModel() {
                         duelXpDeferred = isChallenge && soloAwarded == 0
                     )
                 }
-                quizRepository.recordUserQuizSessionFinished(
-                    userId,
-                    quiz.id,
-                    savedResultToQuizResults = true
-                )
-                ProfileAfterQuizRefresh.notify(userId)
+                when (
+                    quizRepository.recordUserQuizSessionFinished(
+                        userId,
+                        quiz.id,
+                        sessionId,
+                        savedResultToQuizResults = true
+                    )
+                ) {
+                    is Result.Success ->
+                        ProfileAfterQuizRefresh.notify(userId)
+                    else -> Unit
+                }
             }
         }
     }

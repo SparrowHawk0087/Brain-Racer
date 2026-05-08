@@ -1,6 +1,5 @@
 package com.example.brainracer.ui.components
 
-import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -17,20 +16,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Quiz
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Sports
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -50,6 +49,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -66,11 +66,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import com.example.brainracer.data.storage.StorageConfig
 import com.example.brainracer.data.local.QuizOfflineCache
 import com.example.brainracer.data.repositories.QuizRepositoryImpl
 import com.example.brainracer.data.repositories.UserRepositoryImpl
@@ -82,6 +87,8 @@ import com.example.brainracer.ui.theme.BrainRacerColorTokens
 import com.example.brainracer.ui.theme.BrainRacerExtendedColors
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
 import com.google.firebase.auth.FirebaseAuth
+import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 private fun difficultyColor(d: QuizDifficulty, ext: BrainRacerExtendedColors, error: Color): Color = when (d) {
@@ -98,7 +105,7 @@ private fun difficultyLabel(d: QuizDifficulty): String = when (d) {
     QuizDifficulty.EXPERT -> "Эксперт"
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun QuizDetailScreen(
     quizId: String,
@@ -106,6 +113,7 @@ fun QuizDetailScreen(
     onNavigateToPlay: (quizId: String, practiceReplay: Boolean) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
+    val isCompactWidth = LocalConfiguration.current.screenWidthDp < 390
     val coroutineScope = rememberCoroutineScope()
     val quizRepository = remember { QuizRepositoryImpl() }
     val userRepository = remember { UserRepositoryImpl() }
@@ -158,7 +166,19 @@ fun QuizDetailScreen(
         }
         when (val c = quizRepository.getUserQuizPlayCount(currentUserId, quizId)) {
             is Result.Success -> mySavedPlayCount = c.data
-            is Result.Error -> mySavedPlayCount = 0
+            // Не сбрасывает в 0 при сетевой ошибке, иначе слетает после прохождения
+            is Result.Error -> Unit
+        }
+    }
+
+    LaunchedEffect(quizId, currentUserId) {
+        if (currentUserId.isBlank()) return@LaunchedEffect
+        ProfileAfterQuizRefresh.events.collectLatest { uid ->
+            if (uid != currentUserId) return@collectLatest
+            when (val c = quizRepository.getUserQuizPlayCount(currentUserId, quizId)) {
+                is Result.Success -> mySavedPlayCount = c.data
+                is Result.Error -> Unit
+            }
         }
     }
 
@@ -264,7 +284,7 @@ fun QuizDetailScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
+                                painter = androidx.compose.ui.res.painterResource(id = com.example.brainracer.R.drawable.arrow_back_btn),
                                 contentDescription = "Назад",
                                 tint = LocalBrainRacerExtendedColors.current.detailTextPrimary,
                                 modifier = Modifier.size(18.dp)
@@ -272,8 +292,10 @@ fun QuizDetailScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = LocalBrainRacerExtendedColors.current.detailBackground),
-                modifier = Modifier.windowInsetsPadding(WindowInsets.systemBars)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                modifier = Modifier
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .background(LocalBrainRacerExtendedColors.current.detailBackground)
             )
         }
     ) { padding ->
@@ -293,22 +315,23 @@ fun QuizDetailScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(padding),
-                    contentPadding = PaddingValues(bottom = 32.dp)
+                        .padding(padding)
+                        .navigationBarsPadding(),
+                    contentPadding = PaddingValues(bottom = if (isCompactWidth) 16.dp else 24.dp)
                 ) {
                     // ── Обложка ──────────────────────────────────────────────
                     item {
-                        QuizCoverSection(quiz = q)
+                        QuizCoverSection(quiz = q, compact = isCompactWidth)
                     }
 
                     // ── Информация ────────────────────────────────────────────
                     item {
-                        QuizInfoSection(quiz = q)
+                        QuizInfoSection(quiz = q, compact = isCompactWidth)
                     }
 
                     // ── Описание ──────────────────────────────────────────────
                     item {
-                        QuizDescriptionSection(description = q.description)
+                        QuizDescriptionSection(description = q.description, compact = isCompactWidth)
                     }
 
                     // ── Кнопки действий ──────────────────────────────────────
@@ -318,12 +341,31 @@ fun QuizDetailScreen(
                             signedIn = currentUserId.isNotBlank(),
                             soloAlreadyCompleted = soloCheckDone && soloAlreadyCompleted,
                             isOwner = isQuizOwner,
+                            onEdit = {
+                                navController.navigate("quiz_creator?editQuizId=${Uri.encode(quizId)}")
+                            },
                             onRequestDelete = { showDeleteQuizDialog = true },
                             onStart = {
+                                if (isQuizOwner) {
+                                    Toast.makeText(
+                                        context,
+                                        "Автор не может проходить свою викторину",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    return@QuizActionsSection
+                                }
                                 val replay = soloCheckDone && soloAlreadyCompleted
                                 onNavigateToPlay(quizId, replay)
                             },
                             onChallenge = {
+                                if (isQuizOwner) {
+                                    Toast.makeText(
+                                        context,
+                                        "Автор не может запускать игровые сценарии своей викторины",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    return@QuizActionsSection
+                                }
                                 if (currentUserId.isBlank()) {
                                     Toast.makeText(
                                         context,
@@ -336,19 +378,7 @@ fun QuizDetailScreen(
                                     )
                                 }
                             },
-                            onShare = {
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_SUBJECT, "Brain Racer — викторина")
-                                    putExtra(
-                                        Intent.EXTRA_TEXT,
-                                        "Проверь себя в викторине «${q.title}» в Brain Racer!"
-                                    )
-                                }
-                                context.startActivity(
-                                    Intent.createChooser(shareIntent, "Поделиться викториной")
-                                )
-                            }
+                            compact = isCompactWidth
                         )
                     }
                 }
@@ -358,105 +388,146 @@ fun QuizDetailScreen(
 
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 //  Обложка квиза
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun QuizCoverSection(quiz: Quiz) {
+private fun QuizCoverSection(quiz: Quiz, compact: Boolean) {
     val gradient = Brush.verticalGradient(
         listOf(BrainRacerColorTokens.DetailHeroGradientStart, BrainRacerColorTokens.DetailGreen)
     )
+    val coverRaw = quiz.imageUrl.trim()
+    val coverUrl = coverRaw.takeIf { it.isNotEmpty() }?.let { StorageConfig.resolvePublicUrlForCoil(it) }
+    val wDp = LocalConfiguration.current.screenWidthDp
+    val heroHeight = remember(compact, wDp) {
+        val minH = if (compact) 124 else 148
+        val maxH = if (compact) 168 else 208
+        (wDp * 9f / 16f).roundToInt().coerceIn(minH, maxH).dp
+    }
+    val coverShape = RoundedCornerShape(20.dp)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(220.dp)
-            .background(gradient),
-        contentAlignment = Alignment.Center
+            .height(heroHeight)
+            .padding(horizontal = if (compact) 14.dp else 16.dp, vertical = if (compact) 8.dp else 10.dp)
+            .clip(coverShape)
     ) {
-        // Декоративные круги
-        Box(
-            modifier = Modifier
-                .offset(x = (-60).dp, y = (-40).dp)
-                .size(140.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.06f))
-        )
-        Box(
-            modifier = Modifier
-                .offset(x = 70.dp, y = 50.dp)
-                .size(100.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.08f))
-        )
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            // Иконка викторины
+        if (coverUrl != null) {
+            AsyncImage(
+                model = coverUrl,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.55f to Color.Black.copy(alpha = 0.35f),
+                            1f to Color.Black.copy(alpha = 0.55f)
+                        )
+                    )
+            )
+        } else {
             Box(
                 modifier = Modifier
-                    .size(72.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(Color.White.copy(alpha = 0.20f)),
-                contentAlignment = Alignment.Center
+                    .fillMaxSize()
+                    .background(gradient)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Quiz,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(38.dp)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .offset(x = (-48).dp, y = (-32).dp)
+                        .size(120.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.06f))
                 )
-            }
-            Spacer(Modifier.height(16.dp))
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = Color.White.copy(alpha = 0.18f)
-            ) {
-                Text(
-                    quiz.categoryId,
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(x = 36.dp, y = 28.dp)
+                        .size(88.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.08f))
                 )
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(if (compact) 64.dp else 72.dp)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(Color.White.copy(alpha = 0.20f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Quiz,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(if (compact) 34.dp else 38.dp)
+                        )
+                    }
+                }
             }
+        }
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = if (compact) 8.dp else 10.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = Color.White.copy(alpha = 0.22f)
+        ) {
+            Text(
+                quiz.categoryId,
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+            )
         }
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 //  Блок с названием и метаданными
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun QuizInfoSection(quiz: Quiz) {
+private fun QuizInfoSection(quiz: Quiz, compact: Boolean) {
+    val vPad = if (compact) 10.dp else 14.dp
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 20.dp)
+            .padding(horizontal = if (compact) 16.dp else 20.dp, vertical = vPad)
     ) {
         Text(
             quiz.title,
             color = LocalBrainRacerExtendedColors.current.detailTextPrimary,
             fontWeight = FontWeight.Bold,
-            fontSize = 22.sp,
-            lineHeight = 30.sp
+            fontSize = if (compact) 18.sp else 20.sp,
+            lineHeight = if (compact) 24.sp else 27.sp,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
         )
 
         if (quiz.id.startsWith("quiz_custom_") && quiz.creatorNickname.isNotBlank()) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
                 "Автор: ${quiz.creatorNickname}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(if (compact) 8.dp else 10.dp))
 
         // Бейджи
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             InfoBadge(
                 label = difficultyLabel(quiz.difficulty),
                 color = difficultyColor(
@@ -475,12 +546,12 @@ private fun QuizInfoSection(quiz: Quiz) {
             )
         }
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(if (compact) 10.dp else 12.dp))
 
         // Разделитель
         HorizontalDivider(color = LocalBrainRacerExtendedColors.current.detailSurfaceAlt, thickness = 1.dp)
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(if (compact) 10.dp else 12.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -526,26 +597,24 @@ private fun StatItem(icon: androidx.compose.ui.graphics.vector.ImageVector, valu
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 //  Описание
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun QuizDescriptionSection(description: String) {
+private fun QuizDescriptionSection(description: String, compact: Boolean) {
     if (description.isBlank()) return
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
+            .padding(horizontal = if (compact) 16.dp else 20.dp)
     ) {
         Text(
             "Описание",
             color = LocalBrainRacerExtendedColors.current.detailTextPrimary,
             fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp
+            fontSize = if (compact) 15.sp else 16.sp
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(if (compact) 6.dp else 8.dp))
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = LocalBrainRacerExtendedColors.current.detailSurface,
@@ -554,17 +623,15 @@ private fun QuizDescriptionSection(description: String) {
             Text(
                 description,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp,
-                lineHeight = 21.sp,
-                modifier = Modifier.padding(16.dp)
+                fontSize = if (compact) 13.sp else 14.sp,
+                lineHeight = if (compact) 19.sp else 21.sp,
+                modifier = Modifier.padding(if (compact) 12.dp else 14.dp)
             )
         }
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 //  Кнопки действий
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun QuizActionsSection(
@@ -572,16 +639,20 @@ private fun QuizActionsSection(
     signedIn: Boolean,
     soloAlreadyCompleted: Boolean,
     isOwner: Boolean,
+    onEdit: () -> Unit,
     onRequestDelete: () -> Unit,
     onStart: () -> Unit,
     onChallenge: () -> Unit,
-    onShare: () -> Unit
+    compact: Boolean
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(
+                horizontal = if (compact) 16.dp else 20.dp,
+                vertical = if (compact) 10.dp else 16.dp
+            ),
+        verticalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 12.dp)
     ) {
         if (soloAlreadyCompleted) {
             Text(
@@ -600,12 +671,22 @@ private fun QuizActionsSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.fillMaxWidth()
         )
+        if (isOwner) {
+            Text(
+                "Автор не может проходить свою викторину.",
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         // Начать викторину
         Button(
             onClick = onStart,
+            enabled = !isOwner,
             modifier = Modifier
+                .pressScale()
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(if (compact) 48.dp else 52.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = LocalBrainRacerExtendedColors.current.detailAccentPurple
@@ -616,55 +697,63 @@ private fun QuizActionsSection(
             Text(
                 if (soloAlreadyCompleted) "Пройти снова" else "Начать викторину",
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 16.sp
+                fontSize = if (compact) 14.sp else 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
 
         // Бросить вызов другу
         OutlinedButton(
             onClick = onChallenge,
+            enabled = !isOwner,
             modifier = Modifier
+                .pressScale()
                 .fillMaxWidth()
-                .height(52.dp),
+                .height(if (compact) 46.dp else 50.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.outlinedButtonColors(
                 contentColor = LocalBrainRacerExtendedColors.current.detailGreen
             ),
             border = androidx.compose.foundation.BorderStroke(1.5.dp, LocalBrainRacerExtendedColors.current.detailGreen)
         ) {
-            Icon(Icons.Default.Sports, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(
+                painter = androidx.compose.ui.res.painterResource(id = com.example.brainracer.R.drawable.cognition),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
             Spacer(Modifier.width(8.dp))
             Text(
                 "Бросить вызов другу",
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 15.sp
-            )
-        }
-
-        // Поделиться
-        OutlinedButton(
-            onClick = onShare,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-            ),
-            border = androidx.compose.foundation.BorderStroke(1.dp, LocalBrainRacerExtendedColors.current.detailSurfaceAlt)
-        ) {
-            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "Поделиться",
-                fontSize = 14.sp
+                fontSize = if (compact) 14.sp else 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
 
         if (isOwner) {
             OutlinedButton(
+                onClick = onEdit,
+                modifier = Modifier
+                    .pressScale()
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+            ) {
+                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Редактировать викторину", fontSize = 14.sp)
+            }
+
+            OutlinedButton(
                 onClick = onRequestDelete,
                 modifier = Modifier
+                    .pressScale(pressedScale = 0.992f)
                     .fillMaxWidth()
                     .height(48.dp),
                 shape = RoundedCornerShape(16.dp),

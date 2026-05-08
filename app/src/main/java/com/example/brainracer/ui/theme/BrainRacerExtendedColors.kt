@@ -1,7 +1,7 @@
 package com.example.brainracer.ui.theme
 
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -71,4 +71,11 @@ fun brainRacerExtendedColorsLight(): BrainRacerExtendedColors = BrainRacerExtend
     detailTextPrimary = BrainRacerColorTokens.Light.TextPrimary
 )
 
-val LocalBrainRacerExtendedColors = staticCompositionLocalOf { brainRacerExtendedColorsDark() }
+/**
+ * Используется [compositionLocalOf], а не `staticCompositionLocalOf`, чтобы при
+ * редкой смене темы инвалидировались только реальные читатели расширенной палитры,
+ * а не всё поддерево, в котором стоит провайдер. Сама анимация смены темы делается
+ * глобальным crossfade-оверлеем (см. `BrainRacerTheme`), поэтому значение здесь
+ * меняется один раз за переключение темы — без анимаций по каждому полю.
+ */
+val LocalBrainRacerExtendedColors = compositionLocalOf { brainRacerExtendedColorsDark() }

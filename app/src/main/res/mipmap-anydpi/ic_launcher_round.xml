@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Round-вариант иконки для API 24–25 (см. комментарий в ic_launcher.xml).
+  На круглых лаунчерах системы старше API 26 будет показан тот же
+  drawable/group_29__2_ — лаунчер сам подрежет квадратный логотип под
+  круглую маску.
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/group_29__2_"
+    android:inset="0dp" />

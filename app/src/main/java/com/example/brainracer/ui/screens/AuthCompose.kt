@@ -144,6 +144,7 @@ fun AuthStyledTextField(
 @Composable
 fun AuthGoogleButton(
     onClick: () -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val cs = MaterialTheme.colorScheme
@@ -151,10 +152,11 @@ fun AuthGoogleButton(
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp)
+            .alpha(if (enabled) 1f else 0.45f)
             .clip(AuthPillShape)
             .background(cs.surfaceContainerHigh)
             .border(1.dp, cs.outline.copy(alpha = 0.65f), AuthPillShape)
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Row(

@@ -6,6 +6,9 @@ import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.ui.utils.ProfileAfterQuizRefresh
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.data.utils.getOrNull
+import com.example.brainracer.data.storage.EvolutionStorageRepository
+import com.example.brainracer.data.storage.EvolutionStorageRepositoryImpl
+import com.example.brainracer.data.storage.StorageConfig
 import android.util.Log
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
@@ -22,7 +25,9 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.tasks.await
 
-class QuizRepositoryImpl: QuizRepository {
+class QuizRepositoryImpl(
+    private val storageRepository: EvolutionStorageRepository = EvolutionStorageRepositoryImpl()
+) : QuizRepository {
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     // Firestore коллекции
     private val quizzesCollection = firestore.collection("quizzes")
@@ -170,7 +175,7 @@ class QuizRepositoryImpl: QuizRepository {
         Result.error(e)
     }
 
-    // Удаление квиза
+    // Удаление квиза и всех связанных картинок (обложка + картинки/гифки вопросов) из object storage
     override suspend fun deleteQuiz(quizId: String): Result<Unit> = try {
         val quiz = getQuiz(quizId).getOrNull()
         quizzesCollection.document(quizId).delete().await()
@@ -179,9 +184,30 @@ class QuizRepositoryImpl: QuizRepository {
                 .update("createdQuizzes", FieldValue.arrayRemove(quizId))
                 .await()
         }
+        // Чистка bucket
+        if (quiz != null) {
+            val urls = buildList {
+                if (quiz.imageUrl.isNotBlank()) add(quiz.imageUrl)
+                quiz.questions.forEach { q ->
+                    q.imageUrl?.takeIf { it.isNotBlank() }?.let { add(it) }
+                    q.gifUrl?.takeIf { it.isNotBlank() }?.let { add(it) }
+                }
+            }.distinct()
+            urls.forEach { url -> deleteStorageObjectByUrl(url) }
+        }
         Result.success(Unit)
     } catch (e: Exception) {
         Result.error(e)
+    }
+
+    private suspend fun deleteStorageObjectByUrl(url: String) {
+        if (url.isBlank()) return
+        val key = StorageConfig.extractObjectKeyPublic(url) ?: return
+        val bucket = StorageConfig.bucketForKeyPublic(key) ?: return
+        when (val res = storageRepository.delete(bucket, key)) {
+            is Result.Success -> Log.d("QuizRepository", "Deleted asset $bucket/$key")
+            is Result.Error -> Log.w("QuizRepository", "Failed to delete $bucket/$key: ${res.exception.message}")
+        }
     }
 
     // Поиск по названию: префиксный range + public + category требует составного индекса в Firestore и часто падает
@@ -387,30 +413,61 @@ class QuizRepositoryImpl: QuizRepository {
     override suspend fun recordUserQuizSessionFinished(
         userId: String,
         quizId: String,
+        sessionId: String,
         savedResultToQuizResults: Boolean
-    ): Result<Unit> = try {
-        if (userId.isBlank() || quizId.isBlank()) {
+    ): Result<Unit> {
+        if (userId.isBlank() || quizId.isBlank() || sessionId.isBlank()) {
+            return Result.success(Unit)
+        }
+        val userRef = usersCollection.document(userId)
+        val countRef = userRef.collection("quiz_play_counts").document(quizId)
+        val sessionRef = userRef.collection("quiz_sessions").document(sessionId)
+
+        try {
+            firestore.runTransaction { tx ->
+                val sessionSnap = tx.get(sessionRef)
+                if (sessionSnap.exists()) {
+                    return@runTransaction null
+                }
+
+                val countSnap = tx.get(countRef)
+                if (!countSnap.exists()) {
+                    tx.set(countRef, mapOf("count" to 1L), SetOptions.merge())
+                } else {
+                    tx.update(countRef, "count", FieldValue.increment(1))
+                }
+
+                tx.set(
+                    sessionRef,
+                    mapOf(
+                        "quizId" to quizId,
+                        "savedResultToQuizResults" to savedResultToQuizResults,
+                        "finishedAt" to FieldValue.serverTimestamp()
+                    ),
+                    SetOptions.merge()
+                )
+                null
+            }.await()
+            return Result.success(Unit)
+        } catch (e: Exception) {
+            val code = (e as? FirebaseFirestoreException)?.code
+                ?: (e.cause as? FirebaseFirestoreException)?.code
+            if (code != FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                Log.e("QuizRepository", "recordUserQuizSessionFinished tx failed: ${e.message}")
+                return Result.error(e)
+            }
+            Log.w("QuizRepository", "quiz_sessions write denied; falling back to direct play_counts increment")
+        }
+
+        // Если правила ещё не разрешают писать quiz_sessions, всё равно инкрементируется счётчик
+        // Дедуп обеспечивает in-memory finalizedSessionIds в QuizViewModel, один sessionId = один вызов
+        return try {
+            countRef.set(mapOf("count" to FieldValue.increment(1)), SetOptions.merge()).await()
             Result.success(Unit)
-        } else {
-        val ref = usersCollection.document(userId).collection("quiz_play_counts").document(quizId)
-        val snap = ref.get().await()
-        val resultsCount = when (val c = countSavedResultsForUserAndQuiz(userId, quizId)) {
-            is Result.Success -> c.data
-            else -> 0
+        } catch (e: Exception) {
+            Log.e("QuizRepository", "play_counts increment fallback failed: ${e.message}")
+            Result.error(e)
         }
-        if (!snap.exists()) {
-            val initial = if (savedResultToQuizResults) resultsCount else resultsCount + 1
-            ref.set(
-                mapOf("count" to initial.coerceAtLeast(1).toLong()),
-                SetOptions.merge()
-            ).await()
-        } else {
-            ref.update("count", FieldValue.increment(1)).await()
-        }
-        Result.success(Unit)
-        }
-    } catch (e: Exception) {
-        Result.error(e)
     }
 
     // Запись результатов прохождения квиза с поддержкой вызовов

@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,6 +38,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.brainracer.R
 import com.example.brainracer.ui.theme.BrainRacerTheme
 import com.example.brainracer.ui.viewmodels.AuthViewModel
 import kotlinx.coroutines.delay
@@ -85,7 +86,7 @@ fun ForgotPasswordScreen(
                 .size(48.dp)
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                painter = painterResource(id = R.drawable.arrow_back_btn),
                 contentDescription = "Назад",
                 tint = colorScheme.onBackground
             )
@@ -123,7 +124,7 @@ fun ForgotPasswordScreen(
 
             AuthStyledTextField(
                 value = email,
-                onValueChange = { email = it },
+                onValueChange = { email = sanitizeEmailDisallowCyrillicLocalPart(it) },
                 label = "Электронная почта",
                 placeholder = "Введите email",
                 isError = email.isNotBlank() && !isEmailValid && emailValidationMessage.isNotEmpty(),

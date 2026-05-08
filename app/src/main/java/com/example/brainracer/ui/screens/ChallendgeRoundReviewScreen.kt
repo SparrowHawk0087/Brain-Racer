@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -73,12 +72,19 @@ fun ChallengeRoundReviewScreen(
                     IconButton(onClick = { navController.popBackStack() }) {
                         Box(Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
                             contentAlignment = Alignment.Center) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null,
-                                tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
+                            Icon(
+                                painter = androidx.compose.ui.res.painterResource(id = com.example.brainracer.R.drawable.arrow_back_btn),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                modifier = Modifier
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .background(MaterialTheme.colorScheme.background)
             )
         }
     ) { padding ->
@@ -134,7 +140,7 @@ fun ChallengeRoundReviewScreen(
     }
 }
 
-// ── Итоговый счёт ─────────────────────────────────────────────────────────────
+// Итоговый счёт
 
 @Composable
 private fun ScoreHeader(
@@ -246,7 +252,7 @@ private fun PlayerScoreColumn(
     }
 }
 
-// ── Карточка сравнения вопроса ────────────────────────────────────────────────
+// Карточка сравнения вопроса
 
 @Composable
 private fun QuestionComparisonCard(
