@@ -177,7 +177,7 @@ class FriendsViewModel: ViewModel() {
                             createdAt = request.createdAt.toString()
                         )
                     }
-                    // ← сортировка на клиенте
+                    // сортировка на клиенте
                     .sortedByDescending { it.createdAt }
 
                 _uiState.update {

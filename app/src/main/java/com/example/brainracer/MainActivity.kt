@@ -22,7 +22,7 @@ import com.google.firebase.FirebaseApp
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // installSplashScreen() ОБЯЗАТЕЛЬНО до super.onCreate(): иначе системный SplashScreen
+        // installSplashScreen() до super.onCreate(): иначе системный SplashScreen
         // не успеет перехватить запуск. Тема активити выставлена в Theme.BrainRacer.Splash,
         // переключение на Theme.BrainRacer выполнит сама библиотека через postSplashScreenTheme.
         val splash = installSplashScreen()

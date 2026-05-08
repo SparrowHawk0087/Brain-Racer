@@ -107,16 +107,16 @@ fun SplashScreen(
         dotsAlpha.animateTo(1f, animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing))
     }
 
-    // ── Минимальная длительность показа ────────────────────────────────────
+    // Минимальная длительность показа
     LaunchedEffect(Unit) {
         delay(minDisplayMs)
         onFinished()
     }
 
-    // ── Бесконечные циклические анимации ───────────────────────────────────
+    // Бесконечные циклические анимации
     val infinite = rememberInfiniteTransition(label = "splashLoop")
 
-    // Дрейф «жидких» highlight-слоёв. Несинхронные периоды (9 / 11 / 13 сек) —
+    // Дрейф "жидких" highlight-слоёв. Несинхронные периоды (9 / 11 / 13 сек) —
     // фоновое изображение никогда не повторяется визуально на коротких отрезках.
     val drift1 by infinite.animateFloat(
         initialValue = 0f,
@@ -178,7 +178,7 @@ fun SplashScreen(
         modifier = Modifier
             .fillMaxSize()
             // Весь фон рисуется одним проходом — пять радиальных градиентов поверх
-            // линейной базы. Каждый радиал заканчивается Color.Transparent → нет
+            // линейной базы. Каждый радиал заканчивается Color.Transparent - нет
             // прямоугольных границ слоя, как было у Modifier.blur.
             .drawBehind {
                 // 1) Базовый диагональный градиент.
@@ -224,7 +224,7 @@ fun SplashScreen(
                     )
                 )
 
-                // 4) Лёгкий белый «глянец» рядом с центром — приподнимает карточку с иконкой.
+                // 4) Лёгкий белый "глянец" рядом с центром — приподнимает карточку с иконкой.
                 val sheenCenter = Offset(
                     x = size.width  * (0.50f + (drift3 - 0.5f) * 0.10f),
                     y = size.height * (0.42f + (drift1 - 0.5f) * 0.10f)
@@ -255,15 +255,15 @@ fun SplashScreen(
                 )
             }
     ) {
-        // ── Центральный блок ──────────────────────────────────────────────
+        // Центральный блок
         Column(
             modifier = Modifier.align(Alignment.Center),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Box(contentAlignment = Alignment.Center) {
 
-                // Glow за иконкой — крупное радиальное сияние, «дышит» с pulse.
-                // Без clip(CircleShape): радиальный градиент сам уходит в Transparent →
+                // Glow за иконкой — крупное радиальное сияние, "дышит" с pulse.
+                // Без clip(CircleShape): радиальный градиент сам уходит в Transparent -
                 // граница слоя не видна, артефактов нет.
                 Box(
                     modifier = Modifier
@@ -305,14 +305,6 @@ fun SplashScreen(
                     }
                 }
 
-                // Сама иконка. Контейнер — круглая «стеклянная» подложка; внутри
-                // изображение тоже клипается в круг и заметно меньше контейнера, а
-                // ContentScale.Fit заставляет вьюпорт group_29__2_ вписаться целиком.
-                // Раньше при ContentScale.Crop с size = 190dp в 124dp-боксе показывался
-                // только центральный кроп → срезались левый край «B» и правый край «N».
-                // Логотип в group_29__2_ умещается во вписанной окружности своего
-                // 305×305-вьюпорта, поэтому круглый clip обрезает только углы градиента
-                // и не трогает буквы.
                 Box(
                     modifier = Modifier
                         .size(124.dp)

@@ -23,12 +23,12 @@ data class HomeUiState(
         "Фильмы и музыка", "Наука", "Спорт", HOME_CATEGORY_CUSTOM
     ),
 
-    // ── Уровень ───────────────────────────────────────────────────────────
+    // Уровень
     val userLevel: Int = 1,
     val levelProgress: Float = 0f,
     val rankName: String = "Новичок",
 
-    // ── Вызовы для HomeScreen ─────────────────────────────────────────────
+    // Вызовы для HomeScreen
     /** Входящие ожидающие вызовы — показываем badge */
     val pendingChallenges: List<Challenge> = emptyList(),
     /** Активные вызовы: входящие на решение, исходящие в ожидании, принятые в процессе */
@@ -38,7 +38,7 @@ data class HomeUiState(
     /** ID текущего пользователя — нужен для определения роли в вызове */
     val currentUserId: String = "",
 
-    // ── Новый вызов с главной ─────────────────────────────────────────────
+    // Новый вызов с главной
     val friendsForChallenge: List<User> = emptyList(),
     val challengePickerQuizzes: List<QuizItem> = emptyList(),
     val challengePickerLoading: Boolean = false,

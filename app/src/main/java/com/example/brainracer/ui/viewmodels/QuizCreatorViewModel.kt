@@ -29,7 +29,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-// ── Модель черновика вопроса ──────────────────────────────────────────────
+// Модель черновика вопроса
 
 data class DraftQuestion(
     val id: String             = UUID.randomUUID().toString(),
@@ -44,7 +44,7 @@ data class DraftQuestion(
     val explanation: String    = ""        // подсказка/объяснение для экрана результатов
 )
 
-// ── Модель черновика викторины ────────────────────────────────────────────
+// Модель черновика викторины
 
 data class QuizDraft(
     val id: String              = UUID.randomUUID().toString(),
@@ -59,7 +59,7 @@ data class QuizDraft(
     val updatedAt: Long         = System.currentTimeMillis()
 )
 
-// ── Шаблоны ───────────────────────────────────────────────────────────────
+// Шаблоны
 
 data class QuizTemplate(
     val id: String,
@@ -142,7 +142,7 @@ val quizTemplates = listOf(
     ),
 )
 
-// ── UI State ──────────────────────────────────────────────────────────────
+// UI State
 
 data class QuizCreatorUiState(
     val currentDraft: QuizDraft       = QuizDraft(),
@@ -158,8 +158,6 @@ data class QuizCreatorUiState(
     /** URL'ы старых картинок, которые надо удалить из bucket после успешной перезаписи/публикации. */
     val pendingDeletionUrls: List<String> = emptyList()
 )
-
-// ═════════════════════════════════════════════════════════════════════════════
 
 class QuizCreatorViewModel : ViewModel() {
 
@@ -236,7 +234,7 @@ class QuizCreatorViewModel : ViewModel() {
         }
     }
 
-    // ── Редактирование мета-данных викторины ──────────────────────────────
+    // Редактирование мета-данных викторины
 
     fun updateTitle(v: String)       = updateDraft { it.copy(title = v) }
     fun updateDescription(v: String) = updateDraft { it.copy(description = v) }
@@ -244,10 +242,10 @@ class QuizCreatorViewModel : ViewModel() {
     fun updateDifficulty(v: QuizDifficulty) = updateDraft { it.copy(difficulty = v) }
     fun updateTimePerQuestion(v: Int) = updateDraft { it.copy(timePerQuestion = v) }
 
-    // ── Обложка ───────────────────────────────────────────────────────────
+    // Обложка
 
     fun setCoverUri(uri: Uri) {
-        // Запоминаем старую обложку: её удалим после успешной загрузки новой
+        // Запоминаем старую обложку, удаляем после успешной загрузки новой
         // (как с фотографиями профиля — старые файлы не остаются в bucket).
         val prevUrl = _uiState.value.currentDraft.coverUrl
         if (!prevUrl.isNullOrBlank()) {
@@ -300,7 +298,7 @@ class QuizCreatorViewModel : ViewModel() {
         }
     }
 
-    // ── Работа с вопросами ────────────────────────────────────────────────
+    // Работа с вопросами
 
     fun addQuestion() = updateDraft { draft ->
         draft.copy(questions = draft.questions + DraftQuestion(
@@ -424,7 +422,7 @@ class QuizCreatorViewModel : ViewModel() {
         }
     }
 
-    // ── Черновики ─────────────────────────────────────────────────────────
+    // Черновики
 
     fun saveDraft() {
         val uid = userId
@@ -479,7 +477,7 @@ class QuizCreatorViewModel : ViewModel() {
         }
     }
 
-    // ── Применить шаблон ──────────────────────────────────────────────────
+    // Применить шаблон
 
     fun applyTemplate(template: QuizTemplate) {
         val questions = List(template.questionCount) {
@@ -498,7 +496,7 @@ class QuizCreatorViewModel : ViewModel() {
         }
     }
 
-    // ── Публикация ────────────────────────────────────────────────────────
+    // Публикация
 
     /**
      * Полная авто-модерация выполняется при КАЖДОЙ попытке публикации, в том числе
@@ -624,7 +622,7 @@ class QuizCreatorViewModel : ViewModel() {
         }
     }
 
-    // ── Новый черновик ────────────────────────────────────────────────────
+    // Новый черновик
 
     fun newDraft() {
         _uiState.update { it.copy(currentDraft = QuizDraft(), publishSuccess = false, editingQuizId = null) }
@@ -634,7 +632,7 @@ class QuizCreatorViewModel : ViewModel() {
         _uiState.update { it.copy(error = null) }
     }
 
-    // ── Внутренние хелперы ────────────────────────────────────────────────
+    // Внутренние хелперы
 
     private fun updateDraft(transform: (QuizDraft) -> QuizDraft) {
         _uiState.update { it.copy(currentDraft = transform(it.currentDraft)) }

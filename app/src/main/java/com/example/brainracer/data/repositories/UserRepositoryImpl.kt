@@ -4,19 +4,19 @@ import android.util.Log
 import com.example.brainracer.data.storage.EvolutionStorageRepositoryImpl
 import com.example.brainracer.data.storage.QuizDraftRepositoryImpl
 import com.example.brainracer.data.storage.StorageConfig
+import com.example.brainracer.data.utils.Result
 import com.example.brainracer.domain.entities.Challenge
 import com.example.brainracer.domain.entities.ChallengeResult
 import com.example.brainracer.domain.entities.ChallengeStatus
 import com.example.brainracer.domain.entities.ChallengeWinnerXpOutcome
 import com.example.brainracer.domain.entities.ChallengeXpPolicy
-import com.example.brainracer.domain.entities.LevelSystem
-import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.FriendRequest
 import com.example.brainracer.domain.entities.FriendshipStatus
+import com.example.brainracer.domain.entities.LevelSystem
+import com.example.brainracer.domain.entities.Quiz
 import com.example.brainracer.domain.entities.User
 import com.example.brainracer.domain.entities.UserRank
 import com.example.brainracer.domain.entities.normalizeNicknameForStorage
-import com.example.brainracer.data.utils.Result
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -63,7 +63,7 @@ class UserRepositoryImpl : UserRepository {
         }.toMap()
     }
 
-    // ── Получить пользователя ─────────────────────────────────────────────
+    // Получить пользователя
     override suspend fun getUser(userId: String): Result<User> = try {
         val document = usersCollection.document(userId).get().await()
         if (document.exists()) {
@@ -145,7 +145,7 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
-    // ── Создать пользователя ──────────────────────────────────────────────
+    // Создать пользователя
     override suspend fun createUser(user: User): Result<Unit> = try {
         val normalized = user.nicknameNormalized.ifBlank {
             normalizeNicknameForStorage(user.nickname)
@@ -190,7 +190,7 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
-    // ── Обновить пользователя ─────────────────────────────────────────────
+    // Обновить пользователя
     override suspend fun updateUser(user: User): Result<Unit> = try {
         val userRef = usersCollection.document(user.id)
         val normalizedNew = user.nicknameNormalized.ifBlank {
@@ -252,7 +252,7 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
-    // ── Соло: один зачёт XP на quizId ─────────────────────────────────────
+    // Соло: один зачёт XP на quizId
     override suspend fun applySoloQuizCompletion(
         userId: String,
         quizResult: ChallengeResult,
@@ -304,7 +304,7 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
-    // ── Дуэль: только попытка в статистике ────────────────────────────────
+    // Дуэль: только попытка в статистике
     override suspend fun applyChallengeQuizParticipation(
         userId: String,
         quizResult: ChallengeResult
@@ -427,7 +427,7 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
-    // ── Поиск пользователей ───────────────────────────────────────────────
+    // Поиск пользователей
     override suspend fun searchUsers(query: String): Result<List<User>> = try {
         val result = usersCollection
             .whereGreaterThanOrEqualTo("nickname", query)
@@ -441,7 +441,7 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
-    // ── Обновить интересы ─────────────────────────────────────────────────
+    // Обновить интересы
     override suspend fun updateUserInterests(userId: String, interests: List<String>): Result<Unit> = try {
         usersCollection.document(userId).update("interests", interests).await()
         Result.success(Unit)
@@ -456,7 +456,7 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
-    // ── Обновить аватар ───────────────────────────────────────────────────
+    // Обновить аватар
     override suspend fun updateUserAvatar(userId: String, avatarUrl: String): Result<Unit> = try {
         usersCollection.document(userId).update("avatarUrl", avatarUrl).await()
         Result.success(Unit)
@@ -471,7 +471,7 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
-    // ── Отправить запрос в друзья ─────────────────────────────────────────
+    // Отправить запрос в друзья
     override suspend fun sendFriendRequest(senderId: String, receiverId: String): Result<Unit> = try {
         val requestRef = friendRequestsCollection.document()
         val request = FriendRequest(
@@ -489,7 +489,7 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
-    // ── Получить список запросов в друзья для пользователя ────────────────
+    // Получить список запросов в друзья для пользователя
     // Метод возвращает все входящие PENDING-запросы, адресованные userId.
     override suspend fun getFriendRequests(userId: String): Result<List<FriendRequest>> = try {
         val snapshot = friendRequestsCollection
@@ -503,7 +503,7 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
-    // ── Принять запрос в друзья ───────────────────────────────────────────
+    // Принять запрос в друзья
     // Выполняется в одной транзакции: статус запроса → ACCEPTED,
     // userId и friendId добавляются в списки друзей друг друга.
     override suspend fun acceptFriendRequest(
@@ -529,7 +529,7 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
-    // ── Отклонить запрос в друзья ─────────────────────────────────────────
+    // Отклонить запрос в друзья
     // Меняем статус на BLOCKED — документ сохраняется в истории.
     override suspend fun declineFriendRequest(requestId: String): Result<Unit> = try {
         friendRequestsCollection.document(requestId)
@@ -543,7 +543,7 @@ class UserRepositoryImpl : UserRepository {
         Result.error(e)
     }
 
-    // ── Удалить из друзей ─────────────────────────────────────────────────
+    // Удалить из друзей
     // Транзакция убирает userId из массива friends у friendId и наоборот
     override suspend fun removeFriend(userId: String, friendId: String): Result<Unit> = try {
         firestore.runTransaction { transaction ->

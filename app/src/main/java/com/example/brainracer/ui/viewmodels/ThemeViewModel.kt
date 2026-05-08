@@ -6,7 +6,7 @@ import com.example.brainracer.data.preferences.UserPreferencesRepository
 import kotlinx.coroutines.launch
 
 /**
- * Тонкий ViewModel: переключает тему через [UserPreferencesRepository] в собственном scope,
+ * Данный ViewModel: переключает тему через [UserPreferencesRepository] в собственном scope,
  * чтобы клик по `ToggleThemeButton` не зависел от текущего экрана и не отменялся при
  * быстром recomposition.
  */

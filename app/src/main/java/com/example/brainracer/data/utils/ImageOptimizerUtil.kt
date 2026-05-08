@@ -50,7 +50,7 @@ object ImageOptimizerUtil {
         }
     }
 
-    // ── Bitmap (JPEG / PNG / WEBP) ─────────────────────────────────────────
+    // Bitmap (JPEG / PNG / WEBP)
 
     private fun optimizeBitmap(
         context: Context,
@@ -100,7 +100,7 @@ object ImageOptimizerUtil {
         )
     }
 
-    // ── GIF ────────────────────────────────────────────────────────────────
+    // GIF
     // Для GIF мы не перекодируем анимацию — просто возвращаем как есть,
     // предупреждая пользователя если файл слишком велик.
     private fun optimizeGif(raw: ByteArray): OptimizedImage {
@@ -115,7 +115,7 @@ object ImageOptimizerUtil {
         )
     }
 
-    // ── Вспомогательные ───────────────────────────────────────────────────
+    // Вспомогательные
 
     private fun calcSample(w: Int, h: Int, maxPx: Int): Int {
         var sample = 1

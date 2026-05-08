@@ -182,7 +182,7 @@ fun ChallengesScreen(
                 .padding(top = padding.calculateTopPadding())
         ) {
 
-            // ── Вкладки ───────────────────────────────────────────────────
+            // Вкладки
             TabRow(
                 selectedTabIndex = pagerState.currentPage,
                 containerColor   = MaterialTheme.colorScheme.background,
@@ -226,7 +226,7 @@ fun ChallengesScreen(
                 }
             }
 
-            // ── Контент страниц ───────────────────────────────────────────
+            // Контент страниц
             HorizontalPager(
                 state    = pagerState,
                 modifier = Modifier.weight(1f)
@@ -278,9 +278,7 @@ fun ChallengesScreen(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  ВКЛАДКА: ВХОДЯЩИЕ
-// ══════════════════════════════════════════════════════════════════════════════
+//  Вкладка: входящие
 
 @Composable
 private fun IncomingTab(
@@ -440,9 +438,8 @@ private fun IncomingChallengeCard(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  ВКЛАДКА: АКТИВНЫЕ
-// ══════════════════════════════════════════════════════════════════════════════
+//  Вкладка: активные
+
 
 @Composable
 private fun ActiveTab(
@@ -678,9 +675,8 @@ private fun PlayerStatusChip(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  ВКЛАДКА: ИСТОРИЯ
-// ══════════════════════════════════════════════════════════════════════════════
+//  Вкладка: история
+
 
 @Composable
 private fun HistoryTab(
@@ -880,7 +876,7 @@ private fun CompletedChallengeCard(
     }
 }
 
-// ── Общие компоненты ──────────────────────────────────────────────────────────
+// Общие компоненты
 
 @Composable
 private fun CenteredLoader() {

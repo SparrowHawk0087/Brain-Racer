@@ -350,14 +350,13 @@ fun HomeScreen(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  TOP BAR — исправленный
-// ══════════════════════════════════════════════════════════════════════════════
+//  Top bar — исправленный
+
 
 @Composable
 private fun HomeTopBar(
     userLevel: Int,
-    levelProgress: Float,       // 0.0–1.0 реальный прогресс внутри уровня
+    levelProgress: Float,       // реальный прогресс внутри уровня
     rankName: String,
     unreadNotificationsCount: Int,
     showBellChallengeDot: Boolean,
@@ -394,7 +393,7 @@ private fun HomeTopBar(
                         fontSize   = 20.sp,
                         color      = MaterialTheme.colorScheme.onSurface
                     )
-                    // Показываем уровень И ранг
+                    // Показываем уровень и ранг
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment     = Alignment.CenterVertically
@@ -450,9 +449,8 @@ private fun HomeTopBar(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  STAT ROW — обновлённый
-// ══════════════════════════════════════════════════════════════════════════════
+//  Stat row — обновлённый
+
 
 @Composable
 private fun UserStatRow(
@@ -490,9 +488,7 @@ private fun UserStatRow(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
 //  Остальные composable-ы без изменений
-// ══════════════════════════════════════════════════════════════════════════════
 
 @Composable
 private fun WelcomeRow(

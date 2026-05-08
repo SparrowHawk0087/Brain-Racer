@@ -140,7 +140,7 @@ fun ChallengeRoundReviewScreen(
     }
 }
 
-// ── Итоговый счёт ─────────────────────────────────────────────────────────────
+// Итоговый счёт
 
 @Composable
 private fun ScoreHeader(
@@ -252,7 +252,7 @@ private fun PlayerScoreColumn(
     }
 }
 
-// ── Карточка сравнения вопроса ────────────────────────────────────────────────
+// Карточка сравнения вопроса
 
 @Composable
 private fun QuestionComparisonCard(

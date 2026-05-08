@@ -89,9 +89,7 @@ private val allCategories = listOf(
 
 private val quizCreatorExpandIntSpec = tween<IntSize>(durationMillis = 200, easing = FastOutSlowInEasing)
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  ГЛАВНЫЙ ЭКРАН КОНСТРУКТОРА
-// ══════════════════════════════════════════════════════════════════════════════
+//  Главный экран конструктора
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -259,9 +257,9 @@ fun QuizCreatorScreen(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  ВКЛАДКА: КОНСТРУКТОР
-// ══════════════════════════════════════════════════════════════════════════════
+
+//  Вкладка: конструктор
+
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -290,7 +288,7 @@ private fun ConstructorTab(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier            = Modifier.fillMaxSize()
     ) {
-        // ── Обложка ──────────────────────────────────────────────────────
+        // Обложка
         item {
             SectionLabel("Обложка викторины")
             Box(
@@ -345,7 +343,7 @@ private fun ConstructorTab(
             }
         }
 
-        // ── Название ─────────────────────────────────────────────────────
+        // Название
         item {
             SectionLabel("Название *")
             CreatorTextField(
@@ -356,7 +354,7 @@ private fun ConstructorTab(
             )
         }
 
-        // ── Описание ─────────────────────────────────────────────────────
+        // Описание
         item {
             SectionLabel("Описание")
             CreatorTextField(
@@ -368,7 +366,7 @@ private fun ConstructorTab(
             )
         }
 
-        // ── Категория + сложность в строку ────────────────────────────────
+        // Категория + сложность в строку
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -388,7 +386,7 @@ private fun ConstructorTab(
             }
         }
 
-        // ── Время по умолчанию ────────────────────────────────────────────
+        // Время по умолчанию
         item {
             SectionLabel("Время на ответ (сек) по умолчанию")
             TimeSlider(
@@ -400,7 +398,7 @@ private fun ConstructorTab(
             )
         }
 
-        // ── Разделитель ───────────────────────────────────────────────────
+        // Разделитель
         item {
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             Spacer(Modifier.height(4.dp))
@@ -423,7 +421,7 @@ private fun ConstructorTab(
             }
         }
 
-        // ── Список вопросов ───────────────────────────────────────────────
+        // Список вопросов
         itemsIndexed(
             items = draft.questions,
             key = { _, q -> q.id }
@@ -445,7 +443,7 @@ private fun ConstructorTab(
             }
         }
 
-        // ── Кнопка публикации ─────────────────────────────────────────────
+        // Кнопка публикации
         item {
             Spacer(Modifier.height(6.dp))
             Text(
@@ -490,7 +488,7 @@ private fun ConstructorTab(
     }
 }
 
-// ── Карточка вопроса ───────────────────────────────────────────────────────
+// Карточка вопроса
 
 @Composable
 private fun QuestionCard(
@@ -558,7 +556,7 @@ private fun QuestionCard(
                 scaleX = animatedScale
                 scaleY = animatedScale
             }
-            // Перетаскивание ВСЕЙ карточкой по long-press. Долгое нажатие на любую её часть
+            // Перетаскивание всей карточкой по long-press. Долгое нажатие на любую её часть
             // переводит карточку в режим drag — обычные тапы (на иконки/строки) при этом
             // продолжают работать, потому что drag запускается только после задержки нажатия.
             .then(
@@ -707,7 +705,7 @@ private fun QuestionCard(
                             verticalAlignment     = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Радиокнопка «правильный»
+                            // Радиокнопка "правильный"
                             Box(
                                 modifier = Modifier
                                     .size(28.dp)
@@ -763,7 +761,7 @@ private fun QuestionCard(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(0.5f))
 
-                    // ── Подсказка / объяснение ────────────────────────────
+                    // Подсказка-объяснение
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -819,9 +817,8 @@ private fun QuestionCard(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  ВКЛАДКА: ЧЕРНОВИКИ
-// ══════════════════════════════════════════════════════════════════════════════
+
+//  Вкладка: черновики
 
 @Composable
 private fun DraftsTab(
@@ -943,9 +940,9 @@ private fun DraftCard(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  ВКЛАДКА: ШАБЛОНЫ
-// ══════════════════════════════════════════════════════════════════════════════
+
+//  Вкладка: шаблоны
+
 
 @Composable
 private fun TemplatesTab(onApply: (com.example.brainracer.ui.viewmodels.QuizTemplate) -> Unit) {
@@ -1053,9 +1050,7 @@ private fun TemplateCard(
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ
-// ══════════════════════════════════════════════════════════════════════════════
+//  Вспомогательные компоненты
 
 @Composable
 private fun SectionLabel(text: String) {

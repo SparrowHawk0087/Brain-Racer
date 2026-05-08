@@ -161,7 +161,7 @@ fun NavGraph(
     fun bottomTabKey(): String =
         bottomBarSelectedKey(currentRoute, loggedUid, profileDestinationUserId)
 
-    // ── Навигация BottomBar ────────────────────────────────────────────────
+    // Навигация BottomBar
 
     val navigateToHome: () -> Unit = {
         user?.let {
@@ -253,7 +253,7 @@ fun NavGraph(
                 popExitTransition = { popExitFor(initialState, targetState) }
             ) {
 
-                // ── Splash ─────────────────────────────────────────────────────────
+                // Splash
                 composable("splash") {
                     SplashScreen(
                         onFinished = {
@@ -266,7 +266,7 @@ fun NavGraph(
                     )
                 }
 
-                // ── Auth ───────────────────────────────────────────────────────────
+                // Auth
                 composable("auth") {
                     AuthScreen(
                         authViewModel    = authViewModel,
@@ -282,7 +282,7 @@ fun NavGraph(
                     )
                 }
 
-                // ── Home ───────────────────────────────────────────────────────────
+                // Home
                 composable(
                     "home/{userId}",
                     arguments = listOf(navArgument("userId") { type = NavType.StringType })
@@ -321,7 +321,7 @@ fun NavGraph(
                     ChallengeStartScreen(challengeId = cid, navController = navController)
                 }
 
-                // ── Quiz Detail ────────────────────────────────────────────────────
+                // ── Detail
                 composable(
                     "quiz_detail/{quizId}",
                     arguments = listOf(navArgument("quizId") { type = NavType.StringType })
@@ -337,8 +337,8 @@ fun NavGraph(
                     )
                 }
 
-                // ── Quiz Play (соло + вызов) ─────────────────────────────────────────
-                // fromNotifFlow: сценарий «уведомление → старт вызова» — интро как с главной, «Отмена» = на главную
+                // Quiz Play (соло + вызов)
+                // fromNotifFlow: сценарий "уведомление - это старт вызова" — интро как с главной, "Отмена" = на главную
                 composable(
                     route = "quiz_play/{quizId}?challengeId={challengeId}&introShown={introShown}&fromNotifFlow={fromNotifFlow}&nonScoring={nonScoring}",
                     arguments = listOf(
@@ -376,7 +376,7 @@ fun NavGraph(
                     )
                 }
 
-                // ── Search (category + режим только кастомных викторин) ─────────────
+                // Search (category + режим только кастомных викторин)
                 composable(
                     route = "search?category={category}&customOnly={customOnly}",
                     arguments = listOf(
@@ -399,7 +399,7 @@ fun NavGraph(
                     )
                 }
 
-                // ── Quiz Creator ───────────────────────────────────────────────────
+                // Quiz Creator
                 composable(
                     route = "quiz_creator?editQuizId={editQuizId}",
                     arguments = listOf(
@@ -416,7 +416,7 @@ fun NavGraph(
                     )
                 }
 
-                // ── Friends ────────────────────────────────────────────────────────
+                // Friends
                 composable(
                     route = "friends/{userId}?preselectQuizId={preselectQuizId}",
                     arguments = listOf(
@@ -445,7 +445,7 @@ fun NavGraph(
                     )
                 }
 
-                // ── Challenges (вкладки: входящие / активные / история) ───────────
+                // Challenges (вкладки: входящие / активные / история)
                 composable(
                     "challenges/{userId}",
                     arguments = listOf(navArgument("userId") { type = NavType.StringType })
@@ -466,7 +466,7 @@ fun NavGraph(
                     )
                 }
 
-                // ── Challenge Round Review ─────────────────────────────────────────
+                // Challenge Round Review
                 composable(
                     "challenge_review/{challengeId}",
                     arguments = listOf(navArgument("challengeId") { type = NavType.StringType })
@@ -478,7 +478,7 @@ fun NavGraph(
                     )
                 }
 
-                // ── Leaderboard ────────────────────────────────────────────────────
+                // Leaderboard
                 composable(
                     "leaderboard/{userId}",
                     arguments = listOf(navArgument("userId") { type = NavType.StringType })
@@ -499,7 +499,7 @@ fun NavGraph(
                     )
                 }
 
-                // ── Quizzes list ───────────────────────────────────────────────────
+                // Quizzes list
                 composable("quizzes") {
                     QuizListScreen(
                         navController        = navController,
@@ -515,7 +515,7 @@ fun NavGraph(
                     )
                 }
 
-                // ── Profile ────────────────────────────────────────────────────────
+                // Profile
                 composable(
                     "profile/{userId}",
                     arguments = listOf(navArgument("userId") { type = NavType.StringType })

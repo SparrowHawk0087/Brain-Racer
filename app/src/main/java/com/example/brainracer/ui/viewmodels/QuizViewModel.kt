@@ -64,7 +64,7 @@ class QuizViewModel : ViewModel() {
         return QuizNonScoringReason.NOT_SIGNED_IN
     }
 
-    // ── Загрузка викторины ────────────────────────────────────────────────
+    // Загрузка викторины
 
     fun loadQuiz(
         quizId: String,
@@ -148,7 +148,7 @@ class QuizViewModel : ViewModel() {
         }
     }
 
-    // ── Выбор ответа ──────────────────────────────────────────────────────
+    // Выбор ответа
 
     fun selectAnswer(answerIndex: Int) {
         if (_uiState.value.isAnswerSubmitted) return
