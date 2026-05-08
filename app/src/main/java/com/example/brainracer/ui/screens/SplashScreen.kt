@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -306,7 +305,14 @@ fun SplashScreen(
                     }
                 }
 
-                // Сама иконка
+                // Сама иконка. Контейнер — круглая «стеклянная» подложка; внутри
+                // изображение тоже клипается в круг и заметно меньше контейнера, а
+                // ContentScale.Fit заставляет вьюпорт group_29__2_ вписаться целиком.
+                // Раньше при ContentScale.Crop с size = 190dp в 124dp-боксе показывался
+                // только центральный кроп → срезались левый край «B» и правый край «N».
+                // Логотип в group_29__2_ умещается во вписанной окружности своего
+                // 305×305-вьюпорта, поэтому круглый clip обрезает только углы градиента
+                // и не трогает буквы.
                 Box(
                     modifier = Modifier
                         .size(124.dp)
@@ -317,19 +323,21 @@ fun SplashScreen(
                         }
                         .shadow(
                             elevation = 30.dp,
-                            shape = RoundedCornerShape(28.dp),
+                            shape = CircleShape,
                             spotColor = Color.White.copy(alpha = 0.9f),
                             ambientColor = Color.White.copy(alpha = 0.6f)
                         )
-                        .clip(RoundedCornerShape(28.dp))
+                        .clip(CircleShape)
                         .background(Color.White.copy(alpha = 0.20f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                        painter = painterResource(id = R.drawable.group_29__2_),
                         contentDescription = "Brain Racer",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(190.dp)
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .size(104.dp)
+                            .clip(CircleShape)
                     )
                 }
             }

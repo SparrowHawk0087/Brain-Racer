@@ -72,8 +72,10 @@ fun brainRacerExtendedColorsLight(): BrainRacerExtendedColors = BrainRacerExtend
 )
 
 /**
- * Используется [compositionLocalOf], а не `static`, потому что значение анимируется при смене
- * темы (см. `rememberAnimatedExtendedColors` в `Theme.kt`). С `staticCompositionLocalOf`
- * любое изменение значения инвалидировало бы всё поддерево на каждом кадре анимации.
+ * Используется [compositionLocalOf], а не `staticCompositionLocalOf`, чтобы при
+ * редкой смене темы инвалидировались только реальные читатели расширенной палитры,
+ * а не всё поддерево, в котором стоит провайдер. Сама анимация смены темы делается
+ * глобальным crossfade-оверлеем (см. `BrainRacerTheme`), поэтому значение здесь
+ * меняется один раз за переключение темы — без анимаций по каждому полю.
  */
 val LocalBrainRacerExtendedColors = compositionLocalOf { brainRacerExtendedColorsDark() }
