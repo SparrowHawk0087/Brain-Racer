@@ -66,7 +66,7 @@ data class ProfileUIState(
     val isUploadingAvatar: Boolean = false,
     val isSavingProfile: Boolean = false,
     val errorMessage: String? = null,
-    // Ошибка загрузки данных для карточки тем (quiz_results/связанные quizzes); не блокирует остальной профиль
+    /** Ошибка запроса quiz_results (индекс, сеть); не блокирует остальной профиль. */
     val quizHistoryLoadError: String? = null,
     val userId: String = "",
     val username: String = "",
@@ -80,7 +80,6 @@ data class ProfileUIState(
     val createdQuizzes: List<QuizItem> = emptyList(),
     val likedQuizzes: List<QuizItem> = emptyList(),
     val passedAttempts: List<PassedQuizUi> = emptyList(),
-    // Может содержать частичные данные даже при quizHistoryLoadError (покажет предупреждение)
     val topicStats: List<TopicStatUi> = emptyList(),
     val achievements: List<AchievementUi> = emptyList(),
     val currentRank: String = "Новичок",
@@ -149,7 +148,7 @@ object ProfileAchievements {
             AchievementUi(
                 id = "streak_5",
                 title = "Непобедимый",
-                description = "Серия из 5 успешных вызовов",
+                description = "Серия из 5 успешных игр",
                 unlocked = current >= 5 || longest >= 5
             ),
             AchievementUi(
@@ -161,7 +160,7 @@ object ProfileAchievements {
             AchievementUi(
                 id = "week_streak",
                 title = "Марафонец",
-                description = "Серия из 7 вызовов",
+                description = "Серия из 7 игр",
                 unlocked = longest >= 7 || current >= 7
             ),
             AchievementUi(
