@@ -87,7 +87,7 @@ data class ProfileUIState(
     val friendsCount: Int = 0,
     val bio: String = "",
     val interests: List<String> = emptyList(),
-    /** id викторины, для которой идёт удаление (свой профиль). */
+    // id викторины, для которой идёт удаление (свой профиль)
     val deletingQuizId: String? = null
 )
 
