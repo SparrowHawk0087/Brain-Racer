@@ -1,7 +1,5 @@
 package com.example.brainracer.data.storage
 
-package com.example.brainracer.data.storage
-
 import android.util.Log
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.domain.entities.QuizDifficulty
