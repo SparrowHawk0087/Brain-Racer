@@ -202,7 +202,7 @@ private fun SystemBarsThemeAnimator(darkTheme: Boolean) {
     }
 
     // Тон бар-иконок переключается ровно один раз на смене темы, с задержкой
-    // в середину анимации — иначе при переходе light→dark тёмные иконки на ещё-светлом
+    // в середину анимации — иначе при переходе light-dark тёмные иконки на ещё-светлом
     // (или наоборот) фоне моргают как «невидимые».
     LaunchedEffect(darkTheme, view) {
         delay(THEME_SYSTEM_BAR_TONE_DELAY_MS)

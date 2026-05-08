@@ -46,9 +46,8 @@ import com.example.brainracer.ui.components.pressClickable
 import com.example.brainracer.ui.utils.FriendRequestUi
 import com.example.brainracer.ui.utils.OutgoingRequestUi
 import com.example.brainracer.ui.viewmodels.FriendsViewModel
-// ─────────────────────────────────────────────────────────────────────────────
+
 //  Главный composable-экран
-// ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -251,7 +250,7 @@ fun FriendsScreen(
                 }
             }
 
-            // ── Поле поиска ────────────────────────────────────────────────
+            // Поле поиска
             AnimatedVisibility(
                 visible = searchBarVisible || searchQuery.isNotBlank(),
                 enter = fadeIn() + expandVertically(),
@@ -303,7 +302,7 @@ fun FriendsScreen(
                 )
             }
 
-            // ── Результаты поиска (показываем поверх вкладок) ──────────────
+            // Результаты поиска (показываем поверх вкладок)
             if (uiState.isSearching && uiState.searchResults.isNotEmpty()) {
                 SearchResultsList(
                     results = uiState.searchResults,
@@ -312,7 +311,7 @@ fun FriendsScreen(
                 )
             } else {
 
-                // ── Вкладки ────────────────────────────────────────────────
+                // Вкладки
                 var selectedTab by remember(targetUserId) { mutableIntStateOf(0) }
 
                 // Показываем badge с количеством входящих заявок
@@ -353,7 +352,7 @@ fun FriendsScreen(
                     }
                 }
 
-                // ── Контент вкладок ────────────────────────────────────────
+                // Контент вкладок
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -407,7 +406,7 @@ fun FriendsScreen(
                     }
                 }
 
-                // ── Кнопка «Пригласить» ────────────────────────────────────
+                // Кнопка "Пригласить"
                 if (isOwnFriendsList) {
                     Button(
                         onClick = {
@@ -462,7 +461,7 @@ fun FriendsScreen(
                 }
             }
 
-            // ── Сообщение об ошибке ────────────────────────────────────────
+            // Сообщение об ошибке
             uiState.errorMessage?.let { message ->
                 Snackbar(
                     modifier = Modifier.padding(16.dp),
@@ -479,9 +478,7 @@ fun FriendsScreen(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 //  Результаты поиска новых пользователей
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun SearchResultsList(
@@ -549,9 +546,7 @@ private fun SearchResultsList(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Вкладка «My friends»
-// ─────────────────────────────────────────────────────────────────────────────
+//  Вкладка "My friends"
 
 @Composable
 private fun FriendsTab(
@@ -809,9 +804,8 @@ private fun FriendRankingCard(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Вкладка «Incoming»
-// ─────────────────────────────────────────────────────────────────────────────
+//  Вкладка "Incoming"
+
 
 @Composable
 private fun IncomingRequestsTab(
@@ -927,9 +921,7 @@ private fun IncomingRequestCard(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Вкладка «Outgoing»
-// ─────────────────────────────────────────────────────────────────────────────
+//  Вкладка "Outgoing"
 
 @Composable
 private fun OutgoingRequestsTab(
@@ -1017,9 +1009,7 @@ private fun OutgoingRequestCard(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 //  Общие вспомогательные composable-ы
-// ─────────────────────────────────────────────────────────────────────────────
 
 /** Цветной круг с инициалами — заменяет реальный аватар, пока нет фото. */
 @Composable
