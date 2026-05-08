@@ -3,9 +3,12 @@ package com.example.brainracer.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.brainracer.data.repositories.UserRepositoryImpl
+import com.example.brainracer.data.repositories.UserRepositoryImpl.Companion.NICKNAME_TAKEN_ERROR_CODE
 import com.example.brainracer.data.utils.Result
 import com.example.brainracer.domain.entities.normalizeNicknameForStorage
 import com.example.brainracer.ui.screens.isValidUsername
+import com.example.brainracer.ui.utils.ModerationResult
+import com.example.brainracer.ui.utils.QuizModeration
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.UserProfileChangeRequest
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +40,7 @@ class NicknameEnforcementViewModel : ViewModel() {
 
     private val _lockExplanation = MutableStateFlow<String?>(null)
     val lockExplanation: StateFlow<String?> = _lockExplanation.asStateFlow()
+    private val migratedNormalizedNicknames = mutableSetOf<String>()
 
     fun reset() {
         _state.value = NicknameEnforcementState.Idle
@@ -66,6 +70,13 @@ class NicknameEnforcementViewModel : ViewModel() {
                 if (user.nicknameNormalized.isBlank() && user.nickname.isNotBlank()) {
                     userRepository.mergeNicknameNormalized(userId, effective)
                 }
+                if (user.nickname.isNotBlank() &&
+                    effective.isNotBlank() &&
+                    migratedNormalizedNicknames.add(effective)
+                ) {
+                    // Тихая фоновая миграция legacy-профилей с тем же nickname.
+                    userRepository.backfillNicknameNormalizedForNickname(user.nickname, effective)
+                }
                 if (user.nickname.isBlank() || effective.isBlank()) {
                     _lockExplanation.value =
                         "Никнейм не указан. Введите новый никнейм, чтобы пользоваться приложением."
@@ -78,13 +89,36 @@ class NicknameEnforcementViewModel : ViewModel() {
                     _state.value = NicknameEnforcementState.Locked
                     return
                 }
+                // Проверяем и исходный ник, и его нормализованную форму:
+                // это гарантирует lock, в том числе для legacy-вариантов с обфускацией.
+                val moderated = sequenceOf(user.nickname, effective)
+                    .map { QuizModeration.validateUsername(it) }
+                    .filterIsInstance<ModerationResult.Blocked>()
+                    .firstOrNull()
+                when (moderated) {
+                    is ModerationResult.Blocked -> {
+                        _lockExplanation.value =
+                            "Текущий никнейм содержит запрещённые слова/паттерны [${moderated.violation.category.localizedLabel()}]. Введите другой никнейм."
+                        _state.value = NicknameEnforcementState.Locked
+                        return
+                    }
+                    null -> Unit
+                }
                 when (val c = userRepository.countUsersWithNicknameNormalized(effective)) {
                     is Result.Error -> {
                         _lockExplanation.value = null
                         _state.value = NicknameEnforcementState.Ok
                     }
                     is Result.Success -> {
-                        if (c.data > 1) {
+                        // Fallback для старых аккаунтов без nickname_normalized:
+                        // ищем точное совпадение по нормализованному нику среди результатов searchUsers.
+                        val legacyDuplicateExists = when (val legacy = userRepository.searchUsers(user.nickname)) {
+                            is Result.Success -> legacy.data.any {
+                                it.id != userId && normalizeNicknameForStorage(it.nickname) == effective
+                            }
+                            is Result.Error -> false
+                        }
+                        if (c.data > 1 || legacyDuplicateExists) {
                             _lockExplanation.value =
                                 "Ваш никнейм совпадает с другим аккаунтом. Введите другой никнейм, чтобы пользоваться приложением."
                             _state.value = NicknameEnforcementState.Locked
@@ -114,6 +148,14 @@ class NicknameEnforcementViewModel : ViewModel() {
             _submitError.value = "Никнейм не должен быть пустым или содержать пробелы"
             onFinished(false)
             return
+        }
+        when (val moderation = QuizModeration.validateUsername(trimmed)) {
+            is ModerationResult.Blocked -> {
+                _submitError.value = "Никнейм отклонен: [${moderation.violation.category.localizedLabel()}] ${moderation.violation.reason}"
+                onFinished(false)
+                return
+            }
+            ModerationResult.Allowed -> Unit
         }
         val normalized = normalizeNicknameForStorage(trimmed)
         viewModelScope.launch {
@@ -148,7 +190,11 @@ class NicknameEnforcementViewModel : ViewModel() {
                     )
                     when (val up = userRepository.updateUser(upd)) {
                         is Result.Error -> {
-                            _submitError.value = up.exception.message
+                            _submitError.value = if (up.exception.message == NICKNAME_TAKEN_ERROR_CODE) {
+                                "Этот никнейм уже занят"
+                            } else {
+                                up.exception.message
+                            }
                             _isSaving.value = false
                             onFinished(false)
                         }
