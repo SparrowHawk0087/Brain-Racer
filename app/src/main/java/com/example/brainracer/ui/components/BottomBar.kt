@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import com.example.brainracer.ui.theme.BrainRacerTheme
 import com.example.brainracer.ui.theme.LocalBrainRacerExtendedColors
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -34,13 +35,27 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.MaterialTheme
 import com.example.brainracer.R
 
-fun bottomBarSelectedKey(route: String): String = when {
-    route.startsWith("home/")        -> "home"
-    route.startsWith("leaderboard/") -> "leaderboard"
-    route.startsWith("challenges/")  -> "challenges"
-    route == "quizzes"               -> "quizzes"
-    route.startsWith("profile/")     -> "profile"
-    else                             -> ""
+/**
+ * Определяет активную вкладку нижней панели.
+ * Чужой профиль (`profile/{id}` при id != аккаунт) не считается вкладкой «Профиль».
+ */
+fun bottomBarSelectedKey(
+    route: String,
+    loggedInUserId: String? = null,
+    profileDestinationUserId: String? = null
+): String {
+    val onProfileDestination = route.startsWith("profile/")
+    val mine = loggedInUserId.orEmpty().trim()
+    val profileUser = profileDestinationUserId.orEmpty().trim()
+    val profileTab = onProfileDestination && mine.isNotEmpty() && profileUser.isNotEmpty() && profileUser == mine
+    return when {
+        route.startsWith("home/")          -> "home"
+        route.startsWith("leaderboard/")    -> "leaderboard"
+        route.startsWith("challenges/")    -> "challenges"
+        route == "quizzes"                  -> "quizzes"
+        profileTab                          -> "profile"
+        else                                -> ""
+    }
 }
 
 enum class BottomBarGlassIntensity {
@@ -52,6 +67,8 @@ enum class BottomBarGlassIntensity {
 fun BottomBar(
     showBar: Boolean = true,
     currentRoute: String = "",
+    loggedInUserId: String? = null,
+    profileDestinationUserId: String? = null,
     showChallengesIncomingBadge: Boolean = false,
     onHomeClick: () -> Unit = {},
     onLeaderboardClick: () -> Unit = {},
@@ -64,21 +81,42 @@ fun BottomBar(
 ) {
     if (!showBar) return
 
-    val selected = bottomBarSelectedKey(currentRoute)
+    val selected = bottomBarSelectedKey(currentRoute, loggedInUserId, profileDestinationUserId)
     val scheme = MaterialTheme.colorScheme
     val ext = LocalBrainRacerExtendedColors.current
     val isStrongGlass = glassIntensity == BottomBarGlassIntensity.Strong
+    val isLightTheme = scheme.surface.luminance() > 0.5f
     val clampedReflexShift = reflexShift.coerceIn(-18f, 18f)
     val glassShape = RoundedCornerShape(30.dp)
-    val glassBackground = remember(ext.tabBarBackground, glassIntensity) {
+    // В светлой теме капсула чуть менее прозрачна — позади часто белый контент и бледный inactive сливается.
+    val glassBackground = remember(ext.tabBarBackground, glassIntensity, isLightTheme) {
+        val topAlpha: Float
+        val bottomAlpha: Float
+        when {
+            isLightTheme && isStrongGlass -> {
+                topAlpha = 0.94f
+                bottomAlpha = 0.84f
+            }
+            isLightTheme && !isStrongGlass -> {
+                topAlpha = 0.90f
+                bottomAlpha = 0.78f
+            }
+            isStrongGlass -> {
+                topAlpha = 0.86f
+                bottomAlpha = 0.66f
+            }
+            else -> {
+                topAlpha = 0.76f
+                bottomAlpha = 0.58f
+            }
+        }
         Brush.verticalGradient(
             colors = listOf(
-                ext.tabBarBackground.copy(alpha = if (isStrongGlass) 0.86f else 0.76f),
-                ext.tabBarBackground.copy(alpha = if (isStrongGlass) 0.66f else 0.58f)
+                ext.tabBarBackground.copy(alpha = topAlpha),
+                ext.tabBarBackground.copy(alpha = bottomAlpha)
             )
         )
     }
-    val isLightTheme = scheme.surface.luminance() > 0.5f
     val selectedContentColor = if (isLightTheme) scheme.primary else Color.White.copy(alpha = 0.98f)
     val reflectionSweep = remember(glassIntensity, clampedReflexShift, isLightTheme) {
         Brush.linearGradient(
@@ -103,10 +141,27 @@ fun BottomBar(
         )
     }
     val shadowElevation = if (isStrongGlass) 18.dp else 13.dp
-    val shadowAlpha = if (isStrongGlass) 0.70f else 0.48f
-    val borderAlpha = if (isStrongGlass) 0.26f else 0.19f
+    val shadowAlpha =
+        when {
+            isLightTheme && isStrongGlass -> 0.82f
+            isLightTheme -> 0.58f
+            isStrongGlass -> 0.70f
+            else -> 0.48f
+        }
+    val borderAlpha =
+        when {
+            isLightTheme && isStrongGlass -> 0.42f
+            isLightTheme -> 0.32f
+            isStrongGlass -> 0.26f
+            else -> 0.19f
+        }
     val inactiveAlpha = if (isStrongGlass) 1f else 0.95f
-    val inactiveColor = if (isLightTheme) scheme.onSurface.copy(alpha = 0.64f) else ext.tabInactive.copy(alpha = inactiveAlpha)
+    // Неактивные: в светлой теме — заметнее onSurface (~0.64 было слишком бледным на полупрозрачном фоне).
+    val inactiveColor = if (isLightTheme) {
+        scheme.onSurface.copy(alpha = 0.87f)
+    } else {
+        ext.tabInactive.copy(alpha = inactiveAlpha)
+    }
     val pillColor = if (isLightTheme) scheme.primary.copy(alpha = if (isStrongGlass) 0.14f else 0.10f) else Color.White.copy(alpha = if (isStrongGlass) 0.22f else 0.16f)
     val pillBorderColor = if (isLightTheme) scheme.primary.copy(alpha = if (isStrongGlass) 0.34f else 0.24f) else Color.White.copy(alpha = if (isStrongGlass) 0.34f else 0.24f)
 
@@ -306,7 +361,8 @@ private fun BottomBarItem(
             Text(
                 text = label,
                 color = tint,
-                fontSize = 9.5.sp,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -318,7 +374,12 @@ private fun BottomBarItem(
 @Composable
 private fun BottomBarPreviewHome() {
     BrainRacerTheme {
-        BottomBar(showBar = true, currentRoute = "home/user1")
+        BottomBar(
+            showBar = true,
+            currentRoute = "home/{userId}",
+            loggedInUserId = "user1",
+            profileDestinationUserId = null
+        )
     }
 }
 
@@ -326,6 +387,6 @@ private fun BottomBarPreviewHome() {
 @Composable
 private fun BottomBarPreviewQuizzes() {
     BrainRacerTheme {
-        BottomBar(showBar = true, currentRoute = "quizzes")
+        BottomBar(showBar = true, currentRoute = "quizzes", loggedInUserId = "u")
     }
 }
